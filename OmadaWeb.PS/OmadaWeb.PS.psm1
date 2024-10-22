@@ -1,15 +1,42 @@
 #Add parameters like: Import-Module OmadaWeb.PS -ArgumentList "C:\Temp\","C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 PARAM(
-    [ValidateNotNullOrEmpty()]
-    $WebDriverBasePath = "$PSScriptRoot\Bin",
-    [ValidateNotNullOrEmpty()]
-    $InstalledEdgeBasePath = "C:\Program Files (x86)\Microsoft\Edge\Application",
-    [ValidateNotNullOrEmpty()]
-    $NewtonsoftJsonPath="$PSScriptRoot\Bin",
-    $OmadaWebAuthCookie
+    [parameter(Mandatory = $false)]
+    [hashtable]$Parameters
 )
-
 "Loading OmadaWeb.PS Module" | Write-Verbose
+
+
+$DefaultParams = @{
+    WebDriverBasePath     = "$PSScriptRoot\Bin\Core"
+    InstalledEdgeBasePath = "C:\Program Files (x86)\Microsoft\Edge\Application"
+    NewtonsoftJsonPath    = "$PSScriptRoot\Bin"
+    SystemTextJsonPath    = "$PSScriptRoot\Bin"
+    SystemRuntimePath     = "$PSScriptRoot\Bin"
+    OmadaWebAuthCookie    = $null
+    UpdateDependencies    = $false
+}
+
+$DefaultParams.GetEnumerator() | ForEach-Object {
+    New-Variable -Name $_.Key -Value $_.Value -Force
+}
+if($Parameters -eq $null) {
+    $Parameters = @{}
+}
+$Parameters.GetEnumerator() | ForEach-Object {
+    "Processing parameter {0}" -f $_.Key | Write-Verbose
+    if ($_.Key -notin $DefaultParams.Keys) {
+        "Invalid parameter provided '{0}'" -f $_.Key | Write-Error -ErrorAction "Stop"
+    }
+    New-Variable -Name $_.Key -Value $_.Value -Force
+}
+
+if ($PSVersionTable.PSVersion.Major -le 5) {
+    $WebDriverBasePath = "$PSScriptRoot\Bin\Desktop"
+}
+try {
+    $null = New-Item $WebDriverBasePath -ItemType Directory -Force
+}
+catch {}
 
 "PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json) | Write-Verbose
 
@@ -25,6 +52,14 @@ $Script:EdgeDriverPath = [System.IO.Path]::Combine($WebDriverBasePath, "msedgedr
 $Script:NewtonsoftJsonPath = [System.IO.Path]::Combine($($NewtonsoftJsonPath), "Newtonsoft.Json.dll")
 "{0} - {1}" -f $MyInvocation.MyCommand, $($Script:NewtonsoftJsonPath) | Write-Verbose
 
+#System.Text.Json Location
+$Script:SystemTextJsonPath = [System.IO.Path]::Combine($($SystemTextJsonPath), "System.Text.Json.dll")
+"{0} - {1}" -f $MyInvocation.MyCommand, $($Script:SystemTextJsonPath) | Write-Verbose
+
+#System.Runtime Location
+$Script:SystemRuntimePath = [System.IO.Path]::Combine($($SystemRuntimePath), "System.Runtime.dll")
+"{0} - {1}" -f $MyInvocation.MyCommand, $($Script:SystemRuntimePath) | Write-Verbose
+
 #WebDriver Location
 $Script:WebDriverPath = [System.IO.Path]::Combine($WebDriverBasePath, "WebDriver.dll")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebDriverPath | Write-Verbose
@@ -37,13 +72,23 @@ if ($PSBoundParameters["InstalledEdgeBasePath"] -and -not (Test-Path $Script:Ins
 }
 
 #OmadaWebAuthCookie
-if($null -ne $PsBoundParameters["OmadaWebAuthCookie"]){
+if ($null -ne $PsBoundParameters["OmadaWebAuthCookie"]) {
     "Using provided OmadaWebAuthCookie when loading module" | Write-Verbose
     New-Variable OmadaWebAuthCookie -Value $PsBoundParameters["OmadaWebAuthCookie"] -Force -Scope Global | Out-Null
 }
-elseif([string]::IsNullOrEmpty($Script:OmadaWebAuthCookie)){
+elseif ([string]::IsNullOrEmpty($Script:OmadaWebAuthCookie)) {
     "Initialize OmadaWebAuthCookie" | Write-Verbose
     New-Variable OmadaWebAuthCookie -Value $null -Force -Scope Global | Out-Null
+}
+
+if ($UpdateDependencies) {
+    "Update Dependencies" | Write-Verbose
+    try {
+        Get-ChildItem $WebDriverBasePath | Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+    catch {
+        "Failed to initiate dependency updates. Retry restarting this PowerShell session or manually remove the contents of folder '{0}'. Error:`r`n {1}" -f $WebDriverBasePath, $_.Exception | Write-Warning
+    }
 }
 
 #Dot source the files

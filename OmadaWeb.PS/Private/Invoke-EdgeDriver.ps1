@@ -1,11 +1,44 @@
 function Invoke-EdgeDriver {
-    Invoke-WebEdgeDriverFramework
+    $JsonLibraryType = Invoke-WebEdgeDriverFramework
     try {
         Add-Type -Path $($Script:WebDriverPath)
     }
     catch {
         [void] [System.Reflection.Assembly]::LoadFrom($Script:WebDriverPath)
-        Add-Type -Path $($Script:NewtonsoftJsonPath)
+    }
+    try {
+        switch ($JsonLibraryType) {
+            "Newtonsoft.Json" {
+                Add-Type -Path $($Script:NewtonsoftJsonPath)
+            }
+            "System.Text.Json" {
+                if ($PSVersionTable.PSVersion.Major -le 5) {
+
+                    #$DllFiles = Get-ChildItem ".\Bin" -Filter "*.dll" | Where-Object { $_.Name -notin @('System.Text.Json.dll', 'Webdriver.dll') }
+                    #do {
+                    #    try {
+                    #        $DllFiles | ForEach-Object {
+                    #            [System.Reflection.Assembly]::LoadFrom($_.FullName)
+                    #            Add-Type -Path $_.FullName
+                    #            $Failed = $false
+                    #        }
+                    #    }
+                    #    catch {
+                    #        $_.Exception.Message
+                    #        $Failed = $true
+                    #    }
+                    #}until($Failed -eq $false)
+
+                   #[void] [System.Reflection.Assembly]::LoadFrom($Script:SystemRuntimePath)
+                   #[void] [System.Reflection.Assembly]::LoadFrom($Script:SystemTextJsonPath)
+
+                    Add-Type -Path $($Script:SystemRuntimePath)
+                    Add-Type -Path $($Script:SystemTextJsonPath)
+                }
+            }
+        }
+    }
+    catch {
         [void] [System.Reflection.Assembly]::LoadWithPartialName("OpenQA.Selenium.Edge")
     }
     [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
@@ -39,7 +72,7 @@ function Invoke-EdgeDriver {
     $EdgeDriverService = [OpenQA.Selenium.Edge.EdgeDriverService]::CreateDefaultService($($Script:EdgeDriverPath))
     $EdgeDriverService.HideCommandPromptWindow = $true
     $EdgeDriverService.SuppressInitialDiagnosticInformation = $true;
-    $EdgeDriver = New-Object OpenQA.Selenium.Edge.EdgeDriver($($Script:EdgeDriverPath), $EdgeOptions)
+    $EdgeDriver = New-Object OpenQA.Selenium.Edge.EdgeDriver($EdgeDriverService, $EdgeOptions)
 
     return $EdgeDriver
 

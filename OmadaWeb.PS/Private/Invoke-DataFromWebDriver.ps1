@@ -10,13 +10,21 @@ function Invoke-DataFromWebDriver {
     $AgentString = $EdgeDriver.ExecuteScript("return navigator.userAgent")
 
     Start-Sleep -Seconds 1
+    $LoginMessageShown = $false
     do {
         if ($EdgeDriver.url -notlike "*$($Script:OmadaWebBaseUrl)/home*") {
-            "Waiting for login!" | Write-Host
+            if (-not $LoginMessageShown) {
+                Write-Host "`r`nBrowser opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
+                $LoginMessageShown = $true
+            }
+
+            Write-Host "." -NoNewline -ForegroundColor Yellow
             Start-Sleep -Seconds 1
 
             if ($null -eq $EdgeDriver -or $null -eq $EdgeDriver.WindowHandles) {
+                "" | Write-Host
                 "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host
+                $LoginMessageShown = $false
                 Close-EdgeDriver
                 $EdgeDriver = Invoke-EdgeDriver
                 Invoke-EdgeDriverLogin

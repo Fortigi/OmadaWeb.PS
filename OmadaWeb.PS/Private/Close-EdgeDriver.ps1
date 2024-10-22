@@ -6,5 +6,4 @@ function Close-EdgeDriver {
         }
         $null = $EdgeDriver.Dispose()
     }
-
 }
