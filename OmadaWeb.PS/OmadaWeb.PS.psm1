@@ -9,9 +9,9 @@ PARAM(
 $DefaultParams = @{
     WebDriverBasePath     = "$PSScriptRoot\Bin\Core"
     InstalledEdgeBasePath = "C:\Program Files (x86)\Microsoft\Edge\Application"
-    NewtonsoftJsonPath    = "$PSScriptRoot\Bin"
-    SystemTextJsonPath    = "$PSScriptRoot\Bin"
-    SystemRuntimePath     = "$PSScriptRoot\Bin"
+    NewtonsoftJsonPath    = "$PSScriptRoot\Bin\Core"
+    SystemTextJsonPath    = "$PSScriptRoot\Bin\Core"
+    SystemRuntimePath     = "$PSScriptRoot\Bin\Core"
     OmadaWebAuthCookie    = $null
     UpdateDependencies    = $false
 }
@@ -19,7 +19,7 @@ $DefaultParams = @{
 $DefaultParams.GetEnumerator() | ForEach-Object {
     New-Variable -Name $_.Key -Value $_.Value -Force
 }
-if($Parameters -eq $null) {
+if ($Parameters -eq $null) {
     $Parameters = @{}
 }
 $Parameters.GetEnumerator() | ForEach-Object {
@@ -32,6 +32,9 @@ $Parameters.GetEnumerator() | ForEach-Object {
 
 if ($PSVersionTable.PSVersion.Major -le 5) {
     $WebDriverBasePath = "$PSScriptRoot\Bin\Desktop"
+    $NewtonsoftJsonPath = "$PSScriptRoot\Bin\Desktop"
+    $SystemTextJsonPath = "$PSScriptRoot\Bin\Desktop"
+    $SystemRuntimePath = "$PSScriptRoot\Bin\Desktop"
 }
 try {
     $null = New-Item $WebDriverBasePath -ItemType Directory -Force
