@@ -7,7 +7,7 @@ function Install-Selenium {
 
     $CheckJsonLibrary = $false
 
-    "WebDriver.Dll needs to be downloaded. Downloading from GitHub" | Write-Host
+    "WebDriver.dll needs to be downloaded. Downloading from GitHub" | Write-Host
     $DownloadUrl = "https://api.github.com"
     $URI = $DownloadUrl, "/repos/SeleniumHQ/selenium/releases" -join ""
     $null = New-Item (Split-Path $Script:WebDriverPath) -ItemType Directory -Force
