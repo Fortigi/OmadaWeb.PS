@@ -35,10 +35,11 @@ try {
         Get-Item $ModuleTargetFolder | Remove-Item -Force -Recurse
     }
 
-    "Deploy {0} PowerShell module from {1} to {2}" -f $ModuleName,$ModuleSourceFolder, $ModuleTargetFolder | Write-Host
+    "Deploy {0} PowerShell module from {1} to {2}" -f $ModuleName, $ModuleSourceFolder, $ModuleTargetFolder | Write-Host
     Get-Item -Path $ModuleSourceFolder | Copy-Item -Destination $ModuleTargetFolder -Recurse -Force
     Get-ChildItem $ModuleTargetFolder -Recurse | Unblock-File
-    Get-ChildItem $ModuleTargetFolder -Filter "*.dll" | Remove-Item -Force
+    Get-ChildItem $ModuleTargetFolder -Filter "*.dll" -Recurse | Remove-Item -Force
+    Get-ChildItem $ModuleTargetFolder -Filter "*.exe" -Recurse | Remove-Item -Force
     Get-ChildItem $ModuleTargetFolder -Filter "OmadaWeb.PS2.psm1" | Remove-Item -Force
     "Finished" | Write-Host
 }
