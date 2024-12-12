@@ -10,7 +10,7 @@ function Install-EdgeDriver {
     $TempFile = [System.IO.Path]::GetTempFileName()
     "Invoke-WebEdgeDriverFramework: {0}" -f $$ | Write-Verbose
 
-    $ComputerInfo = Get-WmiObject -Class Win32_ComputerSystem
+    $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem
     switch ($ComputerInfo.SystemType) {
         "x64-based PC" { $Arch = "win64" }
         "x86-based PC" { $Arch = "win32" }

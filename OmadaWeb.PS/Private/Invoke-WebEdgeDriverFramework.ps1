@@ -1,5 +1,6 @@
 function Invoke-WebEdgeDriverFramework {
-
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'CheckJsonLibrary', Justification = 'The CheckJsonLibrary variable is used in a function called from here')]
+    PARAM()
     $InstallOrUpdateEdgeDriver = $false
     $InstalledEdgeVersion = Get-Item $Script:InstalledEdgeFilePath
     if ($Null -ne $InstalledEdgeVersion) {
@@ -43,6 +44,7 @@ function Invoke-WebEdgeDriverFramework {
                 }
                 { $PSVersionTable.PSVersion.Major -le 5 -and $_ -ge 24 } {
                     $JsonLibraryType = "System.Text.Json"
+
                     if (!(Test-Path $Script:SystemTextJsonPath -PathType Leaf)) {
                         $CheckJsonLibrary = Install-SystemTextJson
                     }

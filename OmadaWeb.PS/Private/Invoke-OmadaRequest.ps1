@@ -22,9 +22,9 @@ function Invoke-OmadaRequest {
         [System.Management.Automation.CredentialAttribute()]
         ${Credential},
 
-        [parameter(Mandatory = $true)]
+        [parameter(Mandatory = $false)]
         [validateSet("OAuth", "Integrated", "Basic", "Browser", "Windows")]
-        $AuthenticationType,
+        $AuthenticationType = "Browser",
 
         [parameter(Mandatory = $false)]
         $AzureAdTenantId,
@@ -92,7 +92,16 @@ function Invoke-OmadaRequest {
 
         [string]
         #[validateScript({ if ($null -ne $_ -and ![string]::IsNullOrEmpty($_) -and !(Test-Path $_ -PathType Container)) { "Cannot find path {0} for optional parameter OmadaWebAuthCookieExportLocation!" -f $_ | Write-Error -ErrorAction Stop } })]
-        ${OmadaWebAuthCookieExportLocation}
+        ${OmadaWebAuthCookieExportLocation},
+
+        [string]
+        ${EdgeProfile} = $null,
+
+        [switch]
+        ${ForceAuthentication},
+
+        [switch]
+        ${InPrivate}
     )
 
     try {
@@ -103,11 +112,10 @@ function Invoke-OmadaRequest {
         #if (!(Get-Variable -Scope Global | Where-Object { $_.Name -eq $Script:SessionId })) {
         #    New-Variable -Name $Script:SessionId -Value $null
         #}
+        $ExcludedRestMethodParameters = @("AuthenticationType", "AzureAdTenantId", "Credential", "RequestType","EdgeProfile")
+        $ExcludedParameters = @("OmadaWebAuthCookieExportLocation", "InPrivate", "ForceAuthentication", "EdgeProfile")
 
-        $ExcludedRestMethodParameters = @("AuthenticationType", "AzureAdTenantId", "Credential", "RequestType")
-        $ExcludedParameters = @("OmadaWebAuthCookieExportLocation")
-
-        $DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36 Edg/117.0.2045.36"
+        $DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
         if ("UserAgent" -notin $PSBoundParameters.Keys) {
             $PSBoundParameters.Add("UserAgent", $DefaultUserAgent)
         }
@@ -135,6 +143,22 @@ function Invoke-OmadaRequest {
             }
             "Browser" {
                 "{0} - {1} Authentication " -f $MyInvocation.MyCommand, $_ | Write-Verbose
+                if ($ForceAuthentication) {
+                    $Script:OmadaWebAuthCookie = $null
+                }
+                switch ($Script:LastSessionType) {
+                    { $_ -eq "Normal" -and $InPrivate.IsPresent -eq $true } {
+                        "{0} - Reset OmadaWebAuthCookie because session has changed to InPrivate" -f $MyInvocation.MyCommand | Write-Verbose
+                        $Script:OmadaWebAuthCookie = $null
+                        $Script:LastSessionType = "InPrivate"
+                    }
+                    { $_ -eq "InPrivate" -and $InPrivate.IsPresent -eq $false } {
+                        "{0} - Reset OmadaWebAuthCookie because session has changed from InPrivate to not InPrivate" -f $MyInvocation.MyCommand | Write-Verbose
+                        $Script:OmadaWebAuthCookie = $null
+                        $Script:LastSessionType = "Normal"
+                    }
+                    default {}
+                }
 
                 if ($null -ne $($Script:OmadaWebAuthCookie) -and ($Script:OmadaWebBaseUrl -like "*$($Script:OmadaWebAuthCookie.domain)*" )) {
                     "{0} - {1} - OmadaWebAuthCookie exists for this domain" -f $MyInvocation.MyCommand, $_ | Write-Verbose
@@ -148,7 +172,7 @@ function Invoke-OmadaRequest {
                 }
                 else {
                     "{0} - {1} - OmadaWebAuthCookie not exists or for different domain" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    $EdgeDriverData = Invoke-DataFromWebDriver
+                    $EdgeDriverData = Invoke-DataFromWebDriver -EdgeProfile $EdgeProfile -InPrivate:$InPrivate.IsPresent
                     $Script:OmadaWebAuthCookie = $EdgeDriverData[0]
 
                     $PSBoundParameters.UserAgent = $EdgeDriverData[1]
@@ -165,7 +189,7 @@ function Invoke-OmadaRequest {
                 }
                 if (![string]::IsNullOrEmpty($OmadaWebAuthCookieExportLocation)) {
                     "Exporting cookie to {0}" -f $OmadaWebAuthCookieExportLocation | Write-Verbose
-                    $Script:OmadaWebAuthCookie | Export-CliXml (Join-Path $OmadaWebAuthCookieExportLocation -ChildPath ("{0}.cookie" -f $Script:OmadaWebAuthCookie.domain)) -Force
+                    $Script:OmadaWebAuthCookie | Export-Clixml (Join-Path $OmadaWebAuthCookieExportLocation -ChildPath ("{0}.cookie" -f $Script:OmadaWebAuthCookie.domain)) -Force
                 }
             }
             "OAuth" {
@@ -255,7 +279,7 @@ function Invoke-OmadaRequest {
 
                 "Re-authentication needed!" | Write-Host
                 "{0} - Re-Authentication - Error message:" -f $MyInvocation.MyCommand, ($_ | ConvertTo-Json) | Write-Verbose
-                $EdgeDriverData = Invoke-DataFromWebDriver
+                $EdgeDriverData = Invoke-DataFromWebDriver -EdgeProfile $EdgeProfile -InPrivate:$InPrivate.IsPresent
                 $Script:OmadaWebAuthCookie = $EdgeDriverData[0]
                 $PsBoundParameters.UserAgent = $EdgeDriverData[1]
                 $Session.UserAgent = $EdgeDriverData[1]

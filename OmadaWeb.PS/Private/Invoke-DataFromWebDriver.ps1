@@ -1,9 +1,13 @@
 function Invoke-DataFromWebDriver {
+    PARAM(
+        [string]$EdgeProfile,
+        [switch]$InPrivate
+    )
 
     $AuthCookie = $null
 
     "Opening Edge to retrieve authentication cookie" | Write-Host
-    $EdgeDriver = Invoke-EdgeDriver
+    $EdgeDriver = Invoke-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
 
     Invoke-EdgeDriverLogin
 
@@ -23,10 +27,10 @@ function Invoke-DataFromWebDriver {
 
             if ($null -eq $EdgeDriver -or $null -eq $EdgeDriver.WindowHandles) {
                 "" | Write-Host
-                "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host
+                "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host -ForegroundColor Yellow
                 $LoginMessageShown = $false
                 Close-EdgeDriver
-                $EdgeDriver = Invoke-EdgeDriver
+                $EdgeDriver = Invoke-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
                 Invoke-EdgeDriverLogin
             }
         }
@@ -44,5 +48,4 @@ function Invoke-DataFromWebDriver {
     else {
         "Could not authenticate to '{0}" -f $Script:OmadaWebBaseUrl | Write-Error -ErrorAction "Stop"
     }
-
 }
