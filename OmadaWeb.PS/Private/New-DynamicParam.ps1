@@ -155,6 +155,7 @@
         [System.Object]$Type = [string], # Accept Object to handle deserialized types
         [string[]]$Alias = @(),
         [string[]]$ValidateSet,
+        $ValidateScript,
         [switch]$Mandatory,
         [string[]]$ParameterSetName = "__AllParameterSets",
         [int]$Position,
@@ -208,6 +209,10 @@
     # Add ValidateSet if specified
     if ($ValidateSet) {
         $ParamOptions = New-Object System.Management.Automation.ValidateSetAttribute -ArgumentList $ValidateSet
+        $AttributeCollection.Add($ParamOptions)
+    }
+    if ($ValidateScript) {
+        $ParamOptions = New-Object System.Management.Automation.ValidateScriptAttribute -ArgumentList $ValidateScript
         $AttributeCollection.Add($ParamOptions)
     }
 

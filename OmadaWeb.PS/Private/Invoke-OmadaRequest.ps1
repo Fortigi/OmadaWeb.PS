@@ -5,8 +5,7 @@ function Invoke-OmadaRequest {
     DynamicParam {
         $FunctionName = $Script:FunctionName
         $FunctionObject = Get-Command -Name $FunctionName
-        $Dictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
-        return Set-OmadaRequestParameter -Function $FunctionObject -Dictionary $Dictionary
+        return Set-OmadaRequestParameter -Function $FunctionObject
     }
     process {
         try {
@@ -44,12 +43,21 @@ function Invoke-OmadaRequest {
                 $BoundParams.Add("AuthenticationType", "Browser")
             }
 
+            if ($BoundParams.Keys -contains "OmadaWebAuthCookieFile") {
+                $Script:OmadaWebAuthCookie = (Import-Clixml $BoundParams.OmadaWebAuthCookieFile).OmadaWebAuthCookie
+            }
+            if ("OmadaWebAuthCookieFile" -in $BoundParams.Keys) {
+                $BoundParams.Remove("OmadaWebAuthCookieFile") | Out-Null
+            }
+
             "{0} - Authentication type: {1}" -f $MyInvocation.MyCommand, $($BoundParams.AuthenticationType) | Write-Verbose
 
             switch ($BoundParams.AuthenticationType) {
                 "Windows" {
                     "{0} - {1} Authentication " -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    $BoundParams.Credential = $BoundParams.Credential
+                    if($BoundParams.keys -notcontains "Credential"){
+                        $BoundParams.Add("Credential", (Get-Credential -Message "Please enter your Windows credentials"))
+                    }
                 }
                 "Browser" {
                     "{0} - {1} Authentication " -f $MyInvocation.MyCommand, $_ | Write-Verbose
@@ -99,7 +107,10 @@ function Invoke-OmadaRequest {
                     }
                     if (![string]::IsNullOrEmpty($($BoundParams.OmadaWebAuthCookieExportLocation))) {
                         "Exporting cookie to {0}" -f $($BoundParams.OmadaWebAuthCookieExportLocation) | Write-Verbose
-                        $Script:OmadaWebAuthCookie | Export-Clixml (Join-Path $($BoundParams.OmadaWebAuthCookieExportLocation) -ChildPath ("{0}.cookie" -f $Script:OmadaWebAuthCookie.domain)) -Force
+                        $CookieObject = [PSCustomObject]@{
+                            OmadaWebAuthCookie = $Script:OmadaWebAuthCookie
+                        }
+                        $CookieObject | Export-Clixml (Join-Path $($BoundParams.OmadaWebAuthCookieExportLocation) -ChildPath ("{0}.cookie" -f $Script:OmadaWebAuthCookie.domain)) -Force
                     }
                 }
                 "OAuth" {
@@ -128,6 +139,9 @@ function Invoke-OmadaRequest {
                 }
                 "Basic" {
                     "{0} - {1} Authentication " -f $MyInvocation.MyCommand, $_ | Write-Verbose
+                    if($BoundParams.keys -notcontains "Credential"){
+                        $BoundParams.Add("Credential", (Get-Credential -Message "Please enter your authentication credentials"))
+                    }
                     $BoundParams.CredentialPair = "{0}:{1}" -f $BoundParams.Credential.UserName, $BoundParams.Credential.GetNetworkCredential().Password
                     $EncodedCredential = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($BoundParams.CredentialPair))
                     $Headers.Add("Authorization" , ("Basic {0}" -f $EncodedCredential))
