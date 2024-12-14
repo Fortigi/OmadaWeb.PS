@@ -1,12 +1,13 @@
 ﻿function Set-OmadaRequestParameter {
     [CmdletBinding()]
     PARAM(
-        $FunctionObject
+        $FunctionName
     )
     $Dictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
+    $FunctionObject = Get-Command -Name $FunctionName
 
     #https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_commonparameters?view=powershell-7.4
-    $CommonParameters = @("Debug",
+    $ExcludedParameters = @("Debug",
         "ErrorAction",
         "ErrorVariable",
         "InformationAction",
@@ -17,13 +18,19 @@
         "ProgressAction",
         "Verbose",
         "WarningAction",
-        "WarningVariable"
+        "WarningVariable",
+        "Session",
+        "WebSession",
+        "Authentication",
+        "SessionVariable",
+        "UseDefaultCredentials",
+        "UseBasicParsing"
     )
 
     $ParameterObjects = @()
     foreach ($ParameterSet in $FunctionObject.ParameterSets) {
         foreach ($Parameter in $ParameterSet.Parameters) {
-            if ($Parameter.Name -notin $CommonParameters) {
+            if ($Parameter.Name -notin $ExcludedParameters) {
                 if ($Parameter.Name -notin $ParameterObjects.Name) {
                     $ParameterSetName = @($($ParameterSet.Name))
                     $ParameterObjects += @{

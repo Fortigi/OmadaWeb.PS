@@ -263,5 +263,3 @@ function Get-NuGetPackage {
 
     return $BaseReturnObjects
 }
-
-

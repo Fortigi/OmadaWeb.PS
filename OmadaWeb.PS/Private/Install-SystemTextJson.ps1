@@ -33,5 +33,3 @@ function Install-SystemTextJson {
     "Installed '{0}' version {1}" -f $DllFileName, (Get-Item (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName)).VersionInfo.ProductVersion | Write-Host
     return $CheckJsonLibrary
 }
-
-

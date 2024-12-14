@@ -7,9 +7,9 @@ function Invoke-DataFromWebDriver {
     $AuthCookie = $null
 
     "Opening Edge to retrieve authentication cookie" | Write-Host
-    $EdgeDriver = Invoke-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
+    $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
 
-    Invoke-EdgeDriverLogin
+    Start-EdgeDriverLogin
 
     $AgentString = $EdgeDriver.ExecuteScript("return navigator.userAgent")
 
@@ -30,8 +30,8 @@ function Invoke-DataFromWebDriver {
                 "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host -ForegroundColor Yellow
                 $LoginMessageShown = $false
                 Close-EdgeDriver
-                $EdgeDriver = Invoke-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
-                Invoke-EdgeDriverLogin
+                $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
+                Start-EdgeDriverLogin
             }
         }
         else {

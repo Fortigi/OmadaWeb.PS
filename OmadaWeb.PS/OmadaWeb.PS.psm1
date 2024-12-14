@@ -3,7 +3,6 @@ PARAM(
     [parameter(Mandatory = $false)]
     [hashtable]$Parameters
 )
-#region include
 
 "Loading OmadaWeb.PS Module" | Write-Verbose
 
@@ -45,10 +44,6 @@ try {
 catch {}
 
 "PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json) | Write-Verbose
-
-#Get public and private function definition files.
-$Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
-$Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1)
 
 #EdgeDriver Location
 $Script:EdgeDriverPath = [System.IO.Path]::Combine($WebDriverBasePath, "msedgedriver.exe")
@@ -96,9 +91,10 @@ if ($UpdateDependencies) {
         "Failed to initiate dependency updates. Retry restarting this PowerShell session or manually remove the contents of folder '{0}'. Error:`r`n {1}" -f $WebDriverBasePath, $_.Exception | Write-Warning
     }
 }
-#endregion
 
 #region exclude
+$Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
+$Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1)
 Foreach ($Import in @($Public + $Private)) {
     try {
         . $Import.FullName

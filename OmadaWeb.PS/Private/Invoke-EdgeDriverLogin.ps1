@@ -1,4 +1,4 @@
-function Invoke-EdgeDriverLogin {
+function Start-EdgeDriverLogin {
 
     if($null -eq $EdgeDriver) {
         "Browser authentication failed to start!" | Write-Error -ErrorAction "Stop"

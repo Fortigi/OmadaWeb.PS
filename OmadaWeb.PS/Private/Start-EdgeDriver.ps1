@@ -1,4 +1,4 @@
-function Invoke-EdgeDriver {
+function Start-EdgeDriver {
     PARAM(
         [string]$EdgeProfile,
         [switch]$InPrivate
