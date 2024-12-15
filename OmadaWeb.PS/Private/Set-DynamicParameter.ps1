@@ -1,4 +1,4 @@
-﻿function Set-OmadaRequestParameter {
+﻿function Set-DynamicParameter {
     [CmdletBinding()]
     PARAM(
         $FunctionName

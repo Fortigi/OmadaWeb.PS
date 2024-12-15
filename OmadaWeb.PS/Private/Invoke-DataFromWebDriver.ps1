@@ -26,12 +26,21 @@ function Invoke-DataFromWebDriver {
             Start-Sleep -Seconds 1
 
             if ($null -eq $EdgeDriver -or $null -eq $EdgeDriver.WindowHandles) {
+                if ($Script:LoginRetryCount -ge 3) {
+                    Close-EdgeDriver
+                    "`nLogin retry count exceeded! Please check your credentials as no cookie could be retrieved!" | Write-Error -ErrorAction "Stop"
+                }
+                else {
+                    "`n{0} - Login retry count: {1}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount | Write-Verbose
+                }
+
                 "" | Write-Host
                 "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host -ForegroundColor Yellow
                 $LoginMessageShown = $false
                 Close-EdgeDriver
                 $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
                 Start-EdgeDriverLogin
+                $Script:LoginRetryCount++
             }
         }
         else {
@@ -43,6 +52,7 @@ function Invoke-DataFromWebDriver {
 
     Close-EdgeDriver
     if ($null -ne $AuthCookie) {
+        $Script:LoginRetryCount = 0
         return $AuthCookie, $AgentString
     }
     else {

@@ -1,5 +1,6 @@
 ﻿function Invoke-BrowserAuthentication {
-    "{0} - Set Browser authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
+
+    "{0} - Set Browser authentication" -f $MyInvocation.MyCommand | Write-Verbose
 
     if ($BoundParams.ForceAuthentication) {
         $Script:OmadaWebAuthCookie = $null
@@ -19,7 +20,7 @@
     }
 
     if ($null -ne $($Script:OmadaWebAuthCookie) -and ($Script:OmadaWebBaseUrl -like "*$($Script:OmadaWebAuthCookie.domain)*" )) {
-        "{0} - {1} - OmadaWebAuthCookie exists for this domain" -f $MyInvocation.MyCommand, $_ | Write-Verbose
+        "{0} - OmadaWebAuthCookie exists for this domain: {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebBaseUrl | Write-Verbose
         if ("Cookie" -notin $BoundParams.Headers.Keys) {
             $BoundParams.Headers.Add("Cookie", ($($Script:OmadaWebAuthCookie).Name, $($Script:OmadaWebAuthCookie).Value -join "="))
         }
@@ -29,13 +30,14 @@
         $Session.Cookies.Add((New-Object System.Net.Cookie("oisauthtoken", $($Script:OmadaWebAuthCookie.Value), "/", $($Script:OmadaWebAuthCookie.domain))))
     }
     else {
-        "{0} - {1} - OmadaWebAuthCookie not exists or for different domain" -f $MyInvocation.MyCommand, $_ | Write-Verbose
+        "{0} - OmadaWebAuthCookie not exists or is for different domain. Need to authenticate!" -f $MyInvocation.MyCommand | Write-Verbose
         $EdgeDriverData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
         $Script:OmadaWebAuthCookie = $EdgeDriverData[0]
 
         $BoundParams.UserAgent = $EdgeDriverData[1]
 
         $Session.UserAgent = $EdgeDriverData[1]
+
         if ("Cookie" -notin $BoundParams.Headers.Keys) {
             $BoundParams.Headers.Add("Cookie", ($($Script:OmadaWebAuthCookie).Name, $($Script:OmadaWebAuthCookie).Value -join "="))
         }
@@ -52,5 +54,4 @@
         }
         $CookieObject | Export-Clixml (Join-Path $($BoundParams.OmadaWebAuthCookieExportLocation) -ChildPath ("{0}.cookie" -f $Script:OmadaWebAuthCookie.domain)) -Force
     }
-
 }

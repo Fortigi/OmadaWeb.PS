@@ -110,4 +110,5 @@ Export-ModuleMember -Function $Public.Basename -Alias *
 
 #region include
 $Script:EdgeProfiles = Get-EdgeProfile
+$Script:LoginRetryCount = 0
 #endregion

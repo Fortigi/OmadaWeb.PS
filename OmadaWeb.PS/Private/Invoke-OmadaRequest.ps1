@@ -3,7 +3,7 @@ function Invoke-OmadaRequest {
     PARAM()
 
     DynamicParam {
-        return Set-OmadaRequestParameter -FunctionName $Script:FunctionName
+        return Set-DynamicParameter -FunctionName $Script:FunctionName
     }
     process {
         try {
@@ -15,11 +15,21 @@ function Invoke-OmadaRequest {
             $ExcludedRestMethodParameters = @("AuthenticationType", "AzureAdTenantId", "Credential", "RequestType", "EdgeProfile")
             $ExcludedParameters = @("OmadaWebAuthCookieExportLocation", "InPrivate", "ForceAuthentication", "EdgeProfile")
 
-            $DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+            if ("UserAgent" -notin $BoundParams.Keys) {
+                $BoundParams.Add("UserAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+            }
 
-            $null = $BoundParams.Uri -match [regex]'^(?:https?:\/\/)?(?:[^@\/\n]+@)?(?:www\.)?([^:\/\n]+)'
-            if ($null -ne $Matches) {
-                $Script:OmadaWebBaseUrl = $Matches[0]
+            if ("Headers" -notin $BoundParams.Keys) {
+                $BoundParams.Add("Headers", @{})
+            }
+
+            $Uri = [System.Uri]::new($BoundParams.Uri)
+            if ($null -ne $Uri) {
+                $Script:OmadaWebBaseUrl = "{0}://{1}" -f $Uri.Scheme, $Uri.Host
+                if (!$Uri.IsDefaultPort) {
+                    $Script:OmadaWebBaseUrl = "{0}://{1}:{2}" -f $Uri.Scheme, $Uri.Host, $Uri.Port
+                }
+                "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebBaseUrl | Write-Verbose
             }
             else {
                 "Could not determine the base URL from '{0}', is the URL correct?" -f $BoundParams.Uri | Write-Error -ErrorAction "Stop"
@@ -30,15 +40,7 @@ function Invoke-OmadaRequest {
             }
 
             $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-            $Session.UserAgent = $DefaultUserAgent
-
-            if ("Headers" -notin $BoundParams.Keys) {
-                $BoundParams.Add("Headers", @{})
-                $BoundParams.Headers.Add("Accept", "application/json")
-            }
-            elseif ("Accept" -notin $BoundParams.Headers.Keys) {
-                $BoundParams.Headers.Add("Accept", "application/json")
-            }
+            $Session.UserAgent = $BoundParams.UserAgent
 
             if ("AuthenticationType" -notin $BoundParams.Keys) {
                 $BoundParams.Add("AuthenticationType", "Browser")
@@ -89,17 +91,34 @@ function Invoke-OmadaRequest {
 
             "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json) | Write-Verbose
             try {
-                $Parameters = @{}
-                $BoundParams.Keys | ForEach-Object {
-                    if ($_ -notin $ExcludedRestMethodParameters -and $_ -notin $ExcludedParameters) {
-                        $Parameters.Add($_, $BoundParams[$_])
+                switch ($Script:FunctionName) {
+                    "Invoke-RestMethod" {
+
+                        if ("Accept" -notin $BoundParams.Headers.Keys) {
+                            $BoundParams.Headers.Add("Accept", "application/json")
+                        }
+
+                        if ("ContentType" -in $BoundParams.Keys) {
+                            $BoundParams.Headers.Add("Content-Type", $BoundParams.ContentType)
+                            $BoundParams.Remove("ContentType") | Out-Null
+                        }
+                        elseif ("Content-Type" -notin $BoundParams.Headers.Keys) {
+                            $BoundParams.Headers.Add("Content-Type", "application/json")
+                        }
+                        $Parameters = Set-RequestParameter
+                        return (Invoke-RestMethod @Parameters)
+                    }
+                    "Invoke-WebRequest" {
+                        if ($null -eq $BoundParams.Headers -or $null -eq $BoundParams.Headers.Keys) {
+                            $BoundParams.Remove("Headers")
+                        }
+                        $Parameters = Set-RequestParameter
+                        return (Invoke-WebRequest @Parameters)
+                    }
+                    default {
+                        #Ignored
                     }
                 }
-
-                "Parameters" | Write-Verbose
-                $Parameters | ConvertTo-Json | Write-Verbose
-
-                return (Invoke-RestMethod @Parameters)
             }
 
             catch {
@@ -110,39 +129,17 @@ function Invoke-OmadaRequest {
                     $EdgeDriverData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                     $Script:OmadaWebAuthCookie = $EdgeDriverData[0]
                     $BoundParams.UserAgent = $EdgeDriverData[1]
-                    $Session.UserAgent = $EdgeDriverData[1]
 
-                    $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-                    $Session.UserAgent = $BoundParams.UserAgent
-                    $Session.Cookies.Add((New-Object System.Net.Cookie("oisauthtoken", $($Script:OmadaWebAuthCookie.Value), "/", $($Script:OmadaWebAuthCookie.domain))))
-                    if ("Cookie" -notin $BoundParams.Headers.Keys) {
-                        $BoundParams.Headers.Add("Cookie", ($($Script:OmadaWebAuthCookie).Name, $($Script:OmadaWebAuthCookie).Value -join "="))
-                    }
-                    else {
-                        $BoundParams.Headers.Cookie = ($($Script:OmadaWebAuthCookie).Name, $($Script:OmadaWebAuthCookie).Value -join "=")
-                    }
-
-                    if ("WebSession" -notin $BoundParams.Keys) { $BoundParams.Add("WebSession", $Session) }else { $BoundParams.WebSession = $Session }
-                    if ("Headers" -notin $BoundParams.Keys) { $BoundParams.Add("Headers", $BoundParams.Headers) }else { $BoundParams.Headers = $BoundParams.Headers }
-                    if ("UseBasicParsing" -notin $BoundParams.Keys) { $BoundParams.Add("UseBasicParsing", $true) }else { $BoundParams.UseBasicParsing = $true }
-
-                    $Parameters = @{}
-                    $BoundParams.Keys | ForEach-Object {
-                        if ($_ -notin $ExcludedRestMethodParameters) {
-                            $Parameters.Add($_, $BoundParams[$_])
-                        }
-                    }
-                    "Parameters" | Write-Verbose
-                    $Parameters | ConvertTo-Json | Write-Verbose
                     try {
-                        return (Invoke-RestMethod @Parameters)
+                        $Parameters = Set-RequestParameter
+                        return (Invoke-OmadaRequest @Parameters)
                     }
                     catch {
                         Throw $_
                     }
                 }
                 else {
-                    throw $_
+                    Throw $_
                 }
             }
         }

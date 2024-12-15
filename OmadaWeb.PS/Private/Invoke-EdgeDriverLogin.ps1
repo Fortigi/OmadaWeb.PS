@@ -1,6 +1,6 @@
 function Start-EdgeDriverLogin {
 
-    if($null -eq $EdgeDriver) {
+    if ($null -eq $EdgeDriver) {
         "Browser authentication failed to start!" | Write-Error -ErrorAction "Stop"
     }
 
@@ -8,7 +8,16 @@ function Start-EdgeDriverLogin {
     #$WindowSize = [System.Drawing.Size]::new($WindowWidth, $WindowHeight)
     #$EdgeDriver.Manage().Window.size = $WindowSize
 
-    $EdgeDriver.Navigate().GoToUrl($Script:OmadaWebBaseUrl) | Out-Null
-    $EdgeDriver.SwitchTo().Window($EdgeDriver.CurrentWindowHandle) | Out-Null
-
+    try {
+        $EdgeDriver.Navigate().GoToUrl($Script:OmadaWebBaseUrl) | Out-Null
+        $EdgeDriver.SwitchTo().Window($EdgeDriver.CurrentWindowHandle) | Out-Null
+    }
+    catch {
+        if ($_.Exception.Message -like "*failed to check if window was closed: disconnected: not connected to DevTools*") {
+            "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host -ForegroundColor Yellow
+        }
+        else {
+            $_
+        }
+    }
 }
