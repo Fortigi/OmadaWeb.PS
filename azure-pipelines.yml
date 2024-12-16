@@ -10,95 +10,112 @@ variables:
   year: 'Will be set dynamically'
   revision: $[counter(format('{0:dd}', pipeline.startTime), 1)]
 
-steps:
-- task: PowerShell@2
-  displayName: 'Install Modules'
-  inputs:
-    targetType: 'inline'
-    script: |
-      "Validate Modules" | Write-Host
-      $Modules = Get-Module -ListAvailable
-      if ("Pester" -notin $Modules.Name) { 
-        "Install Pester" | Write-Host
-        Install-Module -Name Pester -Scope CurrentUser -Force 
-      }
-      if ("psake" -notin $Modules.Name) { 
-        "Install psake" | Write-Host
-        Install-Module -Name psake -Scope CurrentUser -Force 
-      }
-      if ("PSDeploy" -notin $Modules.Name) { 
-        "Install PSDeploy" | Write-Host
-        Install-Module -Name PSDeploy -Scope CurrentUser -Force 
-      }
-      if ("PSScriptAnalyzer" -notin $Modules.Name) { 
-        "Install PSScriptAnalyzer" | Write-Host
-        Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force 
-      }
-    pwsh: true
-  condition: succeeded()
 
-- task: PowerShell@2
-  displayName: 'Preparing Build Number'
-  inputs:
-    targetType: 'inline'
-    script: |
-      $currentDate = $(Get-Date)
-      $year = $currentDate.Year
-      $month = $currentDate.Month
-      $day = $currentDate.Day
-      "Current date: {0}" -f $currentDate | Write-Host 
-      "Current year: {0}" -f $year | Write-Host 
-      "Current month: {0}" -f $month | Write-Host 
-      "Current day: {0}" -f $day | Write-Host 
-      "Revision: {0}" -f $env:revision | Write-Host 
-      $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
-      "Version: {0}" -f $versionString | Write-Host
-      Write-Host "##vso[task.setvariable variable=buildVersion]$versionString"
-      Write-Host "##vso[task.setvariable variable=year]$year"
-    pwsh: true
-  condition: succeeded()
+stages:
+- stage: Build
+  jobs:
+  - job: 
+    steps:
+    - task: PowerShell@2
+      displayName: 'Install Modules'
+      inputs:
+        targetType: 'inline'
+        script: |
+          "Validate Modules" | Write-Host
+          $Modules = Get-Module -ListAvailable
+          if ("Pester" -notin $Modules.Name) { 
+            "Install Pester" | Write-Host
+            Install-Module -Name Pester -Scope CurrentUser -Force 
+          }
+          if ("psake" -notin $Modules.Name) { 
+            "Install psake" | Write-Host
+            Install-Module -Name psake -Scope CurrentUser -Force 
+          }
+          if ("PSDeploy" -notin $Modules.Name) { 
+            "Install PSDeploy" | Write-Host
+            Install-Module -Name PSDeploy -Scope CurrentUser -Force 
+          }
+          if ("PSScriptAnalyzer" -notin $Modules.Name) { 
+            "Install PSScriptAnalyzer" | Write-Host
+            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force 
+          }
+        pwsh: true
+      condition: succeeded()
 
-- task: PowerShell@2
-  displayName: 'Build'
-  inputs:
-    filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-    arguments: ' -Task Build -BuildVersion $(buildVersion)'
-    pwsh: true
-  condition: succeeded()
+    - task: PowerShell@2
+      displayName: 'Preparing Build Number'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $currentDate = $(Get-Date)
+          $year = $currentDate.Year
+          $month = $currentDate.Month
+          $day = $currentDate.Day
+          "Current date: {0}" -f $currentDate | Write-Host 
+          "Current year: {0}" -f $year | Write-Host 
+          "Current month: {0}" -f $month | Write-Host 
+          "Current day: {0}" -f $day | Write-Host 
+          "Revision: {0}" -f $env:revision | Write-Host 
+          $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
+          "Version: {0}" -f $versionString | Write-Host
+          Write-Host "##vso[task.setvariable variable=buildVersion]$versionString"
+          Write-Host "##vso[task.setvariable variable=year]$year"
+        pwsh: true
+      condition: succeeded()
 
-- task: NuGetCommand@2
-  displayName: 'Pack project'
-  inputs:
-    command: pack
-    packagesToPack: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS.nuspec'
-    packDestination: '$(Build.ArtifactStagingDirectory)'
-    versioningScheme: byEnvVar
-    versionEnvVar: buildVersion
-    buildProperties: 'VERSION=$(buildVersion);YEAR=$(year)'
-  condition: succeededOrFailed()
+    - task: PowerShell@2
+      displayName: 'Build'
+      inputs:
+        filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
+        arguments: ' -Task Build -BuildVersion $(buildVersion)'
+        pwsh: true
+      condition: succeeded()
 
-- task: NuGetCommand@2
-  displayName: 'NuGet push'
-  inputs:
-    command: push
-    nuGetFeedType: internal
-    publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
-    allowPackageConflicts: true
-    packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
-  condition: succeeded()
+- stage: Package
+  dependsOn: [Build]
+  jobs:
+  - job: 'Create_Artifacts'
+    steps:
+    - task: NuGetCommand@2
+      displayName: 'Pack project'
+      inputs:
+        command: pack
+        packagesToPack: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS.nuspec'
+        packDestination: '$(Build.ArtifactStagingDirectory)'
+        versioningScheme: byEnvVar
+        versionEnvVar: buildVersion
+        buildProperties: 'VERSION=$(buildVersion);YEAR=$(year)'
+      condition: succeededOrFailed()
 
-- script: |
-    echo "Create tag: $(BuildVersion)"
-    git config --global user.email "mark@fortigi.nl" 
-    git config --global user.name "Mark van Eijken"
-    git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
-    git push https://$(System.AccessToken)@fortigi.visualstudio.com/$(Build.Repository.Name) refs/tags/v$(BuildVersion)
-  displayName: 'Create Tag'
-  condition: succeeded()
-  env:
-    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+    - task: NuGetCommand@2
+      displayName: 'NuGet push'
+      inputs:
+        command: push
+        nuGetFeedType: internal
+        publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
+        allowPackageConflicts: true
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
+      condition: succeeded()
 
-- task: PSGalleryPackager@0
-  inputs:
-    apiKey: '$(psgallery)'
-    path: 'output\OmadaWeb.PS'    
+    - script: |
+        echo "Create tag: $(BuildVersion)"
+        git config --global user.email "mark@fortigi.nl" 
+        git config --global user.name "Mark van Eijken"
+        git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
+        git push https://$(System.AccessToken)@fortigi.visualstudio.com/$(Build.Repository.Name) refs/tags/v$(BuildVersion)
+      displayName: 'Create Tag'
+      condition: succeeded()
+      enabled: false
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+- stage: Publish
+  dependsOn: [Build, Package]
+  jobs:
+  - job: 'Push_to_PSGallery'
+    steps:
+    - task: PSGalleryPackager@0
+      inputs:
+        apiKey: '$(psgallery)'
+        path: 'output\OmadaWeb.PS'
+      condition: succeeded()
