@@ -87,8 +87,11 @@ steps:
     packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
 
 - script: |
-    echo "Create Tag: $(buildVersion)"
-    git push origin refs/tags/v$(buildVersion)
-  displayName: 'Tag buildVersion'
+    echo "Create tag: $(BuildVersion)"
+    git config user.name "Azure DevOps"
+    git config user.email "devops@fortigi.nl"
+    git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
+    git push origin refs/tags/v$(BuildVersion)
+  displayName: 'Create Tag'
   condition: succeeded()
 
