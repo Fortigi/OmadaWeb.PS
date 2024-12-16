@@ -104,7 +104,7 @@ Task Build -depends Test {
         $CurrentModulePsd1 = $null
     }
 
-    if ($Null -ne $Version) {
+    if (![String]::IsNullOrWhiteSpace($Version)) {
         $NewVersion = $Version
     }
     else {
