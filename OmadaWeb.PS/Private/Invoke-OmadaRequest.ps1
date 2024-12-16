@@ -12,9 +12,6 @@ function Invoke-OmadaRequest {
 
             $BoundParams = $PsCmdLet.MyInvocation.BoundParameters
 
-            $ExcludedRestMethodParameters = @("AuthenticationType", "AzureAdTenantId", "Credential", "RequestType", "EdgeProfile")
-            $ExcludedParameters = @("OmadaWebAuthCookieExportLocation", "InPrivate", "ForceAuthentication", "EdgeProfile")
-
             if ("UserAgent" -notin $BoundParams.Keys) {
                 $BoundParams.Add("UserAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
             }
@@ -86,6 +83,8 @@ function Invoke-OmadaRequest {
                 Set-Body
             }
 
+            $DefaultParams
+
             $BoundParams.Add("WebSession", $Session)
             $BoundParams.Add("UseBasicParsing", $true)
 
@@ -109,9 +108,6 @@ function Invoke-OmadaRequest {
                         return (Invoke-RestMethod @Parameters)
                     }
                     "Invoke-WebRequest" {
-                        if ($null -eq $BoundParams.Headers -or $null -eq $BoundParams.Headers.Keys) {
-                            $BoundParams.Remove("Headers")
-                        }
                         $Parameters = Set-RequestParameter
                         return (Invoke-WebRequest @Parameters)
                     }
