@@ -1,4 +1,6 @@
 function Install-Selenium {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'CheckJsonLibrary', Justification = 'The CheckJsonLibrary variable is used in a function called from here')]
+    PARAM()
     $DllFileName = "WebDriver.dll"
     if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {
         "Failed to update '{0}'. Retry restarting this PowerShell session or manually remove the contents of folder '{1}'. Reuse current version for now. " -f $DllFileName, $WebDriverBasePath | Write-Warning
@@ -8,30 +10,20 @@ function Install-Selenium {
     $CheckJsonLibrary = $false
 
     "WebDriver.dll needs to be downloaded. Downloading from GitHub" | Write-Host
-    $DownloadUrl = "https://api.github.com"
-    $URI = $DownloadUrl, "/repos/SeleniumHQ/selenium/releases" -join ""
     $null = New-Item (Split-Path $Script:WebDriverPath) -ItemType Directory -Force
 
-    try {
-        $Result = Invoke-RestMethod -Method Get -Uri $URI -ErrorAction SilentlyContinue -UseBasicParsing
-    }
-    catch {
-        "Could not download the Edge web driver. Please manually download the latest selenium-dotnet-x.x.0.zip from 'https://github.com/SeleniumHQ/selenium/releases/' extract the net48 or netstandard20 WebDriver.dll and place it in directory '{0}'." -f (Split-Path $Script:WebDriverPath) | Write-Error -ErrorAction "Stop"
-    }
+    $Org = "SeleniumHQ"
+    $Repo = "selenium"
+    $AssetFilter = ".*dotnet.(?!strongnamed).*\.0\.zip"
 
     if ($PSVersionTable.PSVersion.Major -le 5) {
         "Using version 4.23 of Selenium because newer versions are currently not compatible with PowerShell 5.1" | Write-Warning
-        $LatestRelease = $Result | Where-Object { $_.tag_name -like "*4.23*" } | Sort-Object published_at | Select-Object -Last 1
+
+        $TempZipPath = Get-GitHubRelease -Org $Org -Repo $Repo -TagFilter "*4.23*" -AssetFilter $AssetFilter
     }
     else {
-        $LatestRelease = $Result | Where-Object { $_.tag_name -ne "nightly" -and $_.prerelease -eq $false -and $_.draft -eq $false } | Sort-Object published_at | Select-Object -Last 1
-        "Installing Selenium version {0}" -f ($LatestRelease.tag_name.Split("-")[-1]) | Write-Host
+        $TempZipPath = Get-GitHubRelease -Org $Org -Repo $Repo -AssetFilter $AssetFilter
     }
-    $Asset = $LatestRelease.assets | Where-Object { $_.name -match ".*dotnet.(?!strongnamed).*\.0\.zip" }
-
-    $TempFile = Invoke-DownloadFile -DownloadUrl $Asset.'browser_download_url'
-
-    $TempZipPath = Expand-DownloadFile -FilePath $TempFile
 
     $Package = Get-ChildItem $($TempZipPath.FullName) -Filter "*WebDriver*.nupkg"
     $NuPkgZip = Get-Item $($Package.FullName) | Rename-Item -NewName ("{0}.zip" -f $Package.FullName) -PassThru
@@ -59,7 +51,7 @@ function Install-Selenium {
         }
         catch {
             if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {
-                "Failed to update '{0}'. Retry restarting this PowerShell session or manually remove the contents of folder '{1}'. Reuse current version for now. Error:`r`n {2}" -f $DllFileName,$WebDriverBasePath, $_.Exception | Write-Warning
+                "Failed to update '{0}'. Retry restarting this PowerShell session or manually remove the contents of folder '{1}'. Reuse current version for now. Error:`r`n {2}" -f $DllFileName, $WebDriverBasePath, $_.Exception | Write-Warning
                 return $false
             }
             else {
@@ -70,7 +62,6 @@ function Install-Selenium {
         $CheckJsonLibrary = $true
     }
 
-    "Installed '{0}' version {1}" -f $DllFileName,(Get-Item (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName)).VersionInfo.ProductVersion | Write-Host
+    "Installed '{0}' version {1}" -f $DllFileName, (Get-Item (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName)).VersionInfo.ProductVersion | Write-Host
     Remove-Item $($TempZipPath.FullName) -Force -Confirm:$false -Recurse
-
 }

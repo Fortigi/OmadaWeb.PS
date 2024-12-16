@@ -8,20 +8,45 @@ try {
     $ModuleName = "OmadaWeb.PS"
     "ModuleName {0}" -f $ModuleName | Write-Verbose
 
-    $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath $ModuleName
+    $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "output\OmadaWeb.PS"
+    if (!(Test-Path $ModuleSourceFolder -PathType Container)) {
+        $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "output"
+    }
+    if (!(Test-Path $ModuleSourceFolder -PathType Container)) {
+        "Module source folder {0} does not exist" -f $ModuleSourceFolder | Write-Error -ErrorAction Stop
+    }
+
     "ModuleSourceFolder {0}" -f $ModuleTargetFolder | Write-Verbose
+
+    $ModulePsd1 = Import-PowerShellDataFile (Join-Path -Path $ModuleSourceFolder -ChildPath ("{0}.psd1" -f $ModuleName))
+    [version]$Version = $ModulePsd1.ModuleVersion
 
     "Scope: {0}" -f $Scope | Write-Verbose
     switch ($Scope) {
 
         "AllUsers" {
-            $ModuleTargetFolder = Join-Path $env:PROGRAMFILES -ChildPath ("PowerShell\Modules\{0}" -f $ModuleName)
+            if ($PSVersionTable.PsEdition -eq "Desktop") {
+                $ModuleTargetFolder = Join-Path $env:ProgramFiles -ChildPath ("WindowsPowerShell\Modules\{0}\{1}" -f $ModuleName, $Version.ToString())
+            }
+            else {
+                $ModuleTargetFolder = Join-Path $env:ProgramFiles -ChildPath ("PowerShell\Modules\{0}\{1}" -f $ModuleName, $Version.ToString())
+            }
         }
         "System" {
-            $ModuleTargetFolder = Join-Path $PSHOME -ChildPath ("Modules\{0}" -f $ModuleName)
+            if ($PSVersionTable.PsEdition -eq "Desktop") {
+                $ModuleTargetFolder = Join-Path $env:WinDir -ChildPath ("System32\WindowsPowerShell\v1.0\Modules\{0}\{1}" -f $ModuleName, $Version.ToString())
+            }
+            else {
+                $ModuleTargetFolder = Join-Path $env:WinDir -ChildPath ("Program Files\PowerShell\Modules\{0}\{1}" -f $ModuleName, $Version.ToString())
+            }
         }
         default {
-            $ModuleTargetFolder = Join-Path $HOME -ChildPath ("Documents\WindowsPowerShell\Modules\{0}" -f $ModuleName)
+            if ($PSVersionTable.PsEdition -eq "Desktop") {
+                $ModuleTargetFolder = Join-Path $HOME -ChildPath ("Documents\WindowsPowerShell\Modules\{0}\{1}" -f $ModuleName, $Version.ToString())
+            }
+            else {
+                $ModuleTargetFolder = Join-Path $HOME -ChildPath ("Documents\PowerShell\Modules\{0}\{1}" -f $ModuleName, $Version.ToString())
+            }
         }
     }
     "ModuleTargetFolder {0}" -f $ModuleTargetFolder | Write-Verbose
@@ -36,11 +61,10 @@ try {
     }
 
     "Deploy {0} PowerShell module from {1} to {2}" -f $ModuleName, $ModuleSourceFolder, $ModuleTargetFolder | Write-Host
-    Get-Item -Path $ModuleSourceFolder | Copy-Item -Destination $ModuleTargetFolder -Recurse -Force
+    New-Item $ModuleTargetFolder -ItemType Directory -Force | Out-Null
+    Get-ChildItem -Path $ModuleSourceFolder | Copy-Item -Destination $ModuleTargetFolder -Recurse -Force
     Get-ChildItem $ModuleTargetFolder -Recurse | Unblock-File
-    Get-ChildItem $ModuleTargetFolder -Filter "*.dll" -Recurse | Remove-Item -Force
-    Get-ChildItem $ModuleTargetFolder -Filter "*.exe" -Recurse | Remove-Item -Force
-    Get-ChildItem $ModuleTargetFolder -Filter "OmadaWeb.PS2.psm1" | Remove-Item -Force
+    Get-ChildItem $ModuleTargetFolder | Where-Object { $_.Name -notin @("OmadaWeb.PS.psm1", "OmadaWeb.PS.psd1") } | Remove-Item -Force
     "Finished" | Write-Host
 }
 catch {

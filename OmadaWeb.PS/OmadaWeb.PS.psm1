@@ -3,17 +3,25 @@ PARAM(
     [parameter(Mandatory = $false)]
     [hashtable]$Parameters
 )
+
 "Loading OmadaWeb.PS Module" | Write-Verbose
 
+$PowerShellType = "Core"
+if ($PSVersionTable.PSVersion.Major -le 5) {
+    "Selenium is restricted to version (v4.23) due compatibility issues in Windows PowerShell Desktop 5. Consider using PowerShell 7 LTS instead, you can get it here: https://aka.ms/powershell-release?tag=stable" | Write-Warning
+    $PowerShellType = "Desktop"
+}
 
+$BinPath = (New-Item (Join-Path ([System.Environment]::GetEnvironmentVariable("LOCALAPPDATA")) -ChildPath "OmadaWeb.PS\Bin\$PowerShellType") -ItemType Directory -Force).FullName
 $DefaultParams = @{
-    WebDriverBasePath     = "$PSScriptRoot\Bin\Core"
+    WebDriverBasePath     = $BinPath
     InstalledEdgeBasePath = "C:\Program Files (x86)\Microsoft\Edge\Application"
-    NewtonsoftJsonPath    = "$PSScriptRoot\Bin\Core"
-    SystemTextJsonPath    = "$PSScriptRoot\Bin\Core"
-    SystemRuntimePath     = "$PSScriptRoot\Bin\Core"
+    NewtonsoftJsonPath    = $BinPath
+    SystemTextJsonPath    = $BinPath
+    SystemRuntimePath     = $BinPath
     OmadaWebAuthCookie    = $null
     UpdateDependencies    = $false
+    LastSessionType       = "Normal"
 }
 
 $DefaultParams.GetEnumerator() | ForEach-Object {
@@ -30,22 +38,12 @@ $Parameters.GetEnumerator() | ForEach-Object {
     New-Variable -Name $_.Key -Value $_.Value -Force
 }
 
-if ($PSVersionTable.PSVersion.Major -le 5) {
-    $WebDriverBasePath = "$PSScriptRoot\Bin\Desktop"
-    $NewtonsoftJsonPath = "$PSScriptRoot\Bin\Desktop"
-    $SystemTextJsonPath = "$PSScriptRoot\Bin\Desktop"
-    $SystemRuntimePath = "$PSScriptRoot\Bin\Desktop"
-}
 try {
     $null = New-Item $WebDriverBasePath -ItemType Directory -Force
 }
 catch {}
 
 "PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json) | Write-Verbose
-
-#Get public and private function definition files.
-$Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
-$Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1)
 
 #EdgeDriver Location
 $Script:EdgeDriverPath = [System.IO.Path]::Combine($WebDriverBasePath, "msedgedriver.exe")
@@ -94,7 +92,9 @@ if ($UpdateDependencies) {
     }
 }
 
-#Dot source the files
+#region exclude
+$Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
+$Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1)
 Foreach ($Import in @($Public + $Private)) {
     try {
         . $Import.FullName
@@ -106,3 +106,9 @@ Foreach ($Import in @($Public + $Private)) {
 
 # Export all the functions
 Export-ModuleMember -Function $Public.Basename -Alias *
+#endregion
+
+#region include
+$Script:EdgeProfiles = Get-EdgeProfile
+$Script:LoginRetryCount = 0
+#endregion

@@ -1,11 +1,15 @@
 function Invoke-DataFromWebDriver {
+    PARAM(
+        [string]$EdgeProfile,
+        [switch]$InPrivate
+    )
 
     $AuthCookie = $null
 
     "Opening Edge to retrieve authentication cookie" | Write-Host
-    $EdgeDriver = Invoke-EdgeDriver
+    $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
 
-    Invoke-EdgeDriverLogin
+    Start-EdgeDriverLogin
 
     $AgentString = $EdgeDriver.ExecuteScript("return navigator.userAgent")
 
@@ -22,12 +26,21 @@ function Invoke-DataFromWebDriver {
             Start-Sleep -Seconds 1
 
             if ($null -eq $EdgeDriver -or $null -eq $EdgeDriver.WindowHandles) {
+                if ($Script:LoginRetryCount -ge 3) {
+                    Close-EdgeDriver
+                    "`nLogin retry count exceeded! Please check your credentials as no cookie could be retrieved!" | Write-Error -ErrorAction "Stop"
+                }
+                else {
+                    "`n{0} - Login retry count: {1}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount | Write-Verbose
+                }
+
                 "" | Write-Host
-                "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host
+                "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host -ForegroundColor Yellow
                 $LoginMessageShown = $false
                 Close-EdgeDriver
-                $EdgeDriver = Invoke-EdgeDriver
-                Invoke-EdgeDriverLogin
+                $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
+                Start-EdgeDriverLogin
+                $Script:LoginRetryCount++
             }
         }
         else {
@@ -39,10 +52,10 @@ function Invoke-DataFromWebDriver {
 
     Close-EdgeDriver
     if ($null -ne $AuthCookie) {
+        $Script:LoginRetryCount = 0
         return $AuthCookie, $AgentString
     }
     else {
         "Could not authenticate to '{0}" -f $Script:OmadaWebBaseUrl | Write-Error -ErrorAction "Stop"
     }
-
 }

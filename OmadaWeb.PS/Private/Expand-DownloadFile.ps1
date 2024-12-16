@@ -6,7 +6,7 @@ function Expand-DownloadFile {
 
     )
 
-    $FilePath = Get-Item $FilePath | Rename-Item -NewName ("{0}.zip" -f $FilePath) -PassThru
+    $FilePath = Get-Item $FilePath | Move-Item -Destination ("{0}.zip" -f $FilePath) -PassThru -Force
     $ZipOutputPath = (Join-Path (Get-Item $FilePath).PsParentPath -ChildPath $($FilePath.BaseName.Substring(0, $FilePath.BaseName.IndexOf("."))))
     $ZipOutputPath = New-Item $ZipOutputPath -ItemType Directory -Force
     Get-Item $FilePath | Expand-Archive -DestinationPath $($ZipOutputPath.FullName)
