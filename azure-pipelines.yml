@@ -20,15 +20,25 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
-      "Install Pester"|Write-Host
-      Install-Module -Name Pester -Scope CurrentUser -Force;
-      "Install psake"|Write-Host
-      Install-Module -Name psake -Scope CurrentUser -Force;
-      "Install PSDeploy"|Write-Host
-      Install-Module -Name PSDeploy -Scope CurrentUser -Force;
-      "Install PSScriptAnalyzer"|Write-Host
-      Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force;
-
+      "Validate Modules" | Write-Host
+      $Modules = Get-Module -ListAvailable
+      if ("Pester" -notin $Modules.Name) { 
+        "Install Pester" | Write-Host
+        Install-Module -Name Pester -Scope CurrentUser -Force 
+      }
+      if ("psake" -notin $Modules.Name) { 
+        "Install psake" | Write-Host
+        Install-Module -Name psake -Scope CurrentUser -Force 
+      }
+      if ("PSDeploy" -notin $Modules.Name) { 
+        "Install PSDeploy" | Write-Host
+        Install-Module -Name PSDeploy -Scope CurrentUser -Force 
+      }
+      if ("PSScriptAnalyzer" -notin $Modules.Name) { 
+        "Install PSScriptAnalyzer" | Write-Host
+        Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force 
+      }
+    pwsh: true
 
 - task: PowerShell@2
   displayName: 'Preparing Build Number'
@@ -39,23 +49,14 @@ steps:
       $year = $currentDate.Year
       $month = $currentDate.Month
       $day = $currentDate.Day
-      Write-Host $currentDate
-      Write-Host $day
-      Write-Host $env:revision
-      Write-Host "##vso[task.setvariable variable=buildVersion]$year.$month.$day.$env:revision"
-
-- task: PowerShell@2
-  displayName: 'Analyze'
-  inputs:
-    filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-    arguments: ' -Task Analyze'
-    pwsh: true
-
-- task: PowerShell@2
-  displayName: 'Test'
-  inputs:
-    filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-    arguments: ' -Task Test'
+      "Current date: {0}" -f $currentDate | Write-Host 
+      "Current year: {0}" -f $year | Write-Host 
+      "Current month: {0}" -f $month | Write-Host 
+      "Current day: {0}" -f $day | Write-Host 
+      "Revision: {0}" -f $env:revision | Write-Host 
+      $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
+      "Version: {0}" -f $versionString | Write-Host
+      Write-Host "##vso[task.setvariable variable=buildVersion]$versionString"
     pwsh: true
 
 - task: PowerShell@2
@@ -63,13 +64,6 @@ steps:
   inputs:
     filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
     arguments: ' -Task Build -BuildVersion $(buildVersion)'
-    pwsh: true
-
-- task: PowerShell@2
-  displayName: 'ImportModule'
-  inputs:
-    filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-    arguments: ' -Task ImportModule'
     pwsh: true
 
 - task: NuGetCommand@2
@@ -88,6 +82,6 @@ steps:
   inputs:
     command: push
     nuGetFeedType: internal
-    publishVstsFeed: 'Fortigi/OmadaWeb.PS'
+    publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
     allowPackageConflicts: true
     packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
