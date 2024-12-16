@@ -13,28 +13,28 @@ steps:
 - task: PowerShell@2
   displayName: 'Analyze'
   inputs:
-    filePath: '$(System.DefaultWorkingDirectory)\Build\build.ps1'
+    filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
     arguments: ' -Task Analyze'
     pwsh: true
 
 - task: PowerShell@2
   displayName: 'Test'
   inputs:
-    filePath: '$(System.DefaultWorkingDirectory)\Build\build.ps1'
+    filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
     arguments: ' -Task Test'
     pwsh: true
 
 - task: PowerShell@2
   displayName: 'Build'
   inputs:
-    filePath: '$(System.DefaultWorkingDirectory)\Build\build.ps1'
+    filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
     arguments: ' -Task Build'
     pwsh: true
 
 - task: PowerShell@2
   displayName: 'ImportModule'
   inputs:
-    filePath: '$(System.DefaultWorkingDirectory)\Build\build.ps1'
+    filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
     arguments: ' -Task ImportModule'
     pwsh: true    
 
