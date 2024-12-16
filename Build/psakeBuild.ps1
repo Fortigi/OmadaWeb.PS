@@ -105,7 +105,7 @@ Task Build -depends Test {
     }
 
     if (![String]::IsNullOrWhiteSpace($Version)) {
-        $NewVersion = $Version
+        [version]$NewVersion = "{0}" -f $Version
     }
     else {
         [version]$NewVersion = $Date.ToString('yyyy.MM.dd.001')
