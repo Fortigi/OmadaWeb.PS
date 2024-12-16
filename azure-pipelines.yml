@@ -15,14 +15,14 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
-     
-      Install-Module -Name Pester -Scope CurrentUser;
-      
-      Install-Module -Name psake -Scope CurrentUser;
-      
-      Install-Module -Name PSDeploy -Scope CurrentUser;
-      
-      Install-Module -Name PSScriptAnalyzer -Scope CurrentUser;
+      "Install Pester"|Write-Host
+      Install-Module -Name Pester -Scope CurrentUser -Force;
+      "Install psake"|Write-Host
+      Install-Module -Name psake -Scope CurrentUser -Force;
+      "Install PSDeploy"|Write-Host
+      Install-Module -Name PSDeploy -Scope CurrentUser -Force;
+      "Install PSScriptAnalyzer"|Write-Host
+      Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force;
 
 
 - task: PowerShell@2
