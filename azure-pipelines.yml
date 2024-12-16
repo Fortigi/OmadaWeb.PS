@@ -70,7 +70,7 @@ steps:
   displayName: 'Pack project'
   inputs:
     command: pack
-    packagesToPack: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS/OmadaWeb.PS.nuspec'
+    packagesToPack: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS.nuspec'
     packDestination: '$(Build.ArtifactStagingDirectory)'
     versioningScheme: byEnvVar
     versionEnvVar: buildVersion
