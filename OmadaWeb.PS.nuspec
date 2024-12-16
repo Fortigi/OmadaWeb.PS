@@ -8,7 +8,7 @@
         <copyright>Copyright $YEAR$ Fortigi</copyright>
     </metadata>
     <files>
-        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psd1" target="content" />
-        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psm1" target="content" />
+        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psd1" target="" />
+        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psm1" target="" />
     </files>
 </package>
