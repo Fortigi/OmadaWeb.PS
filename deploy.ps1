@@ -8,7 +8,14 @@ try {
     $ModuleName = "OmadaWeb.PS"
     "ModuleName {0}" -f $ModuleName | Write-Verbose
 
-    $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "Output"
+    $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "output\OmadaWeb.PS"
+    if (!(Test-Path $ModuleSourceFolder -PathType Container)) {
+        $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "output"
+    }
+    if (!(Test-Path $ModuleSourceFolder -PathType Container)) {
+        "Module source folder {0} does not exist" -f $ModuleSourceFolder | Write-Error -ErrorAction Stop
+    }
+
     "ModuleSourceFolder {0}" -f $ModuleTargetFolder | Write-Verbose
 
     $ModulePsd1 = Import-PowerShellDataFile (Join-Path -Path $ModuleSourceFolder -ChildPath ("{0}.psd1" -f $ModuleName))

@@ -5,7 +5,7 @@ Properties {
     $ParentPath = (Get-Item -Path $PSScriptRoot -Verbose:$false).Parent.FullName
     $ModuleSource = Join-Path -Path $ParentPath -ChildPath 'OmadaWeb.PS'
     $TestSource = Join-Path -Path $ParentPath -ChildPath 'tests'
-    $OutputDir = Join-Path -Path $ParentPath -ChildPath 'output'
+    $OutputDir = Join-Path -Path $ParentPath -ChildPath 'output\OmadaWeb.PS'
     New-Item -Path $OutputDir -ItemType Directory -Force | Out-Null
 }
 
@@ -121,7 +121,7 @@ Task Build -depends Test {
     $ModulePsd1.ModuleVersion = $NewVersion
 
     New-ModuleManifest @Modulepsd1
-    (Get-Content $($ModulePsd1.Path) -Raw) -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings | Set-Content -Path $($ModulePsd1.Path) -Encoding UTF8 -Force
+    (Get-Content $($ModulePsd1.Path) -Raw) -replace "`r?`n", "`r`n"  | Invoke-Formatter -Settings $FormattingSettings | Set-Content -Path $($ModulePsd1.Path) -Encoding UTF8 -Force
 
 
     $Length = 150
