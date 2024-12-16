@@ -91,3 +91,4 @@ steps:
     git push origin refs/tags/v$(buildVersion)
   displayName: 'Tag buildVersion'
   condition: succeeded()
+
