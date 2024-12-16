@@ -1,0 +1,40 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- None
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: PowerShell@2
+  displayName: 'Analyze'
+  inputs:
+    filePath: '$(System.DefaultWorkingDirectory)\Build\build.ps1'
+    arguments: ' -Task Analyze'
+    pwsh: true
+
+- task: PowerShell@2
+  displayName: 'Test'
+  inputs:
+    filePath: '$(System.DefaultWorkingDirectory)\Build\build.ps1'
+    arguments: ' -Task Test'
+    pwsh: true
+
+- task: PowerShell@2
+  displayName: 'Build'
+  inputs:
+    filePath: '$(System.DefaultWorkingDirectory)\Build\build.ps1'
+    arguments: ' -Task Build'
+    pwsh: true
+
+- task: PowerShell@2
+  displayName: 'ImportModule'
+  inputs:
+    filePath: '$(System.DefaultWorkingDirectory)\Build\build.ps1'
+    arguments: ' -Task ImportModule'
+    pwsh: true    
+
