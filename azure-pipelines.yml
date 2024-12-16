@@ -1,8 +1,3 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
 - None
 
@@ -12,6 +7,7 @@ pool:
 variables:
   buildConfiguration: 'Pipeline'
   buildVersion: 'Will be set dynamically'
+  year: 'Will be set dynamically'
   revision: $[counter(format('{0:dd}', pipeline.startTime), 1)]
 
 steps:
@@ -57,6 +53,7 @@ steps:
       $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
       "Version: {0}" -f $versionString | Write-Host
       Write-Host "##vso[task.setvariable variable=buildVersion]$versionString"
+      Write-Host "##vso[task.setvariable variable=year]$year"
     pwsh: true
 
 - task: PowerShell@2
@@ -74,7 +71,7 @@ steps:
     packDestination: '$(Build.ArtifactStagingDirectory)'
     versioningScheme: byEnvVar
     versionEnvVar: buildVersion
-    buildProperties: 'VERSION=$(buildVersion)'
+    buildProperties: 'VERSION=$(buildVersion);YEAR=$(year)'
   condition: succeededOrFailed()
 
 - task: NuGetCommand@2
@@ -88,8 +85,6 @@ steps:
 
 - script: |
     echo "Create tag: $(BuildVersion)"
-    git config user.name "Azure DevOps"
-    git config user.email "devops@fortigi.nl"
     git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
     git push origin refs/tags/v$(BuildVersion)
   displayName: 'Create Tag'
