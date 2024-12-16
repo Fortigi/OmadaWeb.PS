@@ -5,10 +5,10 @@
         <version>$VERSION$</version>
         <authors>Fortigi</authors>
         <description>Module containing PowerShell commands to manage data via Omada web and OData endpoints in the cloud or on-prem. This module adds support for additional authentication types like OAuth2 based on client credentials and browser based login.</description>
+        <copyright>Copyright $YEAR$ Fortigi</copyright>
     </metadata>
     <files>
-        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psd1" target="lib\OmadaWeb.PS" />
-        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psm1" target="lib\OmadaWeb.PS" />
-        <file src="deploy.ps1" target="lib" />
+        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psd1" target="content" />
+        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psm1" target="content" />
     </files>
 </package>
