@@ -28,7 +28,7 @@ steps:
       Install-Module -Name PSDeploy -Scope CurrentUser -Force;
       "Install PSScriptAnalyzer"|Write-Host
       Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force;
-
+    pwsh: true
 
 - task: PowerShell@2
   displayName: 'Preparing Build Number'
@@ -43,6 +43,7 @@ steps:
       Write-Host $day
       Write-Host $env:revision
       Write-Host "##vso[task.setvariable variable=buildVersion]$year.$month.$day.$env:revision"
+    pwsh: true
 
 - task: PowerShell@2
   displayName: 'Analyze'
