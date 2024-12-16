@@ -83,8 +83,6 @@ function Invoke-OmadaRequest {
                 Set-Body
             }
 
-            $DefaultParams
-
             $BoundParams.Add("WebSession", $Session)
             $BoundParams.Add("UseBasicParsing", $true)
 
