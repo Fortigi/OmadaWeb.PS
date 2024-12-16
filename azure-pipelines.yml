@@ -14,7 +14,7 @@ variables:
 stages:
 - stage: Build
   jobs:
-  - job: 
+  - job: Build
     steps:
     - task: PowerShell@2
       displayName: 'Install Modules'
@@ -44,6 +44,7 @@ stages:
 
     - task: PowerShell@2
       displayName: 'Preparing Build Number'
+      name: versioning
       inputs:
         targetType: 'inline'
         script: |
@@ -75,6 +76,11 @@ stages:
   dependsOn: [Build]
   jobs:
   - job: 'Create_Artifacts'
+    variables:
+      - name: buildVersion
+        value: $[ stageDependencies.Build.Build.outputs['versioning.buildVersion'] ]
+      - name: year
+        value: $[ stageDependencies.Build.Build.outputs['versioning.year'] ]        
     steps:
     - task: NuGetCommand@2
       displayName: 'Pack project'
