@@ -85,3 +85,13 @@ steps:
     publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
     allowPackageConflicts: true
     packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
+
+- script: |
+    echo "Create tag: $(BuildVersion)"
+    git config user.name "Azure DevOps"
+    git config user.email "devops@fortigi.nl"
+    git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
+    git push origin refs/tags/v$(BuildVersion)
+  displayName: 'Create Tag'
+  condition: succeeded()
+
