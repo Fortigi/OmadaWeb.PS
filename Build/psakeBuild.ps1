@@ -1,4 +1,5 @@
 Properties {
+    $Version = $BuildVersion
     $Date = Get-Date
     $ModuleName = "OmadaWeb.PS"
     $ParentPath = (Get-Item -Path $PSScriptRoot -Verbose:$false).Parent.FullName
@@ -9,8 +10,8 @@ Properties {
 }
 
 
-Task default -Depends Analyze, Test, Build, ImportModule
-Task DeployOnly -Depends Build, Deploy
+Task default -depends Analyze, Test, Build, ImportModule
+Task DeployOnly -depends Build, Deploy
 
 Task Analyze {
 
@@ -26,10 +27,10 @@ Task Analyze {
     }
 }
 
-Task Test -Depends Analyze {
+Task Test -depends Analyze {
 }
 
-Task Build -Depends Test {
+Task Build -depends Test {
 
     $FormattingSettings = @{
         IncludeRules = @("PSPlaceOpenBrace", "PSUseConsistentIndentation", "PsAvoidUsingCmdletAliases", "PSUseConsistentWhitespace", "PSAlignAssignmentStatement", "PSPlaceCloseBrace")
@@ -102,12 +103,18 @@ Task Build -Depends Test {
     catch {
         $CurrentModulePsd1 = $null
     }
-    [version]$NewVersion = $Date.ToString('yyyy.MM.dd.001')
-    if ($CurrentModulePsd1) {
-        [version]$CurrentModuleVersion = $CurrentModulePsd1.ModuleVersion
-        if ($CurrentModuleVersion -ge $NewVersion) {
-            $NewVersion = [version]$CurrentModuleVersion
-            $NewVersion = New-Object System.Version($NewVersion.Major, $NewVersion.Minor, $NewVersion.Build, ($NewVersion.Revision + 1))
+
+    if ($Null -ne $Version) {
+        $NewVersion = $Version
+    }
+    else {
+        [version]$NewVersion = $Date.ToString('yyyy.MM.dd.001')
+        if ($CurrentModulePsd1) {
+            [version]$CurrentModuleVersion = $CurrentModulePsd1.ModuleVersion
+            if ($CurrentModuleVersion -ge $NewVersion) {
+                $NewVersion = [version]$CurrentModuleVersion
+                $NewVersion = New-Object System.Version($NewVersion.Major, $NewVersion.Minor, $NewVersion.Build, ($NewVersion.Revision + 1))
+            }
         }
     }
 
@@ -178,11 +185,11 @@ Task Build -Depends Test {
 
 }
 
-Task ImportModule -Depends Build {
-    $Test = Import-Module -Name "$OutputDir\$ModuleName.psd1" -Force -PassThru
+Task ImportModule -depends Build {
+    $Test = Import-Module -name "$OutputDir\$ModuleName.psd1" -Force -PassThru
     if ($Test) {
         "Module loaded successfully" | Write-Verbose
-        Remove-Module -Name $Test.Name -Force
+        Remove-Module -name $Test.Name -Force
     }
     else {
         "Module failed to load" | Write-Error -ErrorAction Stop

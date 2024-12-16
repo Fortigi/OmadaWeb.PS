@@ -1,6 +1,7 @@
 [cmdletbinding()]
 param(
-    [string[]]$Task = 'default'
+    [string[]]$Task = 'default',
+    [string[]]$BuildVersion
 )
 $Error.Clear()
 
@@ -10,5 +11,5 @@ if (!(Get-Module -Name PSDeploy -ListAvailable)) { Install-Module -Name PSDeploy
 if (!(Get-Module -Name PSScriptAnalyzer -ListAvailable)) { Install-Module -Name PSScriptAnalyzer -Scope CurrentUser }
 
 
-Invoke-psake -buildFile "$PSScriptRoot\psakeBuild.ps1" -taskList $Task -Verbose:$VerbosePreference
+Invoke-psake -buildFile "$PSScriptRoot\psakeBuild.ps1" -taskList $Task -Verbose:$VerbosePreference -parameters @{"BuildVersion"=$BuildVersion}
 
