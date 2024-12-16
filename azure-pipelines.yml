@@ -35,6 +35,7 @@ steps:
         Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force 
       }
     pwsh: true
+  condition: succeeded()
 
 - task: PowerShell@2
   displayName: 'Preparing Build Number'
@@ -55,6 +56,7 @@ steps:
       Write-Host "##vso[task.setvariable variable=buildVersion]$versionString"
       Write-Host "##vso[task.setvariable variable=year]$year"
     pwsh: true
+  condition: succeeded()
 
 - task: PowerShell@2
   displayName: 'Build'
@@ -62,6 +64,7 @@ steps:
     filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
     arguments: ' -Task Build -BuildVersion $(buildVersion)'
     pwsh: true
+  condition: succeeded()
 
 - task: NuGetCommand@2
   displayName: 'Pack project'
@@ -82,6 +85,7 @@ steps:
     publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
     allowPackageConflicts: true
     packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
+  condition: succeeded()
 
 - script: |
     echo "Create tag: $(BuildVersion)"
@@ -96,5 +100,5 @@ steps:
 
 - task: PSGalleryPackager@0
   inputs:
-    apiKey: $(psgallery)
-    path: 'output\OmadaWeb.PS'
+    apiKey: '$(psgallery)'
+    path: 'output\OmadaWeb.PS'    
