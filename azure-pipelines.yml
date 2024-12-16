@@ -94,3 +94,7 @@ steps:
   env:
     SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
+- task: PSGalleryPackager@0
+  inputs:
+    apiKey: $(psgallery)
+    path: 'output\OmadaWeb.PS'
