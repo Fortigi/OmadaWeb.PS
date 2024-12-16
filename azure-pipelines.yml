@@ -93,6 +93,6 @@ steps:
   inputs:
     command: push
     nuGetFeedType: internal
-    publishVstsFeed: 'Fortigi/OmadaWeb.PS'
+    publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
     allowPackageConflicts: true
     packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
