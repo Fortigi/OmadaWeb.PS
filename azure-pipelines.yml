@@ -12,12 +12,13 @@ variables:
 
 
 stages:
-- stage: Build
+- stage: BuildStage
   jobs:
-  - job: Build
+  - job: BuildJob
     steps:
     - task: PowerShell@2
       displayName: 'Install Modules'
+      name: "InstallModules"
       inputs:
         targetType: 'inline'
         script: |
@@ -44,7 +45,7 @@ stages:
 
     - task: PowerShell@2
       displayName: 'Preparing Build Number'
-      name: versioning
+      name: BuildVersioning
       inputs:
         targetType: 'inline'
         script: |
@@ -65,22 +66,23 @@ stages:
       condition: succeeded()
 
     - task: PowerShell@2
-      displayName: 'Build'
+      displayName: 'Build Module'
+      name: "BuildTask"
       inputs:
         filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
         arguments: ' -Task Build -BuildVersion $(buildVersion)'
         pwsh: true
       condition: succeeded()
 
-- stage: Package
-  dependsOn: [Build]
+- stage: PackageStage
+  dependsOn: [BuildStage]
   jobs:
   - job: 'Create_Artifacts'
     variables:
       - name: buildVersion
-        value: $[ stageDependencies.Build.Build.outputs['versioning.buildVersion'] ]
+        value: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion'] ]
       - name: year
-        value: $[ stageDependencies.Build.Build.outputs['versioning.year'] ]        
+        value: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
     steps:
     - task: NuGetCommand@2
       displayName: 'Pack project'
@@ -116,7 +118,7 @@ stages:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
 - stage: Publish
-  dependsOn: [Build, Package]
+  dependsOn: [BuildStage, PackageStage]
   jobs:
   - job: 'Push_to_PSGallery'
     steps:
