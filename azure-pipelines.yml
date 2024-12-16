@@ -7,7 +7,12 @@ trigger:
 - None
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: windows-latest
+
+variables:
+  buildConfiguration: 'Pipeline'
+  buildVersion: 'Will be set dynamically'
+  revision: $[counter(format('{0:dd}', pipeline.startTime), 1)]
 
 steps:
 - task: PowerShell@2
@@ -24,6 +29,20 @@ steps:
       "Install PSScriptAnalyzer"|Write-Host
       Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force;
 
+
+- task: PowerShell@2
+  displayName: 'Preparing Build Number'
+  inputs:
+    targetType: 'inline'
+    script: |
+      $currentDate = $(Get-Date)
+      $year = $currentDate.Year
+      $month = $currentDate.Month
+      $day = $currentDate.Day
+      Write-Host $currentDate
+      Write-Host $day
+      Write-Host $env:revision
+      Write-Host "##vso[task.setvariable variable=buildVersion]$year.$month.$day.$env:revision"
 
 - task: PowerShell@2
   displayName: 'Analyze'
@@ -43,7 +62,7 @@ steps:
   displayName: 'Build'
   inputs:
     filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-    arguments: ' -Task Build'
+    arguments: ' -Task Build -BuildVersion $(buildVersion)'
     pwsh: true
 
 - task: PowerShell@2
@@ -51,5 +70,24 @@ steps:
   inputs:
     filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
     arguments: ' -Task ImportModule'
-    pwsh: true    
+    pwsh: true
 
+- task: NuGetCommand@2
+  displayName: 'Pack project'
+  inputs:
+    command: pack
+    packagesToPack: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS/OmadaWeb.PS.nuspec'
+    packDestination: '$(Build.ArtifactStagingDirectory)'
+    versioningScheme: byEnvVar
+    versionEnvVar: buildVersion
+    buildProperties: 'VERSION=$(buildVersion)'
+  condition: succeededOrFailed()
+
+- task: NuGetCommand@2
+  displayName: 'NuGet push'
+  inputs:
+    command: push
+    nuGetFeedType: internal
+    publishVstsFeed: 'Fortigi/OmadaWeb.PS'
+    allowPackageConflicts: true
+    packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
