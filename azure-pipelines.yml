@@ -85,6 +85,11 @@ steps:
 
 - script: |
     echo "Create tag: $(BuildVersion)"
+    git config --global user.email "mark@fortigi.nl" 
+
+    git config --global user.name "Mark van Eijken"
+
+
     git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
     git push origin refs/tags/v$(BuildVersion)
   displayName: 'Create Tag'
