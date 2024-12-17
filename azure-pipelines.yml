@@ -192,19 +192,11 @@ stages:
                 "GitHub CLI installed successfully" | Write-Host
 
           - task: PowerShell@2
-            displayName: 'Authenticate GitHub CLI'
+            displayName: 'Push to GitHub Repository'
             inputs:
               targetType: 'inline'
               script: |
                 $env:GH_TOKEN | gh auth login --with-token -
-            env:
-              GH_TOKEN: $(githubPAT)
-
-          - task: PowerShell@2
-            displayName: 'Push Files to GitHub Repository'
-            inputs:
-              targetType: 'inline'
-              script: |
                 $BuildVersion = "${{ coalesce(variables['manualBuildVersion'], variables['buildVersion']) }}"
                 if ([string]::IsNullOrEmpty($BuildVersion) -or $BuildVersion -eq "0.0.0.0") {
                   Write-Error "Valid buildVersion is required when skipping dependencies."
@@ -222,13 +214,8 @@ stages:
                 git add .
                 git commit -m "Release version $(BuildVersioning.buildVersion)"
                 git push -u origin main
-
-          - task: PowerShell@2
-            displayName: 'Create GitHub Release'
-            inputs:
-              targetType: 'inline'
-              script: |
                 gh release create v$(BuildVersioning.buildVersion) "./*" --title "Release v$(BuildVersioning.buildVersion)" --notes "This is the release for version $(BuildVersioning.buildVersion)"
             env:
               GH_TOKEN: $(githubPAT)
+
 
