@@ -184,7 +184,7 @@ stages:
         deploy:
           steps:
           - checkout: self
-            path: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS'
+            path: 'OmadaWeb.PS'
 
           - task: PowerShell@2
             displayName: 'Install GitHub CLI'
