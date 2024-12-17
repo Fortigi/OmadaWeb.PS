@@ -209,12 +209,12 @@ stages:
                   exit 1
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
-                
+                cd ..
                 New-Item $(System.DefaultWorkingDirectory)/GitHub -ItemType Directory
-                git clone https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git $(System.DefaultWorkingDirectory)/OmadaWeb.PS/GitHub
-                Copy-Item -Path "$(System.DefaultWorkingDirectory)/OmadaWeb.PS/Azure/" -Destination "$(System.DefaultWorkingDirectory)/OmadaWeb.PS/GitHub/" -Recurse -Force
+                git clone https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git ./GitHub
+                Copy-Item -Path "./Azure/" -Destination "./GitHub/" -Recurse -Force
                 
-                cd $(System.DefaultWorkingDirectory)/OmadaWeb.PS-GitHub
+                cd ./GitHub
 
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
