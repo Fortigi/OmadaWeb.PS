@@ -184,7 +184,7 @@ stages:
         deploy:
           steps:
           - checkout: self
-            path: 'output/OmadaWeb.PS'
+            path: 'OmadaWeb.PS'
 
           - task: PowerShell@2
             displayName: 'Install GitHub CLI'
@@ -218,7 +218,7 @@ stages:
                 git fetch origin main --force
                 git reset --hard origin/main
                 "List files:" | Write-Host
-                Get-ChildItem -Recurse | Foreach-Object {$_.FullName | Write-Host }
+                Get-ChildItem / -Recurse | Foreach-Object {$_.FullName | Write-Host }
                 #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
                 git add .
                 git commit -m "Release version $BuildVersion"
