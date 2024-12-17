@@ -209,7 +209,7 @@ stages:
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
                 git init
-                git remote add origin https://$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
+                git remote add origin https://user:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
                 git checkout -b main
                 "List files:" | Write-Host
                 Get-ChildItem $(System.DefaultWorkingDirectory) -Recurse | Foreach-Object {$_.FullName | Write-Host }
