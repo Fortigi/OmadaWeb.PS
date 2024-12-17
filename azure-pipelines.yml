@@ -70,7 +70,7 @@ stages:
       name: "BuildTask"
       inputs:
         filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-        arguments: ' -Task Build -BuildVersion $(buildVersion)'
+        arguments: ' -Task Build -BuildVersion $(BuildVersioning.buildVersion)'
         pwsh: true
       condition: succeeded()
 
@@ -90,7 +90,7 @@ stages:
         packDestination: '$(Build.ArtifactStagingDirectory)'
         versioningScheme: byEnvVar
         versionEnvVar: buildVersion
-        buildProperties: 'VERSION=$(buildVersion);YEAR=$(year)'
+        buildProperties: 'VERSION=$(BuildVersioning.buildVersion);YEAR=$(BuildVersioning.year)'
       condition: succeededOrFailed()
 
     - task: NuGetCommand@2
@@ -100,15 +100,15 @@ stages:
         nuGetFeedType: internal
         publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
         allowPackageConflicts: true
-        packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(BuildVersioning.buildVersion).nupkg'
       condition: succeeded()
 
     - script: |
-        echo "Create tag: $(BuildVersion)"
+        echo "Create tag: $(BuildVersioning.BuildVersion)"
         git config --global user.email "mark@fortigi.nl" 
         git config --global user.name "Mark van Eijken"
-        git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
-        git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/$(Build.Repository.Name) refs/tags/v$(BuildVersion)
+        git tag -a v$(BuildVersioning.BuildVersion) -m "Release version $(BuildVersioning.BuildVersion)"
+        git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/$(Build.Repository.Name) refs/tags/v$(BuildVersioning.BuildVersion)
       displayName: 'Create Tag'
       condition: succeeded()
       enabled: false
