@@ -212,7 +212,7 @@ stages:
                 git add .
                 git commit -m "Release version $BuildVersion"
                 git push -u origin main
-                gh release create v$BuildVersion "./*" --title "Release v$BuildVersion" --notes "This is the release for version $BuildVersion"
+                gh release create v$BuildVersion "./" --title "Release v$BuildVersion" --notes "Release v$BuildVersion"
             env:
               GH_TOKEN: $(githubPAT)
 
