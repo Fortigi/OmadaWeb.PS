@@ -217,7 +217,7 @@ stages:
                 Copy-Item -Path "./Azure/*" -Destination "./GitHub/" -Recurse -Force
                 
                 cd ./GitHub
-                get-item D:\a\1\OmadaWeb.PS\GitHub\Azure | remove-item --foce
+                get-item D:\a\1\OmadaWeb.PS\GitHub\Azure | remove-item --force
                 get-location
 
                 git config --global user.email "mark@fortigi.nl"
