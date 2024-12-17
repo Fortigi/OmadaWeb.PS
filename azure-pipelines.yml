@@ -209,12 +209,15 @@ stages:
                   exit 1
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
+                get-location
                 cd ..
-                New-Item $(System.DefaultWorkingDirectory)/GitHub -ItemType Directory
+                get-location
+                New-Item ./GitHub -ItemType Directory
                 git clone https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git ./GitHub
-                Copy-Item -Path "./Azure/" -Destination "./GitHub/" -Recurse -Force
+                Copy-Item -Path "./Azure/*" -Destination "./GitHub/" -Recurse -Force
                 
                 cd ./GitHub
+                get-location
 
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
