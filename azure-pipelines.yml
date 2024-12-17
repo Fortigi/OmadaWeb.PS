@@ -129,10 +129,10 @@ stages:
       env:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
-- stage: Publish
+- stage: GitHubStage
   dependsOn: [BuildStage, PackageStage]
   jobs:
-  - job: PublishToGitHub
+  - job: GitHubJob
     steps:
     - task: PowerShell@2
       displayName: 'Install GitHub CLI'
@@ -177,7 +177,10 @@ stages:
       env:
         GITHUB_TOKEN: $(githubPAT)
 
-  - deployment: DeployJob
+- stage: PSGalleryPublishStage
+  dependsOn: [BuildStage, PackageStage,GitHubStage]
+  jobs:
+  - deployment: PSGalleryPublishJob
     environment: "PSGallery"
     strategy:
       runOnce:
