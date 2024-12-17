@@ -210,7 +210,7 @@ stages:
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
                 get-location
-                get-item .git* |remove-item -force
+                get-item .git* -force |remove-item -force -Recurse
                 cd ..
                 get-location
                 New-Item ./GitHub -ItemType Directory
