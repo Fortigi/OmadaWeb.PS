@@ -150,5 +150,3 @@ stages:
                 "Publish module to PSGallery" | Write-Host 
                 Get-childitem "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" |Where-Object {$_.extension -notin (".psm1",".psd1")}| Remove-Item -Force
                 Publish-Module -Path "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" -NugetAPIKey "$(psgallery)" -Verbose
-               
-
