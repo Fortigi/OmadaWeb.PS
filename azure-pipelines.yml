@@ -102,6 +102,7 @@ stages:
       year: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
     steps:
     - checkout: self
+      path: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS' 
 
     - task: DownloadPipelineArtifact@2
       displayName: 'Download Build Output'
