@@ -74,6 +74,13 @@ stages:
         pwsh: true
       condition: succeeded()
 
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Build Output'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/output' # Folder to publish
+        artifactName: 'BuildOutput'                           # Name of the artifact
+      condition: succeeded()
+
 - stage: PackageStage
   dependsOn: [BuildStage]
   jobs:
@@ -82,6 +89,13 @@ stages:
       buildVersion: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion'] ]
       year: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
     steps:
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Build Output'
+      inputs:
+        artifactName: 'BuildOutput'                           # Name of the artifact
+        targetPath: '$(System.DefaultWorkingDirectory)/output' # Target folder to download to
+
     - task: NuGetCommand@2
       displayName: 'Pack project'
       inputs:
