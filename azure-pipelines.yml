@@ -206,21 +206,18 @@ stages:
                   exit 1
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
-                "List1"|Write-Host
-                Get-ChildItem $(System.DefaultWorkingDirectory) | Write-HOst
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
                 git init
                 git remote add origin https://$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
                 git checkout -b main
-                "List2"|Write-Host
-                                Get-ChildItem $(System.DefaultWorkingDirectory) | Write-HOst
-
+                "List files:" | Write-Host
+                Get-ChildItem $(System.DefaultWorkingDirectory) -Recurse | Foreach-Object {$_.FullName | Write-Host }
                 #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
-                #git add $(System.DefaultWorkingDirectory)/OmadaWeb.PS --all
-                #git commit -m "Release version $BuildVersion"
-                #git push -u origin main
-                #gh release create v$BuildVersion "./" --title "Release v$BuildVersion" --notes "Release v$BuildVersion"
+                git add $(System.DefaultWorkingDirectory)/OmadaWeb.PS/ --all
+                git commit -m "Release version $BuildVersion"
+                git push -u origin main
+                gh release create v$BuildVersion "./" --title "Release v$BuildVersion" --notes "Release v$BuildVersion"
             env:
               GH_TOKEN: $(githubPAT)
 
