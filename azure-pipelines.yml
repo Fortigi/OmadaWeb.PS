@@ -184,7 +184,7 @@ stages:
         deploy:
           steps:
           - checkout: self
-            #path: 'OmadaWeb.PS'
+            path: 'OmadaWeb.PS/Azure'
 
           - task: PowerShell@2
             displayName: 'Install GitHub CLI'
@@ -209,17 +209,28 @@ stages:
                   exit 1
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
+                get-location
+                get-item .git* -force |remove-item -force -Recurse
+                cd ..
+                get-location
+                New-Item ./GitHub -ItemType Directory
+                git clone https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git ./GitHub
+                
+                Copy-Item -Path "./Azure/*" -Destination "./GitHub/" -Recurse -Force
+                
+                cd ./GitHub
+                get-location
+
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
-                git init
-                git remote remove origin
-                git remote add origin https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
+                #git init
+                #git remote remove origin
+                #git remote add origin https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
                 git checkout main
                 git fetch origin main --force
-                git reset --hard origin/main
+                #git reset --hard origin/main
                 "List files:" | Write-Host
                 Get-ChildItem $(Agent.BuildDirectory) -Recurse | Foreach-Object {$_.FullName | Write-Host }
-                #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
                 git add .
                 git commit -m "Release version $BuildVersion"
                 git push -f origin main 
