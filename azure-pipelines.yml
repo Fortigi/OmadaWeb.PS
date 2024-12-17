@@ -132,6 +132,51 @@ stages:
 - stage: Publish
   dependsOn: [BuildStage, PackageStage]
   jobs:
+  - job: PublishToGitHub
+    steps:
+    - task: PowerShell@2
+      displayName: 'Install GitHub CLI'
+      inputs:
+        targetType: 'inline'
+        script: |
+          "Installing GitHub CLI" | Write-Host
+          Invoke-WebRequest -Uri https://github.com/cli/cli/releases/latest/download/gh_2.41.0_windows_amd64.msi -OutFile gh.msi
+          Start-Process msiexec.exe -Wait -ArgumentList '/i gh.msi /quiet /norestart'
+          "GitHub CLI installed successfully" | Write-Host
+
+    - task: PowerShell@2
+      displayName: 'Authenticate GitHub CLI'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo $(GITHUB_TOKEN) | gh auth login --with-token
+      env:
+        GITHUB_TOKEN: $(githubPAT)
+
+    - task: PowerShell@2
+      displayName: 'Push Files to GitHub Repository'
+      inputs:
+        targetType: 'inline'
+        script: |
+          git config --global user.email "mark@fortigi.nl"
+          git config --global user.name "Mark van Eijken"
+          git init
+          git remote add origin https://$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
+          git checkout -b main
+          Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
+          git add .
+          git commit -m "Release version $(BuildVersioning.buildVersion)"
+          git push -u origin main
+
+    - task: PowerShell@2
+      displayName: 'Create GitHub Release'
+      inputs:
+        targetType: 'inline'
+        script: |
+          gh release create v$(BuildVersioning.buildVersion) "./*" --title "Release v$(BuildVersioning.buildVersion)" --notes "This is the release for version $(BuildVersioning.buildVersion)"
+      env:
+        GITHUB_TOKEN: $(githubPAT)
+
   - deployment: DeployJob
     environment: "PSGallery"
     strategy:
