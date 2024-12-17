@@ -119,7 +119,7 @@ stages:
   dependsOn: [BuildStage, PackageStage]
   jobs:
   - deployment: DeployJob
-    environment: "Production"
+    environment: "PSGallery"
     strategy:
       runOnce:
         deploy:
