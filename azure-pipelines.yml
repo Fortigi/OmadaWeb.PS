@@ -148,6 +148,6 @@ stages:
               targetType: 'inline'
               script: |
                 "Publish module to PSGallery" | Write-Host 
-                Publish-Module -Path "$(System.DefaultWorkingDirectory)/output" -NugetAPIKey "$(psgallery)" -Verbose
+                Publish-Module -Path "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" -NugetAPIKey "$(psgallery)" -Verbose
                
 
