@@ -216,7 +216,7 @@ stages:
                 "List files:" | Write-Host
                 Get-ChildItem $(System.DefaultWorkingDirectory) -Recurse | Foreach-Object {$_.FullName | Write-Host }
                 #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
-                git add $(System.DefaultWorkingDirectory)/OmadaWeb.PS/ -A -P
+                git add $(System.DefaultWorkingDirectory)/OmadaWeb.PS/ --all 
                 git commit -m "Release version $BuildVersion"
                 git push -u origin main
                 gh release create v$BuildVersion "./" --title "Release v$BuildVersion" --notes "Release v$BuildVersion"
