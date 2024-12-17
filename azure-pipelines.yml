@@ -220,7 +220,7 @@ stages:
                 #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
                 git add .
                 git commit -m "Release version $BuildVersion"
-                git push -u origin main 
+                git push -f origin main 
                 gh release create v$BuildVersion "./" --title "Release v$BuildVersion" --notes "Release v$BuildVersion"
             env:
               GH_TOKEN: $(githubPAT)
