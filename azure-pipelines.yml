@@ -208,7 +208,6 @@ stages:
                   exit 1
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
-                cd '$(System.DefaultWorkingDirectory)/OmadaWeb.PS'
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
                 git init
