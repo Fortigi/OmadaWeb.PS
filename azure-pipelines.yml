@@ -210,9 +210,9 @@ stages:
                 git checkout -b main
                 #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
                 git add .
-                git commit -m "Release version $(BuildVersioning.buildVersion)"
+                git commit -m "Release version $BuildVersion"
                 git push -u origin main
-                gh release create v$(BuildVersioning.buildVersion) "./*" --title "Release v$(BuildVersioning.buildVersion)" --notes "This is the release for version $(BuildVersioning.buildVersion)"
+                gh release create v$BuildVersion "./*" --title "Release v$BuildVersion" --notes "This is the release for version $BuildVersion"
             env:
               GH_TOKEN: $(githubPAT)
 
