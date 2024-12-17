@@ -196,9 +196,9 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                echo $(GITHUB_TOKEN) | gh auth login --with-token -
+                echo $(GH_TOKEN) | gh auth login --with-token -
             env:
-              GITHUB_TOKEN: $(githubPAT)
+              GH_TOKEN: $(githubPAT)
 
           - task: PowerShell@2
             displayName: 'Push Files to GitHub Repository'
@@ -230,5 +230,5 @@ stages:
               script: |
                 gh release create v$(BuildVersioning.buildVersion) "./*" --title "Release v$(BuildVersioning.buildVersion)" --notes "This is the release for version $(BuildVersioning.buildVersion)"
             env:
-              GITHUB_TOKEN: $(githubPAT)
+              GH_TOKEN: $(githubPAT)
 
