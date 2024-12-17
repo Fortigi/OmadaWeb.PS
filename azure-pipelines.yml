@@ -184,7 +184,7 @@ stages:
         deploy:
           steps:
           - checkout: self
-            path: 'OmadaWeb.PS-GitHub'
+            path: 'OmadaWeb.PS-Azure'
 
           - task: PowerShell@2
             displayName: 'Install GitHub CLI'
