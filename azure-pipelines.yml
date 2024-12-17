@@ -1,0 +1,230 @@
+parameters:
+  - name: githubOnly
+    type: boolean
+    default: false
+  - name: buildVersion
+    type: string
+    default: '0.0.0.0'
+
+trigger:
+- None
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  githubOnly: ${{ parameters.githubOnly }}
+  manualBuildVersion: ${{ parameters.buildVersion }}
+  buildConfiguration: 'Pipeline'
+  buildVersion: 'Will be set dynamically'
+  year: 'Will be set dynamically'
+  revision: $[counter(format('{0:dd}', pipeline.startTime), 1)]
+
+
+stages:
+- stage: BuildStage
+  condition: eq(variables['githubOnly'], 'false') 
+  jobs:
+  - job: BuildJob
+    steps:
+    - task: PowerShell@2
+      displayName: 'Install Modules'
+      name: "InstallModules"
+      inputs:
+        targetType: 'inline'
+        script: |
+          "Validate Modules" | Write-Host
+          $Modules = Get-Module -ListAvailable
+          if ("Pester" -notin $Modules.Name) { 
+            "Install Pester" | Write-Host
+            Install-Module -Name Pester -Scope CurrentUser -Force 
+          }
+          if ("psake" -notin $Modules.Name) { 
+            "Install psake" | Write-Host
+            Install-Module -Name psake -Scope CurrentUser -Force 
+          }
+          if ("PSDeploy" -notin $Modules.Name) { 
+            "Install PSDeploy" | Write-Host
+            Install-Module -Name PSDeploy -Scope CurrentUser -Force 
+          }
+          if ("PSScriptAnalyzer" -notin $Modules.Name) { 
+            "Install PSScriptAnalyzer" | Write-Host
+            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force 
+          }
+        pwsh: true
+      condition: succeeded()
+
+    - task: PowerShell@2
+      displayName: 'Preparing Build Number'
+      name: BuildVersioning
+      inputs:
+        targetType: 'inline'
+        script: |
+          $currentDate = $(Get-Date)
+          $year = $currentDate.Year
+          $month = $currentDate.Month
+          $day = $currentDate.Day
+          "Current date: {0}" -f $currentDate | Write-Host 
+          "Current year: {0}" -f $year | Write-Host 
+          "Current month: {0}" -f $month | Write-Host 
+          "Current day: {0}" -f $day | Write-Host 
+          "Revision: {0}" -f $env:revision | Write-Host 
+          $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
+          "Version: {0}" -f $versionString | Write-Host
+          Write-Host "##vso[task.setvariable variable=buildVersion;isOutput=true]$versionString"
+          Write-Host "##vso[task.setvariable variable=year;isOutput=true]$year"
+        pwsh: true
+      condition: succeeded()
+
+    - task: PowerShell@2
+      displayName: 'Build Module'
+      name: "BuildTask"
+      inputs:
+        filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
+        arguments: ' -Task Build -BuildVersion $(BuildVersioning.buildVersion)'
+        pwsh: true
+      condition: succeeded()
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Build Output'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/output'
+        artifactName: 'BuildOutput'
+      condition: succeeded()
+
+- stage: PackageStage
+  condition: eq(variables['githubOnly'], 'false') 
+  dependsOn: [BuildStage]
+  jobs:
+  - job: 'Create_Artifacts'
+    variables:
+      buildVersion: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion'] ]
+      year: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
+    steps:
+    - checkout: self
+      path: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS' 
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Build Output'
+      inputs:
+        artifactName: 'BuildOutput'
+        targetPath: '$(System.DefaultWorkingDirectory)/output' 
+
+    - task: NuGetCommand@2
+      displayName: 'Pack project'
+      inputs:
+        command: pack
+        packagesToPack: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS.nuspec'
+        packDestination: '$(Build.ArtifactStagingDirectory)'
+        versioningScheme: byEnvVar
+        versionEnvVar: buildVersion
+        buildProperties: 'VERSION=$(BuildVersioning.buildVersion);YEAR=$(BuildVersioning.year)'
+      condition: succeededOrFailed()
+
+    - task: NuGetCommand@2
+      displayName: 'NuGet push'
+      inputs:
+        command: push
+        nuGetFeedType: internal
+        publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
+        allowPackageConflicts: true
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(BuildVersioning.buildVersion).nupkg'
+      condition: succeeded()
+
+    - script: |
+        echo "Create tag: $(BuildVersioning.BuildVersion)"
+        git config --global user.email "mark@fortigi.nl" 
+        git config --global user.name "Mark van Eijken"
+        git tag -a v$(BuildVersioning.BuildVersion) -m "Release version $(BuildVersioning.BuildVersion)"
+        git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/$(Build.Repository.Name) refs/tags/v$(BuildVersioning.BuildVersion)
+      displayName: 'Create Tag'
+      condition: succeeded()
+      enabled: false
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+- stage: PSGalleryPublishStage
+  condition: eq(variables['githubOnly'], 'false') 
+  dependsOn: [BuildStage, PackageStage]
+  jobs:
+  - deployment: PSGalleryPublishJob
+    environment: "PSGallery"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Output'
+            inputs:
+              artifactName: 'BuildOutput'
+              targetPath: '$(System.DefaultWorkingDirectory)/output'
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                "Publish module to PSGallery" | Write-Host 
+                Get-childitem "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" |Where-Object {$_.extension -notin (".psm1",".psd1")}| Remove-Item -Force
+                Publish-Module -Path "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" -NugetAPIKey "$(psgallery)" -Verbose
+
+- stage: GitHubStage
+  dependsOn:
+    - ${{ if eq(variables['githubOnly'], 'false') }}:
+        - BuildStage
+        - PackageStage
+  condition: |
+    or(
+      and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), succeeded()),
+      and(eq(variables['githubOnly'], 'true'), ne(variables['manualBuildVersion'], '0.0.0.0'))
+    )
+  jobs:
+  - deployment: GitHubJob
+    environment: "GitHub"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            #path: 'OmadaWeb.PS'
+
+          - task: PowerShell@2
+            displayName: 'Install GitHub CLI'
+            inputs:
+              targetType: 'inline'
+              script: |
+                "Installing GitHub CLI" | Write-Host
+                Invoke-WebRequest -Uri https://github.com/cli/cli/releases/download/v2.63.2/gh_2.63.2_windows_amd64.msi -OutFile gh.msi
+                Start-Process msiexec.exe -Wait -ArgumentList '/i gh.msi /quiet /norestart'
+                Get-Item gh.msi | Remove-Item -Force
+                "GitHub CLI installed successfully" | Write-Host
+
+          - task: PowerShell@2
+            displayName: 'Push to GitHub Repository'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $env:GH_TOKEN | gh auth login --with-token -
+                $BuildVersion = "${{ coalesce(variables['manualBuildVersion'], variables['buildVersion']) }}"
+                if ([string]::IsNullOrEmpty($BuildVersion) -or $BuildVersion -eq "0.0.0.0") {
+                  Write-Error "Valid buildVersion is required when skipping dependencies."
+                  exit 1
+                }
+                "Using BuildVersion: $BuildVersion" | Write-Host
+                git config --global user.email "mark@fortigi.nl"
+                git config --global user.name "Mark van Eijken"
+                git init
+                git remote remove origin
+                git remote add origin https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
+                git checkout main
+                git fetch origin main --force
+                git reset --hard origin/main
+                "List files:" | Write-Host
+                Get-ChildItem $(Agent.BuildDirectory) -Recurse | Foreach-Object {$_.FullName | Write-Host }
+                #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
+                git add .
+                git commit -m "Release version $BuildVersion"
+                git push -f origin main 
+                gh release create v$BuildVersion  --title "Release v$BuildVersion" --notes "Release v$BuildVersion"
+            env:
+              GH_TOKEN: $(githubPAT)
+
+
