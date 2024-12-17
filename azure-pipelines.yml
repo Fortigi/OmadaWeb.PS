@@ -1,5 +1,5 @@
 parameters:
-  - name: skipDependencies
+  - name: githubOnly
     type: boolean
     default: false
   - name: buildVersion
@@ -13,7 +13,7 @@ pool:
   vmImage: windows-latest
 
 variables:
-  skipDependencies: ${{ parameters.skipDependencies }}
+  githubOnly: ${{ parameters.githubOnly }}
   manualBuildVersion: ${{ parameters.buildVersion }}
   buildConfiguration: 'Pipeline'
   buildVersion: 'Will be set dynamically'
@@ -23,6 +23,7 @@ variables:
 
 stages:
 - stage: BuildStage
+  condition: eq(variables['githubOnly'], 'false') 
   jobs:
   - job: BuildJob
     steps:
@@ -92,6 +93,7 @@ stages:
       condition: succeeded()
 
 - stage: PackageStage
+  condition: eq(variables['githubOnly'], 'false') 
   dependsOn: [BuildStage]
   jobs:
   - job: 'Create_Artifacts'
@@ -141,13 +143,13 @@ stages:
 
 - stage: GitHubStage
   dependsOn:
-    - ${{ if eq(variables['skipDependencies'], 'false') }}:
+    - ${{ if eq(variables['githubOnly'], 'false') }}:
         - BuildStage
         - PackageStage
   condition: |
     or(
       and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), succeeded()),
-      and(eq(variables['skipDependencies'], 'true'), ne(variables['manualBuildVersion'], '0.0.0.0'))
+      and(eq(variables['githubOnly'], 'true'), ne(variables['manualBuildVersion'], '0.0.0.0'))
     )
   jobs:
   - deployment: GitHubJob
@@ -208,6 +210,7 @@ stages:
               GITHUB_TOKEN: $(githubPAT)
 
 - stage: PSGalleryPublishStage
+  condition: eq(variables['githubOnly'], 'false') 
   dependsOn: [BuildStage, PackageStage]
   jobs:
   - deployment: PSGalleryPublishJob
