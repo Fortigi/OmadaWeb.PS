@@ -208,7 +208,7 @@ stages:
                   exit 1
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
-                cd '$(System.DefaultWorkingDirectory)/OmadaWeb.PS/'
+                cd '$(System.DefaultWorkingDirectory)/OmadaWeb.PS'
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
                 git init
@@ -216,7 +216,7 @@ stages:
                 git remote add origin https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
                 git checkout -b main
                 "List files:" | Write-Host
-                Get-ChildItem $(System.DefaultWorkingDirectory) -Recurse | Foreach-Object {$_.FullName | Write-Host }
+                Get-ChildItem -Recurse | Foreach-Object {$_.FullName | Write-Host }
                 #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
                 git add .
                 git commit -m "Release version $BuildVersion"
