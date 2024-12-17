@@ -210,7 +210,7 @@ stages:
                 git init
                 git remote add origin https://$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
                 git checkout -b main
-                Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
+                #Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" -Destination "./" -Recurse -Force
                 git add .
                 git commit -m "Release version $(BuildVersioning.buildVersion)"
                 git push -u origin main
