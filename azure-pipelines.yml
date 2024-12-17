@@ -210,14 +210,16 @@ stages:
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
                 get-location
+                rm -rf .git*
                 cd ..
                 get-location
                 New-Item ./GitHub -ItemType Directory
                 git clone https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git ./GitHub
+                
                 Copy-Item -Path "./Azure/*" -Destination "./GitHub/" -Recurse -Force
                 
                 cd ./GitHub
-                get-item D:\a\1\OmadaWeb.PS\GitHub\Azure | remove-item --force
+                get-item D:\a\1\OmadaWeb.PS\GitHub\Azure | remove-item -force
                 get-location
 
                 git config --global user.email "mark@fortigi.nl"
