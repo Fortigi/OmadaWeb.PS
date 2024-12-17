@@ -184,7 +184,7 @@ stages:
         deploy:
           steps:
           - checkout: self
-            path: 'OmadaWeb.PS-Azure'
+            path: 'OmadaWeb.PS/Azure'
 
           - task: PowerShell@2
             displayName: 'Install GitHub CLI'
@@ -209,10 +209,10 @@ stages:
                   exit 1
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
-
-                New-Item $(System.DefaultWorkingDirectory)/OmadaWeb.PS-GitHub -ItemType Directory
-                git clone https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git $(System.DefaultWorkingDirectory)/OmadaWeb.PS-GitHub
-                Copy-Item -Path "$(System.DefaultWorkingDirectory)/OmadaWeb.PS-Azure/" -Destination "$(System.DefaultWorkingDirectory)/OmadaWeb.PS-GitHub/" -Recurse -Force
+                
+                New-Item $(System.DefaultWorkingDirectory)/GitHub -ItemType Directory
+                git clone https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git $(System.DefaultWorkingDirectory)/OmadaWeb.PS/GitHub
+                Copy-Item -Path "$(System.DefaultWorkingDirectory)/OmadaWeb.PS/Azure/" -Destination "$(System.DefaultWorkingDirectory)/OmadaWeb.PS/GitHub/" -Recurse -Force
                 
                 cd $(System.DefaultWorkingDirectory)/OmadaWeb.PS-GitHub
 
