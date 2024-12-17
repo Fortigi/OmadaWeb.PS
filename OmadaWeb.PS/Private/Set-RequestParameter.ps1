@@ -1,6 +1,6 @@
 ﻿function Set-RequestParameter {
 
-    $ExcludedParameters = @("OmadaWebAuthCookieExportLocation", "InPrivate", "ForceAuthentication", "AuthenticationType", "AzureAdTenantId", "RequestType", "EdgeProfile")
+    $ExcludedParameters = @("OmadaWebAuthCookieExportLocation", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile")
 
     $Parameters = @{}
     $BoundParams.Keys | ForEach-Object {

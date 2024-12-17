@@ -66,7 +66,13 @@
         New-DynamicParam @ParameterObject
     }
 
-    New-DynamicParam -Name "AuthenticationType" -Type "string" -ValidateSet ("OAuth", "Integrated", "Basic", "Browser", "Windows") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value "Browser" -HelpMessage "The type of authentication to use for the request. Default is Browser."
+    New-DynamicParam -Name "AuthenticationType" -Type "string" -ValidateSet ("OAuth", "Integrated", "Basic", "Browser", "Windows") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value "Browser" -HelpMessage "The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
+- Basic
+- Browser
+- Integrated
+- OAuth
+- Windows"
+    New-DynamicParam -Name "EntraIdTenantId" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The tenant id or name for -AuthenticationType OAuth." -Alias "AzureAdTenantId"
     New-DynamicParam -Name "OmadaWebAuthCookieFile" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use a previously exported Omada authentication cookie using -OmadaWebAuthCookieExportLocation. This must be to the cookie file." -ValidateScript { Test-Path -Path $_ }
     New-DynamicParam -Name "OmadaWebAuthCookieExportLocation" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Export the Omada authentication cookie to as a CliXml file."
     New-DynamicParam -Name "ForceAuthentication" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Force authentication to Omada even when the cookie is still valid."

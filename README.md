@@ -183,7 +183,7 @@ The tenant id or name for -AuthenticationType OAuth.
         Position: Named
         Accept pipeline input: false
         Parameter set name: (All)
-        Aliases: None
+        Aliases: AzureAdTenantId
         Dynamic: true
         Accept wildcard characters: false
 ```
