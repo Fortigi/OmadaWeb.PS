@@ -101,6 +101,7 @@ stages:
       buildVersion: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion'] ]
       year: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
     steps:
+    - checkout: self
 
     - task: DownloadPipelineArtifact@2
       displayName: 'Download Build Output'
