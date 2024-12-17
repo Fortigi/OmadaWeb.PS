@@ -60,8 +60,8 @@ stages:
           "Revision: {0}" -f $env:revision | Write-Host 
           $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
           "Version: {0}" -f $versionString | Write-Host
-          Write-Host "##vso[task.setvariable variable=buildVersion]$versionString"
-          Write-Host "##vso[task.setvariable variable=year]$year"
+          Write-Host "##vso[task.setvariable variable=buildVersion;isOutput=true]$versionString"
+          Write-Host "##vso[task.setvariable variable=year;isOutput=true]$year"
         pwsh: true
       condition: succeeded()
 
@@ -79,10 +79,8 @@ stages:
   jobs:
   - job: 'Create_Artifacts'
     variables:
-      - name: buildVersion
-        value: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion'] ]
-      - name: year
-        value: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
+      buildVersion: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion'] ]
+      year: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
     steps:
     - task: NuGetCommand@2
       displayName: 'Pack project'
@@ -110,7 +108,7 @@ stages:
         git config --global user.email "mark@fortigi.nl" 
         git config --global user.name "Mark van Eijken"
         git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
-        git push https://$(System.AccessToken)@fortigi.visualstudio.com/$(Build.Repository.Name) refs/tags/v$(BuildVersion)
+        git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/$(Build.Repository.Name) refs/tags/v$(BuildVersion)
       displayName: 'Create Tag'
       condition: succeeded()
       enabled: false
@@ -120,10 +118,14 @@ stages:
 - stage: Publish
   dependsOn: [BuildStage, PackageStage]
   jobs:
-  - job: 'Push_to_PSGallery'
-    steps:
-    - task: PSGalleryPackager@0
-      inputs:
-        apiKey: '$(psgallery)'
-        path: 'output\OmadaWeb.PS'
-      condition: succeeded()
+  - deployment: DeployJob
+    environment: "Production"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: PSGalleryPackager@0
+            inputs:
+              apiKey: '$(psgallery)'
+              path: 'output\OmadaWeb.PS'
+            condition: succeeded()
