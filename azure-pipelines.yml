@@ -4,7 +4,7 @@ parameters:
     default: false
   - name: buildVersion
     type: string
-    default: ''
+    default: '0.0.0.0'
 
 trigger:
 - None
@@ -13,6 +13,8 @@ pool:
   vmImage: windows-latest
 
 variables:
+  skipDependencies: ${{ parameters.skipDependencies }}
+  manualBuildVersion: ${{ parameters.buildVersion }}
   buildConfiguration: 'Pipeline'
   buildVersion: 'Will be set dynamically'
   year: 'Will be set dynamically'
@@ -138,7 +140,15 @@ stages:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
 - stage: GitHubStage
-  dependsOn: [BuildStage, PackageStage]
+  dependsOn:
+    - ${{ if eq(variables['skipDependencies'], 'false') }}:
+        - BuildStage
+        - PackageStage
+  condition: |
+    or(
+      and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), succeeded()),
+      and(eq(variables['skipDependencies'], 'true'), ne(variables['manualBuildVersion'], '0.0.0.0'))
+    )
   jobs:
   - deployment: GitHubJob
     environment: "GitHub"
@@ -170,11 +180,13 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $BuildVersion = "${{ coalesce(parameters.buildVersion, variables['BuildVersioning.buildVersion']) }}"
-                if ([string]::IsNullOrEmpty($BuildVersion)) {
-                  Write-Error "BuildVersion is required when skipping dependencies."
+                $BuildVersion = "${{ coalesce(variables['manualBuildVersion'], variables['buildVersion']) }}"
+                if ([string]::IsNullOrEmpty($BuildVersion) -or $BuildVersion -eq "0.0.0.0") {
+                  Write-Error "Valid buildVersion is required when skipping dependencies."
                   exit 1
                 }
+                "Using BuildVersion: $BuildVersion" | Write-Host
+
                 "Injecting BuildVersion: $BuildVersion" | Write-Host
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
