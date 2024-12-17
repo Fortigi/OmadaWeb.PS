@@ -141,6 +141,29 @@ stages:
       env:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
+- stage: PSGalleryPublishStage
+  condition: eq(variables['githubOnly'], 'false') 
+  dependsOn: [BuildStage, PackageStage]
+  jobs:
+  - deployment: PSGalleryPublishJob
+    environment: "PSGallery"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Output'
+            inputs:
+              artifactName: 'BuildOutput'
+              targetPath: '$(System.DefaultWorkingDirectory)/output'
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                "Publish module to PSGallery" | Write-Host 
+                Get-childitem "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" |Where-Object {$_.extension -notin (".psm1",".psd1")}| Remove-Item -Force
+                Publish-Module -Path "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" -NugetAPIKey "$(psgallery)" -Verbose
+
 - stage: GitHubStage
   dependsOn:
     - ${{ if eq(variables['githubOnly'], 'false') }}:
@@ -209,25 +232,3 @@ stages:
             env:
               GITHUB_TOKEN: $(githubPAT)
 
-- stage: PSGalleryPublishStage
-  condition: eq(variables['githubOnly'], 'false') 
-  dependsOn: [BuildStage, PackageStage]
-  jobs:
-  - deployment: PSGalleryPublishJob
-    environment: "PSGallery"
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: DownloadPipelineArtifact@2
-            displayName: 'Download Build Output'
-            inputs:
-              artifactName: 'BuildOutput'
-              targetPath: '$(System.DefaultWorkingDirectory)/output'
-          - task: PowerShell@2
-            inputs:
-              targetType: 'inline'
-              script: |
-                "Publish module to PSGallery" | Write-Host 
-                Get-childitem "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" |Where-Object {$_.extension -notin (".psm1",".psd1")}| Remove-Item -Force
-                Publish-Module -Path "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" -NugetAPIKey "$(psgallery)" -Verbose
