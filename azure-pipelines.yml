@@ -77,8 +77,8 @@ stages:
     - task: PublishPipelineArtifact@1
       displayName: 'Publish Build Output'
       inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/output' # Folder to publish
-        artifactName: 'BuildOutput'                           # Name of the artifact
+        targetPath: '$(System.DefaultWorkingDirectory)/output'
+        artifactName: 'BuildOutput'
       condition: succeeded()
 
 - stage: PackageStage
@@ -93,8 +93,8 @@ stages:
     - task: DownloadPipelineArtifact@2
       displayName: 'Download Build Output'
       inputs:
-        artifactName: 'BuildOutput'                           # Name of the artifact
-        targetPath: '$(System.DefaultWorkingDirectory)/output' # Target folder to download to
+        artifactName: 'BuildOutput'
+        targetPath: '$(System.DefaultWorkingDirectory)/output' 
 
     - task: NuGetCommand@2
       displayName: 'Pack project'
@@ -138,8 +138,11 @@ stages:
       runOnce:
         deploy:
           steps:
-          - task: PSGalleryPackager@0
+          - task: PowerShell@2
             inputs:
-              apiKey: '$(psgallery)'
-              path: 'output\OmadaWeb.PS'
-            condition: succeeded()
+              targetType: 'inline'
+              script: |
+                "Publish module to PSGallery" | Write-Host 
+                Publish-Module -Path "$(System.DefaultWorkingDirectory)/output" -NugetAPIKey "$(psgallery)" -Verbose
+               
+
