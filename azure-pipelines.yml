@@ -12,12 +12,13 @@ variables:
 
 
 stages:
-- stage: Build
+- stage: BuildStage
   jobs:
-  - job: 
+  - job: BuildJob
     steps:
     - task: PowerShell@2
       displayName: 'Install Modules'
+      name: "InstallModules"
       inputs:
         targetType: 'inline'
         script: |
@@ -44,6 +45,7 @@ stages:
 
     - task: PowerShell@2
       displayName: 'Preparing Build Number'
+      name: BuildVersioning
       inputs:
         targetType: 'inline'
         script: |
@@ -58,24 +60,42 @@ stages:
           "Revision: {0}" -f $env:revision | Write-Host 
           $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
           "Version: {0}" -f $versionString | Write-Host
-          Write-Host "##vso[task.setvariable variable=buildVersion]$versionString"
-          Write-Host "##vso[task.setvariable variable=year]$year"
+          Write-Host "##vso[task.setvariable variable=buildVersion;isOutput=true]$versionString"
+          Write-Host "##vso[task.setvariable variable=year;isOutput=true]$year"
         pwsh: true
       condition: succeeded()
 
     - task: PowerShell@2
-      displayName: 'Build'
+      displayName: 'Build Module'
+      name: "BuildTask"
       inputs:
         filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-        arguments: ' -Task Build -BuildVersion $(buildVersion)'
+        arguments: ' -Task Build -BuildVersion $(BuildVersioning.buildVersion)'
         pwsh: true
       condition: succeeded()
 
-- stage: Package
-  dependsOn: [Build]
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Build Output'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/output'
+        artifactName: 'BuildOutput'
+      condition: succeeded()
+
+- stage: PackageStage
+  dependsOn: [BuildStage]
   jobs:
   - job: 'Create_Artifacts'
+    variables:
+      buildVersion: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion'] ]
+      year: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
     steps:
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Build Output'
+      inputs:
+        artifactName: 'BuildOutput'
+        targetPath: '$(System.DefaultWorkingDirectory)/output' 
+
     - task: NuGetCommand@2
       displayName: 'Pack project'
       inputs:
@@ -84,7 +104,7 @@ stages:
         packDestination: '$(Build.ArtifactStagingDirectory)'
         versioningScheme: byEnvVar
         versionEnvVar: buildVersion
-        buildProperties: 'VERSION=$(buildVersion);YEAR=$(year)'
+        buildProperties: 'VERSION=$(BuildVersioning.buildVersion);YEAR=$(BuildVersioning.year)'
       condition: succeededOrFailed()
 
     - task: NuGetCommand@2
@@ -94,15 +114,15 @@ stages:
         nuGetFeedType: internal
         publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
         allowPackageConflicts: true
-        packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(buildVersion).nupkg'
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/OmadaWeb.PS.$(BuildVersioning.buildVersion).nupkg'
       condition: succeeded()
 
     - script: |
-        echo "Create tag: $(BuildVersion)"
+        echo "Create tag: $(BuildVersioning.BuildVersion)"
         git config --global user.email "mark@fortigi.nl" 
         git config --global user.name "Mark van Eijken"
-        git tag -a v$(BuildVersion) -m "Release version $(BuildVersion)"
-        git push https://$(System.AccessToken)@fortigi.visualstudio.com/$(Build.Repository.Name) refs/tags/v$(BuildVersion)
+        git tag -a v$(BuildVersioning.BuildVersion) -m "Release version $(BuildVersioning.BuildVersion)"
+        git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/$(Build.Repository.Name) refs/tags/v$(BuildVersioning.BuildVersion)
       displayName: 'Create Tag'
       condition: succeeded()
       enabled: false
@@ -110,12 +130,23 @@ stages:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
 - stage: Publish
-  dependsOn: [Build, Package]
+  dependsOn: [BuildStage, PackageStage]
   jobs:
-  - job: 'Push_to_PSGallery'
-    steps:
-    - task: PSGalleryPackager@0
-      inputs:
-        apiKey: '$(psgallery)'
-        path: 'output\OmadaWeb.PS'
-      condition: succeeded()
+  - deployment: DeployJob
+    environment: "PSGallery"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download Build Output'
+            inputs:
+              artifactName: 'BuildOutput'
+              targetPath: '$(System.DefaultWorkingDirectory)/output'
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                "Publish module to PSGallery" | Write-Host 
+                Get-childitem "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" |Where-Object {$_.extension -notin (".psm1",".psd1")}| Remove-Item -Force
+                Publish-Module -Path "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" -NugetAPIKey "$(psgallery)" -Verbose
