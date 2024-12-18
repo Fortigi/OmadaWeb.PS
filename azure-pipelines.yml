@@ -208,8 +208,9 @@ stages:
                 "buildVersion variable: $(buildVersion)" | Write-Host
                 Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
                 $ManualBuildVersion = "${{ variables['manualBuildVersion'] }}"
+                "ManualBuildVersion: {0} (Length: {1})" -f $ManualBuildVersion, $ManualBuildVersion.Length | Write-Host
                 $BuildVersion = $(buildVersion)
-                if(${{ variables['manualBuildVersion'] }} -notlike "*0.0.0.0*"){
+                if($ManualBuildVersion.Trim() -ne "0.0.0.0"){
                   $BuildVersion = "${{ variables['manualBuildVersion'] }}"
                   "Using manualBuildVersion: {0}" -f $BuildVersion | Write-Host 
                 }
