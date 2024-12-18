@@ -15,15 +15,63 @@ function Invoke-DataFromWebDriver {
 
     Start-Sleep -Seconds 1
     $LoginMessageShown = $false
+    $CredentialsEntered = $false
     do {
-        if ($EdgeDriver.url -notlike "*$($Script:OmadaWebBaseUrl)/home*") {
-            if (-not $LoginMessageShown) {
-                Write-Host "`r`nBrowser opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
-                $LoginMessageShown = $true
-            }
 
-            Write-Host "." -NoNewline -ForegroundColor Yellow
-            Start-Sleep -Seconds 1
+        if (-not $LoginMessageShown) {
+            Write-Host "`r`nBrowser opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
+            $LoginMessageShown = $true
+        }
+
+        Write-Host "." -NoNewline -ForegroundColor Yellow
+        Start-Sleep -Seconds 1
+
+
+        if ($Script:Credential -and ![string]::IsNullOrWhiteSpace($Script:Credential.UserName)) {
+
+            if ($EdgeDriver.url -like "https://login.microsoftonline.com/*") {
+                try {
+                    $UserNameElementId = "i0116"
+                    $PasswordElementId = "i0118"
+                    $SubmitButton = "idSIButton9"
+                    $ButtonNotKeepSignedIn = "idBtn_Back"
+                    $LoginElements = $null
+                    $ButtonNotKeepSignedInElement = $null
+                    try{$LoginElements = $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))}catch{}
+                    try{$ButtonNotKeepSignedInElement = $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonNotKeepSignedIn))}catch{}
+
+                    if ($null -ne $ButtonNotKeepSignedInElement -and $CredentialsEntered -eq $true) {
+                        $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonNotKeepSignedIn)).Click()
+                    }
+                    if ($null -ne $LoginElements -and $null -ne $Script:Credential.Password) {
+                        $LoginElements[0].SendKeys($Script:Credential.UserName)
+                        $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
+                        Start-Sleep -Seconds 1
+                        $LoginElements = $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($PasswordElementId))
+                        $LoginElements[0].SendKeys($Script:Credential.GetNetworkCredential().Password)
+                        $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
+                        Start-Sleep -Seconds 1
+                        $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonNotKeepSignedIn)).Click()
+                        $CredentialsEntered = $true
+                    }
+                    elseif ($null -ne $LoginElements -and $null -eq $Script:Credential.Password) {
+                        "Password is required for username + password login!" | Write-Warning
+                    }
+                    else {
+                        $AccountElements = $EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@data-test-id]"))
+                        foreach ($AccountElement in $AccountElements) {
+                            if ($AccountElement.GetAttribute("data-test-id") -eq $Script:Credential.UserName) {
+                                $AccountElement.Click()
+                            }
+                        }
+                    }
+                }
+                catch {}
+            }
+        }
+
+        if ($EdgeDriver.url -notlike "*$($Script:OmadaWebBaseUrl)/home*") {
+
 
             if ($null -eq $EdgeDriver -or $null -eq $EdgeDriver.WindowHandles) {
                 if ($Script:LoginRetryCount -ge 3) {
