@@ -179,6 +179,8 @@ stages:
   jobs:
   - deployment: GitHubJob
     environment: "GitHub"
+    variables:
+      buildVersion: $[stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion']]
     strategy:
       runOnce:
         deploy:
