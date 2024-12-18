@@ -203,7 +203,10 @@ stages:
               targetType: 'inline'
               script: |
                 $env:GH_TOKEN | gh auth login --with-token -
-                $BuildVersion = "${{ coalesce(variables['manualBuildVersion'], variables['buildVersion']) }}"
+                "Using BuildVersion: $BuildVersion" | Write-Host
+                Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
+                Write-Host ("buildVersion" + "${{ variables['buildVersion'] }}")
+                Write-Host ("coalesce" + "${{ coalesce(variables['manualBuildVersion'], variables['buildVersion']) }}")
                 if ([string]::IsNullOrEmpty($BuildVersion) -or $BuildVersion -eq "0.0.0.0") {
                   Write-Error "Valid buildVersion is required when skipping dependencies."
                   exit 1
