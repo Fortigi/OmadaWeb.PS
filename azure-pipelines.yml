@@ -170,7 +170,7 @@ stages:
   dependsOn:
     - ${{ if eq(variables['githubOnly'], 'false') }}:
         - BuildStage
-        - PackageStage
+        #- PackageStage
   condition: |
     or(
       and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), succeeded()),
