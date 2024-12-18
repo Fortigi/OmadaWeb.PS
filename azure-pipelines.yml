@@ -208,7 +208,7 @@ stages:
                 "buildVersion variable: $(buildVersion)" | Write-Host
                 Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
 
-                if(${{ variables['manualBuildVersion'] }} -ne "0.0.0.0"){
+                if(${{ variables['manualBuildVersion'] }} -notlike "*0.0.0.0*"){
                   $BuildVersion = ${{ variables['manualBuildVersion'] }}
                 }
                 else{
