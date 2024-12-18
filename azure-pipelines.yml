@@ -23,7 +23,7 @@ variables:
 
 stages:
 - stage: BuildStage
-  condition: eq(variables['githubOnly'], 'false') 
+  condition: eq(variables['githubOnly'], 'false')
   jobs:
   - job: BuildJob
     steps:
@@ -35,21 +35,21 @@ stages:
         script: |
           "Validate Modules" | Write-Host
           $Modules = Get-Module -ListAvailable
-          if ("Pester" -notin $Modules.Name) { 
+          if ("Pester" -notin $Modules.Name) {
             "Install Pester" | Write-Host
-            Install-Module -Name Pester -Scope CurrentUser -Force 
+            Install-Module -Name Pester -Scope CurrentUser -Force
           }
-          if ("psake" -notin $Modules.Name) { 
+          if ("psake" -notin $Modules.Name) {
             "Install psake" | Write-Host
-            Install-Module -Name psake -Scope CurrentUser -Force 
+            Install-Module -Name psake -Scope CurrentUser -Force
           }
-          if ("PSDeploy" -notin $Modules.Name) { 
+          if ("PSDeploy" -notin $Modules.Name) {
             "Install PSDeploy" | Write-Host
-            Install-Module -Name PSDeploy -Scope CurrentUser -Force 
+            Install-Module -Name PSDeploy -Scope CurrentUser -Force
           }
-          if ("PSScriptAnalyzer" -notin $Modules.Name) { 
+          if ("PSScriptAnalyzer" -notin $Modules.Name) {
             "Install PSScriptAnalyzer" | Write-Host
-            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force 
+            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
           }
         pwsh: true
       condition: succeeded()
@@ -64,11 +64,11 @@ stages:
           $year = $currentDate.Year
           $month = $currentDate.Month
           $day = $currentDate.Day
-          "Current date: {0}" -f $currentDate | Write-Host 
-          "Current year: {0}" -f $year | Write-Host 
-          "Current month: {0}" -f $month | Write-Host 
-          "Current day: {0}" -f $day | Write-Host 
-          "Revision: {0}" -f $env:revision | Write-Host 
+          "Current date: {0}" -f $currentDate | Write-Host
+          "Current year: {0}" -f $year | Write-Host
+          "Current month: {0}" -f $month | Write-Host
+          "Current day: {0}" -f $day | Write-Host
+          "Revision: {0}" -f $env:revision | Write-Host
           $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
           "Version: {0}" -f $versionString | Write-Host
           Write-Host "##vso[task.setvariable variable=buildVersion;isOutput=true]$versionString"
@@ -93,7 +93,7 @@ stages:
       condition: succeeded()
 
 - stage: PackageStage
-  condition: eq(variables['githubOnly'], 'false') 
+  condition: eq(true,false)  # eq(variables['githubOnly'], 'false')
   dependsOn: [BuildStage]
   jobs:
   - job: 'Create_Artifacts'
@@ -102,13 +102,13 @@ stages:
       year: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
     steps:
     - checkout: self
-      path: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS' 
+      path: 'OmadaWeb.PS'
 
     - task: DownloadPipelineArtifact@2
       displayName: 'Download Build Output'
       inputs:
         artifactName: 'BuildOutput'
-        targetPath: '$(System.DefaultWorkingDirectory)/output' 
+        targetPath: '$(System.DefaultWorkingDirectory)/output'
 
     - task: NuGetCommand@2
       displayName: 'Pack project'
@@ -133,7 +133,7 @@ stages:
 
     - script: |
         echo "Create tag: $(BuildVersioning.BuildVersion)"
-        git config --global user.email "mark@fortigi.nl" 
+        git config --global user.email "mark@fortigi.nl"
         git config --global user.name "Mark van Eijken"
         git tag -a v$(BuildVersioning.BuildVersion) -m "Release version $(BuildVersioning.BuildVersion)"
         git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/$(Build.Repository.Name) refs/tags/v$(BuildVersioning.BuildVersion)
@@ -144,7 +144,7 @@ stages:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
 - stage: PSGalleryPublishStage
-  condition: eq(variables['githubOnly'], 'false') 
+  condition: eq(true,false)  #eq(variables['githubOnly'], 'false')
   dependsOn: [BuildStage, PackageStage]
   jobs:
   - deployment: PSGalleryPublishJob
@@ -162,7 +162,7 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                "Publish module to PSGallery" | Write-Host 
+                "Publish module to PSGallery" | Write-Host
                 Get-childitem "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" |Where-Object {$_.extension -notin (".psm1",".psd1")}| Remove-Item -Force
                 Publish-Module -Path "$(System.DefaultWorkingDirectory)/output/OmadaWeb.PS" -NugetAPIKey "$(psgallery)" -Verbose
 
@@ -170,7 +170,7 @@ stages:
   dependsOn:
     - ${{ if eq(variables['githubOnly'], 'false') }}:
         - BuildStage
-        - PackageStage
+        #- PackageStage
   condition: |
     or(
       and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), succeeded()),
@@ -179,6 +179,8 @@ stages:
   jobs:
   - deployment: GitHubJob
     environment: "GitHub"
+    variables:
+      buildVersion: $[stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion']]
     strategy:
       runOnce:
         deploy:
@@ -203,37 +205,40 @@ stages:
               targetType: 'inline'
               script: |
                 $env:GH_TOKEN | gh auth login --with-token -
-                $BuildVersion = "${{ coalesce(variables['manualBuildVersion'], variables['buildVersion']) }}"
+                
+                "buildVersion variable: $(buildVersion)" | Write-Host
+                $BuildVersion = "$(buildVersion)"
+                "BuildVersion variable: $BuildVersion" | Write-Host
+
+                Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
+                $ManualBuildVersion = "${{ variables['manualBuildVersion'] }}"
+                "ManualBuildVersion: {0} (Length: {1})" -f $ManualBuildVersion, $ManualBuildVersion.Length | Write-Host
+
+                if($ManualBuildVersion.Trim() -ne "0.0.0.0"){
+                  $BuildVersion = $ManualBuildVersion.Trim()
+                  "Using manualBuildVersion: {0}" -f $BuildVersion | Write-Host 
+                }
+                "BuildVersion set to: $BuildVersion" | Write-Host
                 if ([string]::IsNullOrEmpty($BuildVersion) -or $BuildVersion -eq "0.0.0.0") {
                   Write-Error "Valid buildVersion is required when skipping dependencies."
                   exit 1
                 }
                 "Using BuildVersion: $BuildVersion" | Write-Host
-                get-location
-                get-item .git* -force |remove-item -force -Recurse
+                Get-Item .git* -Force | Remove-Item -Force -Recurse
                 cd ..
-                get-location
-                New-Item ./GitHub -ItemType Directory
+                New-Item ./GitHub -ItemType Directory | Out-Null
                 git clone https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git ./GitHub
-                
                 Copy-Item -Path "./Azure/*" -Destination "./GitHub/" -Recurse -Force
-                
                 cd ./GitHub
-                get-location
-
                 git config --global user.email "mark@fortigi.nl"
                 git config --global user.name "Mark van Eijken"
-                #git init
-                #git remote remove origin
-                #git remote add origin https://mvaneijken:$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git
                 git checkout main
                 git fetch origin main --force
-                #git reset --hard origin/main
                 "List files:" | Write-Host
                 Get-ChildItem $(Agent.BuildDirectory) -Recurse | Foreach-Object {$_.FullName | Write-Host }
                 git add .
                 git commit -m "Release version $BuildVersion"
-                git push -f origin main 
+                git push -f origin main
                 gh release create v$BuildVersion  --title "Release v$BuildVersion" --notes "Release v$BuildVersion"
             env:
               GH_TOKEN: $(githubPAT)
