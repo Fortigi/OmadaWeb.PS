@@ -23,7 +23,7 @@ variables:
 
 stages:
 - stage: BuildStage
-  condition: eq(variables['githubOnly'], 'false')
+  condition: eq(true,false)  #eq(variables['githubOnly'], 'false')
   jobs:
   - job: BuildJob
     steps:
@@ -93,7 +93,7 @@ stages:
       condition: succeeded()
 
 - stage: PackageStage
-  condition: eq(variables['githubOnly'], 'false')
+  condition: eq(true,false)  # eq(variables['githubOnly'], 'false')
   dependsOn: [BuildStage]
   jobs:
   - job: 'Create_Artifacts'
