@@ -207,9 +207,9 @@ stages:
                 $env:GH_TOKEN | gh auth login --with-token -
                 "buildVersion variable: $(buildVersion)" | Write-Host
                 Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
-                $ManualBuildVersion =  "${{ variables['manualBuildVersion'] }}"
-                if($ManualBuildVersion -ne "0.0.0.0"){
-                  $BuildVersion = $ManualBuildVersion
+
+                if(${{ variables['manualBuildVersion'] }} -ne "0.0.0.0"){
+                  $BuildVersion = ${{ variables['manualBuildVersion'] }}
                 }
                 else{
                   $BuildVersion = $(buildVersion)
