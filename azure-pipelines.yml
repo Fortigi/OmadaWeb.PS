@@ -23,7 +23,7 @@ variables:
 
 stages:
 - stage: BuildStage
-  condition: eq(true,false)  #eq(variables['githubOnly'], 'false')
+  condition: eq(variables['githubOnly'], 'false')
   jobs:
   - job: BuildJob
     steps:
