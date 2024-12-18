@@ -205,15 +205,14 @@ stages:
               targetType: 'inline'
               script: |
                 $env:GH_TOKEN | gh auth login --with-token -
-                "Using BuildVersion: $BuildVersion" | Write-Host
+                "Using BuildVersion: $(BuildVersion)" | Write-Host
                 Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
-                Write-Host ("buildVersion" + "${{ variables['buildVersion'] }}")
-                Write-Host ("coalesce" + "${{ coalesce(variables['manualBuildVersion'], variables['buildVersion']) }}")
-                if ([string]::IsNullOrEmpty($BuildVersion) -or $BuildVersion -eq "0.0.0.0") {
+                
+                if ([string]::IsNullOrEmpty($(BuildVersion)) -or $(BuildVersion) -eq "0.0.0.0") {
                   Write-Error "Valid buildVersion is required when skipping dependencies."
                   exit 1
                 }
-                "Using BuildVersion: $BuildVersion" | Write-Host
+                "Using BuildVersion: $(BuildVersion)" | Write-Host
                 Get-Item .git* -Force | Remove-Item -Force -Recurse
                 cd ..
                 New-Item ./GitHub -ItemType Directory | Out-Null
@@ -227,9 +226,9 @@ stages:
                 "List files:" | Write-Host
                 Get-ChildItem $(Agent.BuildDirectory) -Recurse | Foreach-Object {$_.FullName | Write-Host }
                 git add .
-                git commit -m "Release version $BuildVersion"
+                git commit -m "Release version $(BuildVersion)"
                 git push -f origin main
-                gh release create v$BuildVersion  --title "Release v$BuildVersion" --notes "Release v$BuildVersion"
+                gh release create v$(BuildVersion)  --title "Release v$(BuildVersion)" --notes "Release v$(BuildVersion)"
             env:
               GH_TOKEN: $(githubPAT)
 
