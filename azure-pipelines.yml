@@ -208,11 +208,11 @@ stages:
                 "buildVersion variable: $(buildVersion)" | Write-Host
                 Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
 
-                if(${{ variables['manualBuildVersion'] }} -notlike "*0.0.0.0*"){
-                  $BuildVersion = ${{ variables['manualBuildVersion'] }}
+                if(${{ variables['manualBuildVersion'] }} -like "*0.0.0.0*"){
+                  $BuildVersion = $(buildVersion)
                 }
                 else{
-                  $BuildVersion = $(buildVersion)
+                  $BuildVersion = ${{ variables['manualBuildVersion'] }}
                 }
                 if ([string]::IsNullOrEmpty($BuildVersion) -or $BuildVersion -eq "0.0.0.0") {
                   Write-Error "Valid buildVersion is required when skipping dependencies."
