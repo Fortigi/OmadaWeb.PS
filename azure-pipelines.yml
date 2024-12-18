@@ -207,7 +207,7 @@ stages:
                 $env:GH_TOKEN | gh auth login --with-token -
                 
                 "buildVersion variable: $(buildVersion)" | Write-Host
-                $BuildVersion = $(buildVersion)
+                $BuildVersion = "$(buildVersion)""
                 "BuildVersion variable: $BuildVersion" | Write-Host
 
                 Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
