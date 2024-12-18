@@ -207,13 +207,13 @@ stages:
                 $env:GH_TOKEN | gh auth login --with-token -
                 "buildVersion variable: $(buildVersion)" | Write-Host
                 Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
-
-                if(${{ variables['manualBuildVersion'] }} -like "*0.0.0.0*"){
-                  $BuildVersion = $(buildVersion)
+                $ManualBuildVersion = "${{ variables['manualBuildVersion'] }}"
+                $BuildVersion = $(buildVersion)
+                if(${{ variables['manualBuildVersion'] }} -notlike "*0.0.0.0*"){
+                  $BuildVersion = "${{ variables['manualBuildVersion'] }}"
+                  "Using manualBuildVersion: {0}" -f $BuildVersion | Write-Host 
                 }
-                else{
-                  $BuildVersion = ${{ variables['manualBuildVersion'] }}
-                }
+                "BuildVersion set to: $BuildVersion" | Write-Host
                 if ([string]::IsNullOrEmpty($BuildVersion) -or $BuildVersion -eq "0.0.0.0") {
                   Write-Error "Valid buildVersion is required when skipping dependencies."
                   exit 1
