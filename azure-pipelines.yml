@@ -211,7 +211,7 @@ stages:
                 "ManualBuildVersion: {0} (Length: {1})" -f $ManualBuildVersion, $ManualBuildVersion.Length | Write-Host
                 $BuildVersion = $(buildVersion)
                 if($ManualBuildVersion.Trim() -ne "0.0.0.0"){
-                  $BuildVersion = "${{ variables['manualBuildVersion'] }}"
+                  $BuildVersion = $ManualBuildVersion.Trim()
                   "Using manualBuildVersion: {0}" -f $BuildVersion | Write-Host 
                 }
                 "BuildVersion set to: $BuildVersion" | Write-Host
