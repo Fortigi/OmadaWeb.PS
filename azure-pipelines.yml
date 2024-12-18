@@ -205,11 +205,15 @@ stages:
               targetType: 'inline'
               script: |
                 $env:GH_TOKEN | gh auth login --with-token -
+                
                 "buildVersion variable: $(buildVersion)" | Write-Host
+                $BuildVersion = $(buildVersion)
+                "BuildVersion variable: $BuildVersion" | Write-Host
+
                 Write-Host ("manualBuildVersion" + "${{ variables['manualBuildVersion'] }}")
                 $ManualBuildVersion = "${{ variables['manualBuildVersion'] }}"
                 "ManualBuildVersion: {0} (Length: {1})" -f $ManualBuildVersion, $ManualBuildVersion.Length | Write-Host
-                $BuildVersion = $(buildVersion)
+
                 if($ManualBuildVersion.Trim() -ne "0.0.0.0"){
                   $BuildVersion = $ManualBuildVersion.Trim()
                   "Using manualBuildVersion: {0}" -f $BuildVersion | Write-Host 
