@@ -52,6 +52,7 @@ stages:
             Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
           }
         pwsh: true
+        failOnStderr: true 
       condition: succeeded()
 
     - task: PowerShell@2
@@ -74,6 +75,7 @@ stages:
           Write-Host "##vso[task.setvariable variable=buildVersion;isOutput=true]$versionString"
           Write-Host "##vso[task.setvariable variable=year;isOutput=true]$year"
         pwsh: true
+        failOnStderr: tru
       condition: succeeded()
 
     - task: PowerShell@2
@@ -83,6 +85,7 @@ stages:
         filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
         arguments: ' -Task Build -BuildVersion $(BuildVersioning.buildVersion)'
         pwsh: true
+        failOnStderr: true 
       condition: succeeded()
 
     - task: PublishPipelineArtifact@1
@@ -203,6 +206,7 @@ stages:
             displayName: 'Push to GitHub Repository'
             inputs:
               targetType: 'inline'
+              failOnStderr: true 
               script: |
                 $env:GH_TOKEN | gh auth login --with-token -
                 
