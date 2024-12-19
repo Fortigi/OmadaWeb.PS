@@ -23,7 +23,7 @@ Task Analyze {
     $saResults = Invoke-ScriptAnalyzer -Path $ModuleSource -Severity @('Error', 'Warning') -Recurse -Profile $Profile -Verbose:$false
     if ($saResults) {
         $saResults | Format-Table
-        Write-Error -Message 'One or more Script Analyzer errors/warnings where found. Build cannot continue!'
+        Write-Error -Message 'One or more Script Analyzer errors/warnings where found. Build cannot continue!' -ErrorAction "Stop"
     }
 }
 
