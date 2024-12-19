@@ -177,7 +177,7 @@ function Invoke-DataFromWebDriver {
     until($null -ne $AuthCookie)
     "{0} (Line {1}): {2}" -f $MyInvocation.MyCommand, $MyInvocation.ScriptLineNumber, $$ | Write-Verbose
 
-    $CredentialsEntered = $false
+    #$CredentialsEntered = $false
     Close-EdgeDriver
     if ($null -ne $AuthCookie) {
         $Script:LoginRetryCount = 0
