@@ -35,14 +35,12 @@ function Invoke-DataFromWebDriver {
 
         if ($Script:Credential -and ![string]::IsNullOrWhiteSpace($Script:Credential.UserName)) {
 
-
-
             if ($EdgeDriver.url -like "https://login.microsoftonline.com/*") {
                 try {
                     $UserNameElementId = "i0116"
                     $PasswordElementId = "i0118"
                     $SubmitButton = "idSIButton9"
-                    $DisplayNameElement = "displayName"
+                    #$DisplayNameElement = "displayName"
                     $CantAccessAccountId = "cantAccessAccount"
                     $MfaElementId = "idRichContext_DisplaySign"
                     $MfaRetryId1 = "idA_SAASTO_Resend"
@@ -138,7 +136,7 @@ function Invoke-DataFromWebDriver {
                             -and $IdAttributes -notcontains $PasswordElementId `
                             -and $IdAttributes -notcontains $MFAElementId `
                             -and (
-                            $IdAttributes -contains $MfaRetryId `
+                            $IdAttributes -contains $MfaRetryId1 `
                                 -or $IdAttributes -contains $MfaRetryId2 )`
                             -and ($EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@data-test-id]")) | Measure-Object).Count -eq 0
                     ) {
