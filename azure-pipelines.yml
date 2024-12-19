@@ -93,7 +93,7 @@ stages:
       condition: succeeded()
 
 - stage: PackageStage
-  condition: eq(true,false)  # eq(variables['githubOnly'], 'false')
+  condition:  eq(variables['githubOnly'], 'false')
   dependsOn: [BuildStage]
   jobs:
   - job: 'Create_Artifacts'
@@ -144,7 +144,7 @@ stages:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
 - stage: PSGalleryPublishStage
-  condition: eq(true,false)  #eq(variables['githubOnly'], 'false')
+  condition: eq(variables['githubOnly'], 'false')
   dependsOn: [BuildStage, PackageStage]
   jobs:
   - deployment: PSGalleryPublishJob
@@ -170,7 +170,7 @@ stages:
   dependsOn:
     - ${{ if eq(variables['githubOnly'], 'false') }}:
         - BuildStage
-        #- PackageStage
+        - PackageStage
   condition: |
     or(
       and(eq(variables['Build.SourceBranch'], 'refs/heads/main'), succeeded()),
