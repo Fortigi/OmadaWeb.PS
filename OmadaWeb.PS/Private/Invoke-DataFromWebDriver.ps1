@@ -37,13 +37,18 @@ function Invoke-DataFromWebDriver {
                     $ButtonNotKeepSignedIn = "idBtn_Back"
                     $LoginElements = $null
                     $ButtonNotKeepSignedInElement = $null
-                    try{$LoginElements = $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))}catch{}
-                    try{$ButtonNotKeepSignedInElement = $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonNotKeepSignedIn))}catch{}
-
-                    if ($null -ne $ButtonNotKeepSignedInElement -and $CredentialsEntered -eq $true) {
+                    $SubmitButtonElement = $null
+                    #Wait-Debugger
+                    try {$LoginElements = $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))}catch {}
+                    try {$SubmitButtonElement = $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton))}catch {}
+                    try {$ButtonNotKeepSignedInElement = $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonNotKeepSignedIn))}catch {}
+Wait-Debugger
+                    if ($null -ne $ButtonNotKeepSignedInElement -and $null -ne $SubmitButtonElement -and $CredentialsEntered) {
+                        "Waiting for ButtonNotKeepSignedIn action" | Write-Verbose
                         $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonNotKeepSignedIn)).Click()
                     }
-                    if ($null -ne $LoginElements -and $null -ne $Script:Credential.Password) {
+                    if ($CredentialsEntered -ne $true -and $null -ne $LoginElements -and $null -ne $Script:Credential.Password) {
+                        "Waiting for LoginElements actions" | Write-Verbose
                         $LoginElements[0].SendKeys($Script:Credential.UserName)
                         $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                         Start-Sleep -Seconds 1
@@ -51,13 +56,14 @@ function Invoke-DataFromWebDriver {
                         $LoginElements[0].SendKeys($Script:Credential.GetNetworkCredential().Password)
                         $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                         Start-Sleep -Seconds 1
-                        $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonNotKeepSignedIn)).Click()
                         $CredentialsEntered = $true
+                        $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonNotKeepSignedIn)).Click()
                     }
-                    elseif ($null -ne $LoginElements -and $null -eq $Script:Credential.Password) {
+                    elseif ($CredentialsEntered -ne $true -and $null -ne $LoginElements -and $null -eq $Script:Credential.Password) {
                         "Password is required for username + password login!" | Write-Warning
                     }
-                    else {
+                    elseif($CredentialsEntered -ne $true) {
+                        "Waiting for AccountElements actions" | Write-Verbose
                         $AccountElements = $EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@data-test-id]"))
                         foreach ($AccountElement in $AccountElements) {
                             if ($AccountElement.GetAttribute("data-test-id") -eq $Script:Credential.UserName) {
@@ -98,6 +104,7 @@ function Invoke-DataFromWebDriver {
     until($null -ne $AuthCookie)
     "{0} (Line {1}): {2}" -f $MyInvocation.MyCommand, $MyInvocation.ScriptLineNumber, $$ | Write-Verbose
 
+    $CredentialsEntered = $false
     Close-EdgeDriver
     if ($null -ne $AuthCookie) {
         $Script:LoginRetryCount = 0
