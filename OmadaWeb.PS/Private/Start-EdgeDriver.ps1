@@ -66,6 +66,7 @@ function Start-EdgeDriver {
     $EdgeOptions.AddArgument("--disable-blink-features=AutomationControlled")
     $EdgeOptions.AddArgument("--disable-infobars")
     $EdgeOptions.AddArgument("--log-level=3")
+    $EdgeOptions.AddArgument("--lang=en")
     $EdgeOptions.AddExcludedArgument("enable-automation")
     $EdgeOptions.AddAdditionalOption("useAutomationExtension", $false)
 
