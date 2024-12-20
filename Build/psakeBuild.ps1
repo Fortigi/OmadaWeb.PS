@@ -121,8 +121,8 @@ Task Build -depends Test {
     $ModulePsd1.ModuleVersion = $NewVersion
 
     New-ModuleManifest @Modulepsd1
+    "Module psd1 output file: {0}" -f $($ModulePsd1.Path) | Write-Host
     (Get-Content $($ModulePsd1.Path) -Raw) -replace "`r?`n", "`r`n"  | Invoke-Formatter -Settings $FormattingSettings | Set-Content -Path $($ModulePsd1.Path) -Encoding UTF8 -Force
-
 
     $Length = 150
     $ModuleContent = $null
@@ -181,6 +181,7 @@ Task Build -depends Test {
     }
 
     $ModuleContent = $ModuleContent -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings
+    "Module psm1 output file: {0}" -f $OutputDirFile | Write-Host
     $ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
 
 }
