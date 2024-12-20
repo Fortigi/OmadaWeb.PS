@@ -1,7 +1,4 @@
 parameters:
-  - name: githubOnly
-    type: boolean
-    default: false
   - name: buildVersion
     type: string
     default: '0.0.0.0'
@@ -13,7 +10,6 @@ pool:
   vmImage: windows-latest
 
 variables:
-  githubOnly: ${{ parameters.githubOnly }}
   manualBuildVersion: ${{ parameters.buildVersion }}
   buildConfiguration: 'Pipeline'
   buildVersion: 'Will be set dynamically'
@@ -23,7 +19,6 @@ variables:
 
 stages:
 - stage: BuildStage
-  condition: eq(variables['githubOnly'], 'false')
   jobs:
   - job: BuildJob
     steps:
@@ -96,7 +91,6 @@ stages:
       condition: succeeded()
 
 - stage: PackageStage
-  condition:  eq(variables['githubOnly'], 'false')
   dependsOn: [BuildStage]
   jobs:
   - job: 'Create_Artifacts'
