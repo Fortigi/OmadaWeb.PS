@@ -10,12 +10,10 @@ pool:
   vmImage: windows-latest
 
 variables:
-  manualBuildVersion: ${{ parameters.buildVersion }}
   buildConfiguration: 'Pipeline'
   buildVersion: 'Will be set dynamically'
   year: 'Will be set dynamically'
   revision: $[counter(format('{0:dd}', pipeline.startTime), 1)]
-
 
 stages:
 - stage: BuildStage
