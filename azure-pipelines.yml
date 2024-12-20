@@ -125,6 +125,7 @@ stages:
         allowPackageConflicts: true
         packagesToPush: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS.$(BuildVersioning.buildVersion).nupkg'
       condition: succeeded()
+      continueOnError: false
 
     - script: |
         echo "Create tag: $(BuildVersioning.BuildVersion)"
