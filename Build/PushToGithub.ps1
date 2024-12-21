@@ -1,4 +1,28 @@
 ﻿try {
+    "Folder contents for: $(System.DefaultWorkingDirectory)" | Write-Host
+    Get-ChildItem "$(System.DefaultWorkingDirectory)" -Recurse | ForEach-Object {
+        $_.FullName | Write-Host
+    }
+}
+catch {
+    Write-Error "Error: $_"
+    exit 1
+}
+
+try {
+    "Installing GitHub CLI" | Write-Host
+    Invoke-WebRequest -Uri https://github.com/cli/cli/releases/download/v2.63.2/gh_2.63.2_windows_amd64.msi -OutFile gh.msi
+    Start-Process msiexec.exe -Wait -ArgumentList '/i gh.msi /quiet /norestart'
+    Get-Item gh.msi | Remove-Item -Force
+    "GitHub CLI installed successfully" | Write-Host
+}
+catch {
+    Write-Error "GitHub CLI installation failed: $_"
+    exit 1
+}
+
+
+try {
     git fetch --tags
     $latestTag = git describe --tags "$(git rev-list --tags --max-count=1)"
     if ([string]::IsNullOrEmpty($latestTag)) {
