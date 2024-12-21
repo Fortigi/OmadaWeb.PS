@@ -120,7 +120,7 @@ Task Build -depends Test {
     $ModulePsd1.ModuleVersion = $NewVersion
 
     #Work-around for the bug in New-ModuleManifest that breaks the PrivateData key (Source: https://github.com/PowerShell/PowerShell/issues/5922)
-    $ModulePsd1.PrivateData = $ModulePsd1.PrivateData.PSData
+    $ModulePsd1.PrivateData = $ModulePsd1.PrivateData
     $ModulePsd1Path = (Join-Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName))
 
 
