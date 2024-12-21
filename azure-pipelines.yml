@@ -98,6 +98,8 @@ stages:
     steps:
     - checkout: self
       path: 'OmadaWeb.PS'
+      persistCredentials: true
+      clean: true
 
     - task: DownloadPipelineArtifact@2
       displayName: 'Download Build Output'
@@ -127,6 +129,20 @@ stages:
       condition: succeeded()
       continueOnError: false
 
+    # - task: CmdLine@2
+    #   inputs:
+    #     script: |
+    #       echo "Create tag: $(buildVersion)"
+    #       git config --global user.email "mark@fortigi.nl"
+    #       git config --global user.name "Mark van Eijken"
+    #       git tag -a v$(buildVersion) -m "Release version $(buildVersion)"
+    #       git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/Fortigi-Generic/_git/$(Build.Repository.Name) refs/tags/v$(buildVersion)
+    #     failOnStderr: true
+    #   displayName: 'Create Tag'
+    #   condition: succeeded()
+    #   enabled: true
+    #   env:
+    #     SYSTEM_ACCESSTOKEN: $(System.AccessToken)
     - task: CmdLine@2
       inputs:
         script: |
@@ -134,10 +150,12 @@ stages:
           git config --global user.email "mark@fortigi.nl"
           git config --global user.name "Mark van Eijken"
           git tag -a v$(buildVersion) -m "Release version $(buildVersion)"
-          git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/Fortigi-Generic/_git/$(Build.Repository.Name) refs/tags/v$(buildVersion)
+          git push origin refs/tags/v$(buildVersion)
         failOnStderr: true
       displayName: 'Create Tag'
       condition: succeeded()
       enabled: true
       env:
         SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+
