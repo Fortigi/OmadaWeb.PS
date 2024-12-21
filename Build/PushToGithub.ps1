@@ -1,6 +1,6 @@
 ﻿PARAM(
-    $SystemDefaultWorkingDirectory,
-    $GitHubPAT
+    [string]$SystemDefaultWorkingDirectory,
+    [string]$GitHubPAT
 )
 
 try {
