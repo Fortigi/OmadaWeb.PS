@@ -3,6 +3,7 @@
     Get-ChildItem "$(System.DefaultWorkingDirectory)" -Recurse | ForEach-Object {
         $_.FullName | Write-Host
     }
+    "Current path {0}" -f (Get-Location).Path | Write-Host
 }
 catch {
     Write-Error "Error: $_"
