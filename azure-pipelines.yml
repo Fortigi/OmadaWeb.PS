@@ -68,7 +68,7 @@ stages:
           Write-Host "##vso[task.setvariable variable=buildVersion;isOutput=true]$versionString"
           Write-Host "##vso[task.setvariable variable=year;isOutput=true]$year"
         pwsh: true
-        failOnStderr: tru
+        failOnStderr: true
       condition: succeeded()
 
     - task: PowerShell@2
