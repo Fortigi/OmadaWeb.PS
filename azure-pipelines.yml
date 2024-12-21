@@ -150,6 +150,7 @@ stages:
           git tag -a v$(buildVersion) -m "Release version $(buildVersion)"
           git push origin refs/tags/v$(buildVersion)
         failOnStderr: true
+        workingDirectory: $(Build.SourcesDirectory)
       displayName: 'Create Tag'
       condition: succeeded()
       enabled: true
