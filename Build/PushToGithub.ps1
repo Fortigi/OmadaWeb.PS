@@ -30,7 +30,7 @@ catch {
 }
 
 try {
-    git fetch --tags
+   # git fetch --tags
     $latestTag = git describe --tags "$(git rev-list --tags --max-count=1)"
     if ([string]::IsNullOrEmpty($latestTag)) {
         Write-Error "No tags found. Exiting."
