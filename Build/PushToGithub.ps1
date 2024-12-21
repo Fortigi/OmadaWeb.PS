@@ -1,9 +1,15 @@
-﻿try {
-    "Folder contents for: $(System.DefaultWorkingDirectory)" | Write-Host
-    Get-ChildItem "$(System.DefaultWorkingDirectory)" -Recurse | ForEach-Object {
+﻿PARAM(
+    $SystemDefaultWorkingDirectory,
+    $GitHubPAT
+)
+
+try {
+    "Current path {0}" -f (Get-Location).Path | Write-Host
+
+    "Folder contents for: $SystemDefaultWorkingDirectory" | Write-Host
+    Get-ChildItem "$SystemDefaultWorkingDirectory" -Recurse | ForEach-Object {
         $_.FullName | Write-Host
     }
-    "Current path {0}" -f (Get-Location).Path | Write-Host
 }
 catch {
     Write-Error "Error: $_"
@@ -50,7 +56,7 @@ catch {
 try {
     Get-Item .git* -Force | Remove-Item -Force -Recurse
     New-Item ./GitHub -ItemType Directory | Out-Null
-    git clone https://$(githubPAT)@github.com/fortigi/OmadaWeb.PS.git ./GitHub
+    git clone https://$GitHubPAT@github.com/fortigi/OmadaWeb.PS.git ./GitHub
     Copy-Item -Path "./Azure/*" -Destination "./GitHub/" -Recurse -Force
 }
 catch {
