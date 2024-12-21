@@ -30,7 +30,7 @@ catch {
 }
 
 try {
-    git fetch --tags
+   # git fetch --tags
     $latestTag = git describe --tags "$(git rev-list --tags --max-count=1)"
     if ([string]::IsNullOrEmpty($latestTag)) {
         Write-Error "No tags found. Exiting."
@@ -46,7 +46,7 @@ catch {
 
 try {
     "Copy contents to _Fortigi_OmadaWeb.PS" | Write-Host
-    Copy-Item -Path "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\*" -Destination "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS" -Recurse -Force -Filter "*.git"
+    Copy-Item -Path "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\*" -Destination "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS" -Recurse -Force -Filter ".git"
 }
 catch {
     Write-Error "File operations failed: $_"
