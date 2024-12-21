@@ -95,7 +95,6 @@ Task Build -depends Test {
     $ModulePsd1 = Import-PowerShellDataFile (Join-Path $ModuleSource -ChildPath ("{0}.psd1" -f $ModuleName))
     $ModulePsd1.FunctionsToExport = $PublicModules
 
-    $ModulePsd1.Add("Path", (Join-Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName)))
 
     try {
         $CurrentModulePsd1 = Import-PowerShellDataFile (Join-Path -Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName))
@@ -120,9 +119,17 @@ Task Build -depends Test {
 
     $ModulePsd1.ModuleVersion = $NewVersion
 
-    New-ModuleManifest @Modulepsd1
-    "Module psd1 output file: {0}" -f $($ModulePsd1.Path) | Write-Host
-    (Get-Content $($ModulePsd1.Path) -Raw) -replace "`r?`n", "`r`n"  | Invoke-Formatter -Settings $FormattingSettings | Set-Content -Path $($ModulePsd1.Path) -Encoding UTF8 -Force
+    #Work-around for the bug in New-ModuleManifest that breaks the PrivateData key (Source: https://github.com/PowerShell/PowerShell/issues/5922)
+    $ModulePsd1.PrivateData = $ModulePsd1.PrivateData.PSData
+    $ModulePsd1Path = (Join-Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName))
+
+
+    New-ModuleManifest -Path $ModulePsd1Path
+    Update-ModuleManifest -Path $ModulePsd1Path @ModulePsd1
+
+    #    New-ModuleManifest @Modulepsd1
+    "Module psd1 output file: {0}" -f $($ModulePsd1Path) | Write-Host
+    (Get-Content $($ModulePsd1Path) -Raw) -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings | Set-Content -Path $($ModulePsd1Path) -Encoding UTF8 -Force
 
     $Length = 150
     $ModuleContent = $null
@@ -184,13 +191,16 @@ Task Build -depends Test {
     "Module psm1 output file: {0}" -f $OutputDirFile | Write-Host
     $ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
 
+    "Copy nuspec file" | Write-Host
+    Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force
+
 }
 
 Task ImportModule -depends Build {
-    $Test = Import-Module -name "$OutputDir\$ModuleName.psd1" -Force -PassThru
+    $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
     if ($Test) {
         "Module loaded successfully" | Write-Verbose
-        Remove-Module -name $Test.Name -Force
+        Remove-Module -Name $Test.Name -Force
     }
     else {
         "Module failed to load" | Write-Error -ErrorAction Stop

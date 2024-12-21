@@ -10,5 +10,6 @@
     <files>
         <file src="output\OmadaWeb.PS\OmadaWeb.PS.psd1" target="" />
         <file src="output\OmadaWeb.PS\OmadaWeb.PS.psm1" target="" />
+        <file src="output\OmadaWeb.PS\OmadaWeb.PS.nuspec" target="" />
     </files>
 </package>
