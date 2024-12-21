@@ -113,7 +113,7 @@ stages:
         packDestination: '$(Build.ArtifactStagingDirectory)'
         versioningScheme: byEnvVar
         versionEnvVar: buildVersion
-        buildProperties: 'VERSION=$(BuildVersioning.buildVersion);YEAR=$(BuildVersioning.year)'
+        buildProperties: 'VERSION=$(buildVersion);YEAR=$(year)'
       condition: succeededOrFailed()
 
     - task: NuGetCommand@2
@@ -130,11 +130,11 @@ stages:
     - task: CmdLine@2
       inputs:
         script: |
-          echo "Create tag: $(BuildVersioning.BuildVersion)"
+          echo "Create tag: $(buildVersion)"
           git config --global user.email "mark@fortigi.nl"
           git config --global user.name "Mark van Eijken"
-          git tag -a v$(BuildVersioning.BuildVersion) -m "Release version $(BuildVersioning.BuildVersion)"
-          git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/Fortigi-Generic/_git/$(Build.Repository.Name) refs/tags/v$(BuildVersioning.BuildVersion)
+          git tag -a v$(buildVersion) -m "Release version $(buildVersion)"
+          git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/Fortigi-Generic/_git/$(Build.Repository.Name) refs/tags/v$(buildVersion)
         failOnStderr: true
       displayName: 'Create Tag'
       condition: succeeded()
