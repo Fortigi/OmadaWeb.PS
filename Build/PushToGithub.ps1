@@ -1,7 +1,23 @@
 ﻿PARAM(
     [string]$SystemDefaultWorkingDirectory,
+    [string]$BuildRepositoryUri,
     [string]$GitHubPAT
 )
+
+try {
+    "Current path {0}" -f (Get-Location).Path | Write-Host
+    Set-Location $SystemDefaultWorkingDirectory
+    "Current path {0}" -f (Get-Location).Path | Write-Host
+    git clone "$BuildRepositoryUri" "Azure"
+    Set-Location "Azure"
+    $AzureLocation = (Get-Location).Path
+    "Current path {0}" -f (Get-Location).Path | Write-Host
+}
+catch {
+    Write-Error "Error: $_"
+    exit 1
+}
+
 
 try {
     "Current path {0}" -f (Get-Location).Path | Write-Host
@@ -55,9 +71,9 @@ catch {
 
 try {
     Get-Item .git* -Force | Remove-Item -Force -Recurse
-    New-Item ./GitHub -ItemType Directory | Out-Null
-    git clone https://$GitHubPAT@github.com/fortigi/OmadaWeb.PS.git ./GitHub
-    Copy-Item -Path "./Azure/*" -Destination "./GitHub/" -Recurse -Force
+    New-Item "$SystemDefaultWorkingDirectory/GitHub" -ItemType Directory | Out-Null
+    git clone https://$GitHubPAT@github.com/fortigi/OmadaWeb.PS.git "$SystemDefaultWorkingDirectory/GitHub/"
+    Copy-Item -Path "$AzureLocation/*" -Destination "$SystemDefaultWorkingDirectory/GitHub/" -Recurse -Force
 }
 catch {
     Write-Error "File operations failed: $_"
