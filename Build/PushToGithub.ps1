@@ -1,28 +1,13 @@
 ﻿PARAM(
-    [string]$SystemDefaultWorkingDirectory,
-    [string]$BuildRepositoryUri,
-    [string]$GitHubPAT
+    [string]$SystemDefaultWorkingDirectory
 )
 
 try {
     "Current path {0}" -f (Get-Location).Path | Write-Host
-    Set-Location $SystemDefaultWorkingDirectory
-    "Current path {0}" -f (Get-Location).Path | Write-Host
-    git clone "$BuildRepositoryUri" "Azure"
-    Set-Location "Azure"
-    $AzureLocation = (Get-Location).Path
-    "Current path {0}" -f (Get-Location).Path | Write-Host
-}
-catch {
-    Write-Error "Error: $_"
-    exit 1
-}
-
-
-try {
+    Set-Location "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\"
     "Current path {0}" -f (Get-Location).Path | Write-Host
 
-    "Folder contents for: $SystemDefaultWorkingDirectory" | Write-Host
+    "Folder contents for SystemDefaultWorkingDirectory: $SystemDefaultWorkingDirectory" | Write-Host
     Get-ChildItem "$SystemDefaultWorkingDirectory" -Recurse | ForEach-Object {
         $_.FullName | Write-Host
     }
@@ -44,7 +29,6 @@ catch {
     exit 1
 }
 
-
 try {
     git fetch --tags
     $latestTag = git describe --tags "$(git rev-list --tags --max-count=1)"
@@ -61,19 +45,8 @@ catch {
 }
 
 try {
-    $env:GH_TOKEN | gh auth login --with-token -
-    gh auth status | Write-Host
-}
-catch {
-    Write-Error "GitHub authentication failed: $_"
-    exit 1
-}
-
-try {
-    Get-Item .git* -Force | Remove-Item -Force -Recurse
-    New-Item "$SystemDefaultWorkingDirectory/GitHub" -ItemType Directory | Out-Null
-    git clone https://$GitHubPAT@github.com/fortigi/OmadaWeb.PS.git "$SystemDefaultWorkingDirectory/GitHub/"
-    Copy-Item -Path "$AzureLocation/*" -Destination "$SystemDefaultWorkingDirectory/GitHub/" -Recurse -Force
+    "Copy contents to _Fortigi_OmadaWeb.PS" | Write-Host
+    Copy-Item -Path "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\*" -Destination "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS" -Recurse -Force -Filter "*.git"
 }
 catch {
     Write-Error "File operations failed: $_"
@@ -81,7 +54,7 @@ catch {
 }
 
 try {
-    Set-Location ./GitHub
+    Set-Location "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS"
     git config --global user.email "mark@fortigi.nl"
     git config --global user.name "Mark van Eijken"
     git add .
