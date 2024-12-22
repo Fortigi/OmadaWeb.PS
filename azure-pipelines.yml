@@ -7,7 +7,7 @@ trigger:
 - None
 
 pool:
-  vmImage: windows-latest
+  name: PH
 
 variables:
   buildConfiguration: 'Pipeline'
