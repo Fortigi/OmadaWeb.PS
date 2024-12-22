@@ -46,7 +46,7 @@ catch {
 
 try {
     "Copy contents to _Fortigi_OmadaWeb.PS" | Write-Host
-    Copy-Item -Path "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\*" -Destination "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS" -Recurse -Force -Filter ".git"
+    Copy-Item -Path "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\*" -Destination "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS" -Recurse -Force -Filter ".git" -PassThru
 }
 catch {
     Write-Error "File operations failed: $_"
