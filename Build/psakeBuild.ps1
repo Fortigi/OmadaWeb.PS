@@ -120,12 +120,22 @@ Task Build -depends Test {
     $ModulePsd1.ModuleVersion = $NewVersion
 
     #Work-around for the bug in New-ModuleManifest that breaks the PrivateData key (Source: https://github.com/PowerShell/PowerShell/issues/5922)
-    $ModulePsd1.PrivateData = $ModulePsd1.PrivateData
+    $PrivateData = $ModulePsd1.PrivateData | ConvertTo-Json | ConvertFrom-Json -AsHashtable
+    $ModulePsd1.Remove("PrivateData")
+
+    $SerializedContent = $PrivateData.GetEnumerator() | ForEach-Object {
+        if ($_ -is [System.Collections.DictionaryEntry]) {
+            if ($_.Value -is [System.Collections.Hashtable]) {
+                # Serialize nested hashtables into a string
+                "$($_.Key) = @{`n$($_.Value.GetEnumerator() | ForEach-Object {`"$($_.Key) = `'$($_.Value)`'`n"})"
+            } else {
+                "$($_.Key) = `'$($_.Value)`'"
+            }
+        }
+    }
     $ModulePsd1Path = (Join-Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName))
-
-
-    New-ModuleManifest -Path $ModulePsd1Path
-    Update-ModuleManifest -Path $ModulePsd1Path @ModulePsd1
+    New-ModuleManifest -Path $ModulePsd1Path @ModulePsd1
+    (Get-Content -Path $ModulePsd1Path) -replace 'PSData = @{',$SerializedContent   | Set-Content -Path $ModulePsd1Path -Encoding UTF8 -Force
 
     #    New-ModuleManifest @Modulepsd1
     "Module psd1 output file: {0}" -f $($ModulePsd1Path) | Write-Host
