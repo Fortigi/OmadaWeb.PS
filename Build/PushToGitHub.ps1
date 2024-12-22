@@ -1,5 +1,6 @@
 ﻿PARAM(
-    [string]$SystemDefaultWorkingDirectory
+    [string]$SystemDefaultWorkingDirectory,
+    [string]$PAT
 )
 
 try {
@@ -48,6 +49,7 @@ try {
     Set-Location "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS"
     git config --global user.email "mark@fortigi.nl"
     git config --global user.name "Mark van Eijken"
+    git remote set-url origin "https://$($PAT)@github.com/fortigi/OmadaWeb.PS.git"
     git checkout main
 }
 catch {
