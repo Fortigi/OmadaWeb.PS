@@ -31,7 +31,16 @@ catch {
 }
 
 try {
-   # git fetch --tags
+    $PAT | gh auth login --with-token -
+    gh auth status | Write-Host
+}
+catch {
+    Write-Error "GitHub authentication failed: $_"
+    exit 1
+}
+
+try {
+    # git fetch --tags
     $latestTag = git describe --tags "$(git rev-list --tags --max-count=1)"
     if ([string]::IsNullOrEmpty($latestTag)) {
         Write-Error "No tags found. Exiting."
