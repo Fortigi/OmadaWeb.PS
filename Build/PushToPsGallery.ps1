@@ -2,6 +2,9 @@
     [string]$SystemDefaultWorkingDirectory,
     [string]$PsGalleryKey
 )
+
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 try {
     "Folder tree for SystemDefaultWorkingDirectory:"
     Get-ChildItem "$SystemDefaultWorkingDirectory" -Recurse | ForEach-Object { Write-Host $_.FullName }

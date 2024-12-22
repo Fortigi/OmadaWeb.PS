@@ -3,6 +3,8 @@
     [string]$PAT
 )
 
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 try {
     "Current path {0}" -f (Get-Location).Path | Write-Host
     Set-Location "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\"
