@@ -19,6 +19,7 @@ catch {
 # }
 
 try {
+    "Publish-Module to PSGallery"
     Publish-Module -Path "$SystemDefaultWorkingDirectory/_OmadaWeb.PS Build/BuildOutput/OmadaWeb.PS" -NugetAPIKey "$PsGalleryKey" -Verbose
 }
 catch {
