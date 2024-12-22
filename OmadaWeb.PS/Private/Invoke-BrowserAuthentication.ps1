@@ -5,6 +5,10 @@
     if ($BoundParams.ForceAuthentication) {
         $Script:OmadaWebAuthCookie = $null
     }
+    $Script:Credential = $null
+    if ($BoundParams.keys -contains "Credential") {
+        $Script:Credential = $BoundParams.Credential
+    }
     switch ($Script:LastSessionType) {
         { $_ -eq "Normal" -and $($BoundParams.InPrivate).IsPresent -eq $true } {
             "{0} - Reset OmadaWebAuthCookie because session has changed to InPrivate" -f $MyInvocation.MyCommand | Write-Verbose

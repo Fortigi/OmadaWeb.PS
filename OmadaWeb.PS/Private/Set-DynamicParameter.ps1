@@ -76,8 +76,8 @@
     New-DynamicParam -Name "OmadaWebAuthCookieFile" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use a previously exported Omada authentication cookie using -OmadaWebAuthCookieExportLocation. This must be to the cookie file." -ValidateScript { Test-Path -Path $_ }
     New-DynamicParam -Name "OmadaWebAuthCookieExportLocation" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Export the Omada authentication cookie to as a CliXml file."
     New-DynamicParam -Name "ForceAuthentication" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Force authentication to Omada even when the cookie is still valid."
-    New-DynamicParam -Name "EdgeProfile" -Type "switch" -ValidateSet $Script:EdgeProfiles.Name -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use the specified Edge profile for the authentication request."
-    New-DynamicParam -Name "InPrivate" -Type "switch" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use InPrivate mode for the authentication request."
+    New-DynamicParam -Name "EdgeProfile" -Type "string" -ValidateSet $Script:EdgeProfiles.Name -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use the specified Edge profile for the authentication request."
+    New-DynamicParam -Name "InPrivate" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use InPrivate mode for the authentication request."
 
     return $Dictionary
 }

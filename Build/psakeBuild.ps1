@@ -23,7 +23,7 @@ Task Analyze {
     $saResults = Invoke-ScriptAnalyzer -Path $ModuleSource -Severity @('Error', 'Warning') -Recurse -Profile $Profile -Verbose:$false
     if ($saResults) {
         $saResults | Format-Table
-        Write-Error -Message 'One or more Script Analyzer errors/warnings where found. Build cannot continue!'
+        Write-Error -Message 'One or more Script Analyzer errors/warnings where found. Build cannot continue!' -ErrorAction "Stop"
     }
 }
 
@@ -95,7 +95,6 @@ Task Build -depends Test {
     $ModulePsd1 = Import-PowerShellDataFile (Join-Path $ModuleSource -ChildPath ("{0}.psd1" -f $ModuleName))
     $ModulePsd1.FunctionsToExport = $PublicModules
 
-    $ModulePsd1.Add("Path", (Join-Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName)))
 
     try {
         $CurrentModulePsd1 = Import-PowerShellDataFile (Join-Path -Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName))
@@ -120,9 +119,27 @@ Task Build -depends Test {
 
     $ModulePsd1.ModuleVersion = $NewVersion
 
-    New-ModuleManifest @Modulepsd1
-    (Get-Content $($ModulePsd1.Path) -Raw) -replace "`r?`n", "`r`n"  | Invoke-Formatter -Settings $FormattingSettings | Set-Content -Path $($ModulePsd1.Path) -Encoding UTF8 -Force
+    #Work-around for the bug in New-ModuleManifest that breaks the PrivateData key (Source: https://github.com/PowerShell/PowerShell/issues/5922)
+    $PrivateData = $ModulePsd1.PrivateData | ConvertTo-Json | ConvertFrom-Json -AsHashtable
+    $ModulePsd1.Remove("PrivateData")
 
+    $SerializedContent = $PrivateData.GetEnumerator() | ForEach-Object {
+        if ($_ -is [System.Collections.DictionaryEntry]) {
+            if ($_.Value -is [System.Collections.Hashtable]) {
+                # Serialize nested hashtables into a string
+                "$($_.Key) = @{`n$($_.Value.GetEnumerator() | ForEach-Object {`"$($_.Key) = `'$($_.Value)`'`n"})"
+            } else {
+                "$($_.Key) = `'$($_.Value)`'"
+            }
+        }
+    }
+    $ModulePsd1Path = (Join-Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName))
+    New-ModuleManifest -Path $ModulePsd1Path @ModulePsd1
+    (Get-Content -Path $ModulePsd1Path) -replace 'PSData = @{',$SerializedContent   | Set-Content -Path $ModulePsd1Path -Encoding UTF8 -Force
+
+    #    New-ModuleManifest @Modulepsd1
+    "Module psd1 output file: {0}" -f $($ModulePsd1Path) | Write-Host
+    (Get-Content $($ModulePsd1Path) -Raw) -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings | Set-Content -Path $($ModulePsd1Path) -Encoding UTF8 -Force
 
     $Length = 150
     $ModuleContent = $null
@@ -181,15 +198,19 @@ Task Build -depends Test {
     }
 
     $ModuleContent = $ModuleContent -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings
+    "Module psm1 output file: {0}" -f $OutputDirFile | Write-Host
     $ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
+
+    "Copy nuspec file" | Write-Host
+    Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force
 
 }
 
 Task ImportModule -depends Build {
-    $Test = Import-Module -name "$OutputDir\$ModuleName.psd1" -Force -PassThru
+    $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
     if ($Test) {
         "Module loaded successfully" | Write-Verbose
-        Remove-Module -name $Test.Name -Force
+        Remove-Module -Name $Test.Name -Force
     }
     else {
         "Module failed to load" | Write-Error -ErrorAction Stop
