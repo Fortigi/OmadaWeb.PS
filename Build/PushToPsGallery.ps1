@@ -3,27 +3,7 @@
     [string]$PsGalleryKey
 )
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-try {
-    "Installing PowerShellGet and NuGet if not present"
-    if ((Get-Module -ListAvailable).Name -notcontains "PowerShellGet") {
-        Install-Module -Name PowerShellGet -Force -AllowClobber
-    }
-}
-catch {
-    Write-Error "Failed to install PowerShellGet: $_"
-    exit 1
-}
-
-try {
-    "Installing NuGet if not present"
-    Install-PackageProvider -Name NuGet -Force -Scope CurrentUser
-}
-catch {
-    Write-Error "Failed to install NuGet: $_"
-    exit 1
-}
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12,[Net.SecurityProtocolType]::Tls11,[Net.SecurityProtocolType]::Tls13
 
 try {
     "Folder tree for SystemDefaultWorkingDirectory:"

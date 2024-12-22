@@ -3,7 +3,7 @@
     [string]$PAT
 )
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12,[Net.SecurityProtocolType]::Tls11,[Net.SecurityProtocolType]::Tls13
 
 try {
     "Current path {0}" -f (Get-Location).Path | Write-Host
