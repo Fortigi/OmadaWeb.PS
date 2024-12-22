@@ -6,6 +6,26 @@
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 try {
+    "Installing PowerShellGet and NuGet if not present"
+    if ((Get-Module -ListAvailable).Name -notcontains "PowerShellGet") {
+        Install-Module -Name PowerShellGet -Force -AllowClobber
+    }
+}
+catch {
+    Write-Error "Failed to install PowerShellGet: $_"
+    exit 1
+}
+
+try {
+    "Installing NuGet if not present"
+    Install-PackageProvider -Name NuGet -Force -Scope CurrentUser
+}
+catch {
+    Write-Error "Failed to install NuGet: $_"
+    exit 1
+}
+
+try {
     "Folder tree for SystemDefaultWorkingDirectory:"
     Get-ChildItem "$SystemDefaultWorkingDirectory" -Recurse | ForEach-Object { Write-Host $_.FullName }
 }
@@ -23,7 +43,7 @@ catch {
 
 try {
     "Publish-Module to PSGallery"
-    Publish-Module -Path "$SystemDefaultWorkingDirectory/_OmadaWeb.PS Build/BuildOutput/OmadaWeb.PS" -NugetAPIKey "$PsGalleryKey" -Verbose
+    Publish-Module -Path "$SystemDefaultWorkingDirectory/_OmadaWeb.PS Build/BuildOutput/OmadaWeb.PS" -NuGetApiKey "$PsGalleryKey" -Verbose
 }
 catch {
     Write-Error "Failed to deploy to PowerShell Gallery: $_"
