@@ -45,6 +45,18 @@ catch {
 }
 
 try {
+    Set-Location "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS"
+    git config --global user.email "mark@fortigi.nl"
+    git config --global user.name "Mark van Eijken"
+    git checkout main
+}
+catch {
+    Write-Error "Git or release operations failed: $_"
+    exit 1
+}
+
+
+try {
     "Copy contents to _Fortigi_OmadaWeb.PS" | Write-Host
     Copy-Item -Path "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\*" -Destination "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS" -Recurse -Force -PassThru -Exclude ".git"
 }
@@ -54,9 +66,6 @@ catch {
 }
 
 try {
-    Set-Location "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS"
-    git config --global user.email "mark@fortigi.nl"
-    git config --global user.name "Mark van Eijken"
     git add .
     git commit -m "Release version $latestTag"
     git push -f origin main
