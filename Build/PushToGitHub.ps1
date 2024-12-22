@@ -60,6 +60,13 @@ try {
     git add .
     git commit -m "Release version $latestTag"
     git push -f origin main
+}
+catch {
+    Write-Error "Git or release operations failed: $_"
+    exit 1
+}
+
+try {
     gh release create $latestTag --title "Release $latestTag" --notes "Release $latestTag"
 }
 catch {
