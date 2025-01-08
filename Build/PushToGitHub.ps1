@@ -1,6 +1,9 @@
 ﻿PARAM(
     [string]$SystemDefaultWorkingDirectory,
     [string]$PAT,
+    [string]$GitHubAccount,
+    [string]$GitHubProjectName,
+    [string]$GitHubBranch,
     [string]$ReleaseDescription
 )
 
@@ -8,7 +11,7 @@
 
 try {
     "Current path {0}" -f (Get-Location).Path | Write-Host
-    Set-Location "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\"
+    Set-Location "$SystemDefaultWorkingDirectory\_SourceRepo\"
     "Current path {0}" -f (Get-Location).Path | Write-Host
 
     "Folder contents for SystemDefaultWorkingDirectory: $SystemDefaultWorkingDirectory" | Write-Host
@@ -58,11 +61,12 @@ catch {
 }
 
 try {
-    Set-Location "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS"
+    Set-Location "$SystemDefaultWorkingDirectory\_GitHub"
     git config --global user.email "devops@fortigi.nl"
     git config --global user.name "Azure DevOps Pipeline"
-    git remote set-url origin "https://$($PAT)@github.com/fortigi/OmadaWeb.PS.git"
-    git checkout main
+    $RemoteUrl = "https://{0}@github.com/{1}/{2}.git" -f $($PAT), $GitHubAccount, $GitHubProjectName
+    git remote set-url origin $RemoteUrl
+    git checkout $GitHubBranch
 }
 catch {
     Write-Error "Git or release operations failed: $_"
@@ -71,8 +75,8 @@ catch {
 
 
 try {
-    "Copy contents to _Fortigi_OmadaWeb.PS" | Write-Host
-    Copy-Item -Path "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\*" -Destination "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS" -Recurse -Force -PassThru -Exclude ".git"
+    "Copy contents to _GitHub" | Write-Host
+    Copy-Item -Path "$SystemDefaultWorkingDirectory\_SourceRepo\*" -Destination "$SystemDefaultWorkingDirectory\_GitHub" -Recurse -Force -PassThru -Exclude ".git"
 }
 catch {
     Write-Error "File operations failed: $_"
@@ -83,7 +87,7 @@ try {
     git add .
     $commitMessage = if (![string]::IsNullOrWhiteSpace($ReleaseDescription)) { $ReleaseDescription } else { "Release version $latestTag" }
     git commit -m $commitMessage
-    git push -f origin main
+    git push -f origin $GitHubBranch
 }
 catch {
     Write-Error "Git or release operations failed: $_"
