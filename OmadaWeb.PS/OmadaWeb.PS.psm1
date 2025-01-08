@@ -4,7 +4,8 @@ PARAM(
     [hashtable]$Parameters
 )
 
-"Loading OmadaWeb.PS Module" | Write-Verbose
+$ModuleName = "OmadaWeb.PS"
+"Loading {0} Module" -f $ModuleName | Write-Verbose
 
 $PowerShellType = "Core"
 if ($PSVersionTable.PSVersion.Major -le 5) {
@@ -12,7 +13,7 @@ if ($PSVersionTable.PSVersion.Major -le 5) {
     $PowerShellType = "Desktop"
 }
 
-$BinPath = (New-Item (Join-Path ([System.Environment]::GetEnvironmentVariable("LOCALAPPDATA")) -ChildPath "OmadaWeb.PS\Bin\$PowerShellType") -ItemType Directory -Force).FullName
+$BinPath = (New-Item (Join-Path ([System.Environment]::GetEnvironmentVariable("LOCALAPPDATA")) -ChildPath "$ModuleName\Bin\$PowerShellType") -ItemType Directory -Force).FullName
 $DefaultParams = @{
     WebDriverBasePath     = $BinPath
     InstalledEdgeBasePath = "C:\Program Files (x86)\Microsoft\Edge\Application"
@@ -108,7 +109,33 @@ Foreach ($Import in @($Public + $Private)) {
 Export-ModuleMember -Function $Public.Basename -Alias *
 #endregion
 
-#region include
+"Validate version" | Write-Verbose
+try {
+    $InstalledModule = Get-InstalledModuleInfo -ModuleName $ModuleName
+
+    if (-not $InstalledModule.RepositorySource -or $InstalledModule.RepositorySource -notlike "*powershellgallery.com*") {
+        "Module '{0}' was not sourced from the PowerShell Gallery. Skipping version check." -f $ModuleName | Write-Verbose
+    }
+    else {
+        $GalleryVersion = Get-GalleryModuleVersion -ModuleName $ModuleName
+
+        if (-not $GalleryVersion) {
+        }
+        else {
+            if ([version]$InstalledModule.Version -lt [version]$GalleryVersion) {
+                "The installed version {0} of '{1}' is outdated. Latest version: {2}. Execute Update-Module {1} to update to the latest version!" -f ($($InstalledModule.Version)), $ModuleName, $GalleryVersion | Write-Warning
+            }
+            elseif ([version]$InstalledModule.Version -eq [version]$GalleryVersion) {
+                "The installed version {0} of '{1}' is up-to-date." -f ($($InstalledModule.Version)) , $ModuleName | Write-Verbose
+            }
+            else {
+                "The installed version {0} of '{1}' is newer than the gallery version {2}." -f ($($InstalledModule.Version)), $ModuleName, $GalleryVersion | Write-Warning
+            }
+        }
+    }
+
+}
+catch {}
+
 $Script:EdgeProfiles = Get-EdgeProfile
 $Script:LoginRetryCount = 0
-#endregion
