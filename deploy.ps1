@@ -8,9 +8,9 @@ try {
     $ModuleName = "OmadaWeb.PS"
     "ModuleName {0}" -f $ModuleName | Write-Verbose
 
-    $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "output\OmadaWeb.PS"
+    $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "buildoutput\OmadaWeb.PS"
     if (!(Test-Path $ModuleSourceFolder -PathType Container)) {
-        $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "output"
+        $ModuleSourceFolder = Join-Path $PSScriptRoot -ChildPath "buildoutput"
     }
     if (!(Test-Path $ModuleSourceFolder -PathType Container)) {
         "Module source folder {0} does not exist" -f $ModuleSourceFolder | Write-Error -ErrorAction Stop

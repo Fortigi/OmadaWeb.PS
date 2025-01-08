@@ -57,7 +57,7 @@ stages:
     - task: PublishPipelineArtifact@1
       displayName: 'Publish Build Output'
       inputs:
-        targetPath: '$(System.DefaultWorkingDirectory)/output'
+        targetPath: '$(System.DefaultWorkingDirectory)/buildoutput'
         artifactName: 'BuildOutput'
       condition: succeeded()
 

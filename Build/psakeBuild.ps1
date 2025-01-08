@@ -5,7 +5,7 @@ Properties {
     $ParentPath = (Get-Item -Path $PSScriptRoot -Verbose:$false).Parent.FullName
     $ModuleSource = Join-Path -Path $ParentPath -ChildPath 'OmadaWeb.PS'
     $TestSource = Join-Path -Path $ParentPath -ChildPath 'tests'
-    $OutputDir = Join-Path -Path $ParentPath -ChildPath 'output\OmadaWeb.PS'
+    $OutputDir = Join-Path -Path $ParentPath -ChildPath 'buildoutput\OmadaWeb.PS'
     New-Item -Path $OutputDir -ItemType Directory -Force | Out-Null
 }
 
