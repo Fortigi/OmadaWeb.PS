@@ -166,6 +166,7 @@ Task Build -Depends Test {
     $RegionName = "exclude"
     $ScriptContent = Get-Content -Path $ModuleSource\OmadaWeb.PS.psm1 -Encoding UTF8 -ErrorAction Stop
     $ExcludeRegion = $false
+    $FunctionsAdded = $false
     foreach ($Line in $ScriptContent) {
         if ($Line -match "#region\s+$RegionName") {
             $ExcludeRegion = $true
@@ -174,13 +175,14 @@ Task Build -Depends Test {
         elseif ($Line -match "#endregion") {
             if ($ExcludeRegion) {
                 $ExcludeRegion = $false
-                break
+                #break
             }
         }
         if (!$ExcludeRegion) {
             $ModuleContent += ($Line | Where-Object { $_ -notmatch '^\s*#' }) + "`n"
         }
-        elseif ($ExcludeRegion) {
+        elseif ($ExcludeRegion -and !$FunctionsAdded) {
+            "Adding functions" | Write-Host
             $PublicModules = @()
             $Public = @(Get-ChildItem -Path $ModuleSource\Public\*.ps1 -Recurse)
             $Private = @(Get-ChildItem -Path $ModuleSource\Private\*.ps1)
@@ -199,19 +201,25 @@ Task Build -Depends Test {
                 $ModuleContent += "`n`n"
             }
             $ModuleContent += "#endregion`n`n"
-
-            # Export all the functions
-            $Content = "Export-ModuleMember -Function @(""{0}"") -Alias *`n`n" -f ($PublicModules -join '", "')
-            $ModuleContent += $Content -join "`n`n"
+            $FunctionsAdded = $true
         }
     }
 
-    $ModuleContent = $ModuleContent -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings
-    "Module psm1 output file: {0}" -f $OutputDirFile | Write-Host
-    $ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
+    "Processing included lines after added functions" | Write-Host
+    # Export all the functions
+    $ModuleContent += ($Line | Where-Object { $_ -notmatch '^\s*#' }) + "`n"
+    $Content = "Export-ModuleMember -Function @(""{0}"") -Alias *`n`n" -f ($PublicModules -join '", "')
+    $ModuleContent += $Content -join "`n`n"
 
-    "Copy nuspec file" | Write-Host
-    Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force
+
+
+
+$ModuleContent = $ModuleContent -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings
+"Module psm1 output file: {0}" -f $OutputDirFile | Write-Host
+$ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
+
+"Copy nuspec file" | Write-Host
+Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force
 
 }
 
