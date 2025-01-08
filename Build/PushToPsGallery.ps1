@@ -3,7 +3,7 @@
     [string]$PsGalleryKey
 )
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12,[Net.SecurityProtocolType]::Tls11,[Net.SecurityProtocolType]::Tls13
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12, [Net.SecurityProtocolType]::Tls11, [Net.SecurityProtocolType]::Tls13
 
 try {
     "Folder tree for SystemDefaultWorkingDirectory:"
@@ -12,14 +12,6 @@ try {
 catch {
     Write-Host "Failed to retrieve directory tree: $_"
 }
-
-# try {
-#     Get-ChildItem "$SystemDefaultWorkingDirectory/_OmadaWeb.PS" -Filter *.nuspec -Recurse | Copy-Item -Destination "$SystemDefaultWorkingDirectory/_OmadaWeb.PS Build\BuildOutput\OmadaWeb.PS" -Force
-# }
-# catch {
-#     Write-Error "Failed to copy nuspec file: $_"
-#     exit 1
-# }
 
 try {
     "Publish-Module to PSGallery"

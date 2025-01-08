@@ -4,7 +4,13 @@ parameters:
     default: '0.0.0.0'
 
 trigger:
-- None
+  batch: true
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - OmadaWeb.PS/**
 
 pool:
   name: PH
@@ -24,49 +30,16 @@ stages:
       displayName: 'Install Modules'
       name: "InstallModules"
       inputs:
-        targetType: 'inline'
-        script: |
-          "Validate Modules" | Write-Host
-          $Modules = Get-Module -ListAvailable
-          if ("Pester" -notin $Modules.Name) {
-            "Install Pester" | Write-Host
-            Install-Module -Name Pester -Scope CurrentUser -Force
-          }
-          if ("psake" -notin $Modules.Name) {
-            "Install psake" | Write-Host
-            Install-Module -Name psake -Scope CurrentUser -Force
-          }
-          if ("PSDeploy" -notin $Modules.Name) {
-            "Install PSDeploy" | Write-Host
-            Install-Module -Name PSDeploy -Scope CurrentUser -Force
-          }
-          if ("PSScriptAnalyzer" -notin $Modules.Name) {
-            "Install PSScriptAnalyzer" | Write-Host
-            Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
-          }
+        filePath: '$(System.DefaultWorkingDirectory)/Build/InstallModules.ps1'
         pwsh: true
-        failOnStderr: true 
+        failOnStderr: true
       condition: succeeded()
 
     - task: PowerShell@2
       displayName: 'Preparing Build Number'
       name: BuildVersioning
       inputs:
-        targetType: 'inline'
-        script: |
-          $currentDate = $(Get-Date)
-          $year = $currentDate.Year
-          $month = $currentDate.Month
-          $day = $currentDate.Day
-          "Current date: {0}" -f $currentDate | Write-Host
-          "Current year: {0}" -f $year | Write-Host
-          "Current month: {0}" -f $month | Write-Host
-          "Current day: {0}" -f $day | Write-Host
-          "Revision: {0}" -f $env:revision | Write-Host
-          $versionString = "{0:d4}.{1:d2}.{2:d2}.{3}" -f $year,$month,$day,($env:revision -eq $null ? 0 : $env:revision)
-          "Version: {0}" -f $versionString | Write-Host
-          Write-Host "##vso[task.setvariable variable=buildVersion;isOutput=true]$versionString"
-          Write-Host "##vso[task.setvariable variable=year;isOutput=true]$year"
+        filePath: '$(System.DefaultWorkingDirectory)/Build/BuildVersioning.ps1'
         pwsh: true
         failOnStderr: true
       condition: succeeded()
@@ -78,7 +51,7 @@ stages:
         filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
         arguments: ' -Task Build -BuildVersion $(BuildVersioning.buildVersion)'
         pwsh: true
-        failOnStderr: true 
+        failOnStderr: true
       condition: succeeded()
 
     - task: PublishPipelineArtifact@1
@@ -105,7 +78,7 @@ stages:
       displayName: 'Download Build Output'
       inputs:
         artifactName: 'BuildOutput'
-        targetPath: '$(System.DefaultWorkingDirectory)/output'
+        targetPath: '$(System.DefaultWorkingDirectory)/buildoutput'
 
     - task: NuGetCommand@2
       displayName: 'Pack project'
@@ -129,32 +102,18 @@ stages:
       condition: succeeded()
       continueOnError: false
 
-    # - task: CmdLine@2
-    #   inputs:
-    #     script: |
-    #       echo "Create tag: $(buildVersion)"
-    #       git config --global user.email "mark@fortigi.nl"
-    #       git config --global user.name "Mark van Eijken"
-    #       git tag -a v$(buildVersion) -m "Release version $(buildVersion)"
-    #       git push https://user:$(System.AccessToken)@dev.azure.com/fortigi/Fortigi-Generic/_git/$(Build.Repository.Name) refs/tags/v$(buildVersion)
-    #     failOnStderr: true
-    #   displayName: 'Create Tag'
-    #   condition: succeeded()
-    #   enabled: true
-    #   env:
-    #     SYSTEM_ACCESSTOKEN: $(System.AccessToken)
     - task: CmdLine@2
+      displayName: 'Create Tag'
       inputs:
         script: |
           echo "Create tag: $(buildVersion)"
-          git config --global user.email "mark@fortigi.nl"
-          git config --global user.name "Mark van Eijken"
+          git config --global user.email "devops@fortigi.nl"
+          git config --global user.name "Azure DevOps Pipeline"
           git tag -a v$(buildVersion) -m "Release version $(buildVersion)"
           git push origin refs/tags/v$(buildVersion) 2>stderr.log
           type stderr.log
         failOnStderr: false
         workingDirectory: $(Build.SourcesDirectory)
-      displayName: 'Create Tag'
       condition: succeeded()
       enabled: true
 

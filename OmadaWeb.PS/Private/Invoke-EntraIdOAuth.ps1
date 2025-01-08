@@ -14,7 +14,20 @@
         client_secret = $($BoundParams.Credential.GetNetworkCredential().Password)
     }
 
-    $BearerToken = Invoke-RestMethod -Uri ("https://login.microsoftonline.com/{0}/oauth2/v2.0/token" -f $BoundParams.EntraIdTenantId) -UseBasicParsing -Method Post -Body $RequestBody -ContentType 'application/x-www-form-urlencoded'
+    $Arguments = @{
+        Method      = "Post"
+        Uri         = ("https://login.microsoftonline.com/{0}/oauth2/v2.0/token" -f $BoundParams.EntraIdTenantId)
+        Body        = $RequestBody
+        ContentType = 'application/x-www-form-urlencoded'
+        ErrorAction = "SilentlyContinue"
+    }
+
+    # UseBasicParsing is deprecated since PowerShell Core 6, there it is only set when using PowerShell 5 (https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest?view=powershell-7.4#-usebasicparsing)
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+        $Arguments.Add("UseBasicParsing", $true)
+    }
+
+    $BearerToken = Invoke-RestMethod @Arguments
     $BearerToken = $BearerToken
     $BoundParams.Headers.Add("Authorization" , "Bearer {0}" -f $BearerToken.access_token)
 }

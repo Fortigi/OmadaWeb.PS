@@ -209,7 +209,7 @@ Please see Microsoft documentation for all other available options.
 
 [`Invoke-WebRequest`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest)
 
-[Omada Documentation](https://documentation.omadaidentity.com/)
+[`Omada Documentation`](https://documentation.omadaidentity.com/)
 ## LICENSE
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
