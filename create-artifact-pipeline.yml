@@ -1,0 +1,121 @@
+parameters:
+  - name: buildVersion
+    type: string
+    default: '0.0.0.0'
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - OmadaWeb.PS/**
+
+pool:
+  name: PH
+
+variables:
+  buildConfiguration: 'Pipeline'
+  buildVersion: 'Will be set dynamically'
+  year: 'Will be set dynamically'
+  revision: $[counter(format('{0:dd}', pipeline.startTime), 1)]
+
+stages:
+- stage: BuildStage
+  jobs:
+  - job: BuildJob
+    steps:
+    - task: PowerShell@2
+      displayName: 'Install Modules'
+      name: "InstallModules"
+      inputs:
+        filePath: '$(System.DefaultWorkingDirectory)/Build/InstallModules.ps1'
+        pwsh: true
+        failOnStderr: true
+      condition: succeeded()
+
+    - task: PowerShell@2
+      displayName: 'Preparing Build Number'
+      name: BuildVersioning
+      inputs:
+        filePath: '$(System.DefaultWorkingDirectory)/Build/BuildVersioning.ps1'
+        pwsh: true
+        failOnStderr: true
+      condition: succeeded()
+
+    - task: PowerShell@2
+      displayName: 'Build Module'
+      name: "BuildTask"
+      inputs:
+        filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
+        arguments: ' -Task Build -BuildVersion $(BuildVersioning.buildVersion)'
+        pwsh: true
+        failOnStderr: true
+      condition: succeeded()
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Build Output'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/buildoutput'
+        artifactName: 'BuildOutput'
+      condition: succeeded()
+
+- stage: PackageStage
+  dependsOn: [BuildStage]
+  jobs:
+  - job: 'Create_Artifacts'
+    variables:
+      buildVersion: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.buildVersion'] ]
+      year: $[ stageDependencies.BuildStage.BuildJob.outputs['BuildVersioning.year'] ]
+    steps:
+    - checkout: self
+      path: 'OmadaWeb.PS'
+      persistCredentials: true
+      clean: true
+
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Build Output'
+      inputs:
+        artifactName: 'BuildOutput'
+        targetPath: '$(System.DefaultWorkingDirectory)/buildoutput'
+
+    - task: NuGetCommand@2
+      displayName: 'Pack project'
+      inputs:
+        command: pack
+        packagesToPack: '$(System.DefaultWorkingDirectory)/OmadaWeb.PS.nuspec'
+        packDestination: '$(Build.ArtifactStagingDirectory)'
+        versioningScheme: byEnvVar
+        versionEnvVar: buildVersion
+        buildProperties: 'VERSION=$(buildVersion);YEAR=$(year)'
+      condition: succeededOrFailed()
+
+    - task: NuGetCommand@2
+      displayName: 'NuGet push'
+      inputs:
+        command: push
+        nuGetFeedType: internal
+        publishVstsFeed: 'Fortigi-Generic/OmadaWeb.PS'
+        allowPackageConflicts: true
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/**/*.nupkg;!$(Build.ArtifactStagingDirectory)/**/*.symbols.nupkg'
+      condition: succeeded()
+      continueOnError: false
+
+    - task: CmdLine@2
+      displayName: 'Create Tag'
+      inputs:
+        script: |
+          echo "Create tag: $(buildVersion)"
+          git config --global user.email "devops@fortigi.nl"
+          git config --global user.name "Azure DevOps Pipeline"
+          git tag -a v$(buildVersion) -m "Release version $(buildVersion)"
+          git push origin refs/tags/v$(buildVersion) 2>stderr.log
+          type stderr.log
+        failOnStderr: false
+        workingDirectory: $(Build.SourcesDirectory)
+      condition: succeeded()
+      enabled: true
+
+
+

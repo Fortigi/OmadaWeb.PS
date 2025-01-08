@@ -7,6 +7,8 @@ OmadaWeb.PS is a PowerShell module containing commands to manage data via Omada 
 
 This module contains two functions that wraps over the built-in PowerShell commands [`Invoke-RestMethod`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-restmethod) and [`Invoke-WebRequest`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest). It adds authentication handling to be used with Omada.
 
+When using browser based authentication this module is able to sign-in automatically to Entra ID when providing credentials via the -Credential parameter. When using number based MFA it is also capable to copy the required number to you clipboard if you have PhoneLink active. It makes it a little bit easier to past the number directly in the Authenticator app on your phone.
+
 ## INSTALLATION
 
 To install the module from the PowerShell Gallery, you can use the following command:
@@ -79,9 +81,14 @@ Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/ident
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EmtraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -Credential $Credential
 ```
 
+### Example 4: Retrieve Identity object using Browser authentication on EntraID with a credential specified
+When adding a credential parameter the sign-in process will try to automatically select the correct user when already signed-in or and enters the provided credentials automatically. When PhoneLink is active, you have clipboard sharing configured, number based MFA is used, the required value is copied to the clipboard so you only need to paste it in the authenticator app.
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser" -Credential $Credential
+```
+
 ## PARAMETERS
 The built-in are the same for both Invoke-OmadaRestMethod and Invoke-OmadaWebRequest.
-
 
 ###    -AuthenticationType <string>
 The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
@@ -202,7 +209,7 @@ Please see Microsoft documentation for all other available options.
 
 [`Invoke-WebRequest`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest)
 
-[Omada Documentation](https://documentation.omadaidentity.com/)
+[`Omada Documentation`](https://documentation.omadaidentity.com/)
 ## LICENSE
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

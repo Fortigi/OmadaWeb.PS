@@ -1,13 +1,17 @@
 ﻿PARAM(
     [string]$SystemDefaultWorkingDirectory,
-    [string]$PAT
+    [string]$PAT,
+    [string]$GitHubAccount,
+    [string]$GitHubProjectName,
+    [string]$GitHubBranch,
+    [string]$ReleaseDescription
 )
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12,[Net.SecurityProtocolType]::Tls11,[Net.SecurityProtocolType]::Tls13
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12, [Net.SecurityProtocolType]::Tls11, [Net.SecurityProtocolType]::Tls13
 
 try {
     "Current path {0}" -f (Get-Location).Path | Write-Host
-    Set-Location "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\"
+    Set-Location "$SystemDefaultWorkingDirectory\_SourceRepo\"
     "Current path {0}" -f (Get-Location).Path | Write-Host
 
     "Folder contents for SystemDefaultWorkingDirectory: $SystemDefaultWorkingDirectory" | Write-Host
@@ -57,11 +61,12 @@ catch {
 }
 
 try {
-    Set-Location "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS"
-    git config --global user.email "mark@fortigi.nl"
-    git config --global user.name "Mark van Eijken"
-    git remote set-url origin "https://$($PAT)@github.com/fortigi/OmadaWeb.PS.git"
-    git checkout main
+    Set-Location "$SystemDefaultWorkingDirectory\_GitHub"
+    git config --global user.email "devops@fortigi.nl"
+    git config --global user.name "Azure DevOps Pipeline"
+    $RemoteUrl = "https://{0}@github.com/{1}/{2}.git" -f $($PAT), $GitHubAccount, $GitHubProjectName
+    git remote set-url origin $RemoteUrl
+    git checkout $GitHubBranch
 }
 catch {
     Write-Error "Git or release operations failed: $_"
@@ -70,8 +75,8 @@ catch {
 
 
 try {
-    "Copy contents to _Fortigi_OmadaWeb.PS" | Write-Host
-    Copy-Item -Path "$SystemDefaultWorkingDirectory\_OmadaWeb.PS\*" -Destination "$SystemDefaultWorkingDirectory\_Fortigi_OmadaWeb.PS" -Recurse -Force -PassThru -Exclude ".git"
+    "Copy contents to _GitHub" | Write-Host
+    Copy-Item -Path "$SystemDefaultWorkingDirectory\_SourceRepo\*" -Destination "$SystemDefaultWorkingDirectory\_GitHub" -Recurse -Force -PassThru -Exclude ".git"
 }
 catch {
     Write-Error "File operations failed: $_"
@@ -80,8 +85,9 @@ catch {
 
 try {
     git add .
-    git commit -m "Release version $latestTag"
-    git push -f origin main
+    $commitMessage = if (![string]::IsNullOrWhiteSpace($ReleaseDescription)) { $ReleaseDescription } else { "Release version $latestTag" }
+    git commit -m $commitMessage
+    git push -f origin $GitHubBranch
 }
 catch {
     Write-Error "Git or release operations failed: $_"
@@ -89,7 +95,12 @@ catch {
 }
 
 try {
-    gh release create $latestTag --title "Release $latestTag" --notes "Release $latestTag"
+    $existingTag = gh release view $latestTag --json tagName 2>$null
+    if ($existingTag) {
+        gh release delete $latestTag --yes
+    }
+    $releaseNotes = if (![string]::IsNullOrWhiteSpace($ReleaseDescription)) { $ReleaseDescription } else { "Release $latestTag" }
+    gh release create $latestTag --title "Release $latestTag" --notes $releaseNotes
 }
 catch {
     Write-Error "Git or release operations failed: $_"

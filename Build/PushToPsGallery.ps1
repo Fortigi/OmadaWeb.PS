@@ -1,29 +1,23 @@
 ﻿PARAM(
     [string]$SystemDefaultWorkingDirectory,
-    [string]$PsGalleryKey
+    [string]$PsGalleryKey,
+    [string]$BuildPath
 )
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12,[Net.SecurityProtocolType]::Tls11,[Net.SecurityProtocolType]::Tls13
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12, [Net.SecurityProtocolType]::Tls11, [Net.SecurityProtocolType]::Tls13
 
 try {
-    "Folder tree for SystemDefaultWorkingDirectory:"
+    "Folder tree for SystemDefaultWorkingDirectory:" | Write-Host
     Get-ChildItem "$SystemDefaultWorkingDirectory" -Recurse | ForEach-Object { Write-Host $_.FullName }
 }
 catch {
     Write-Host "Failed to retrieve directory tree: $_"
 }
 
-# try {
-#     Get-ChildItem "$SystemDefaultWorkingDirectory/_OmadaWeb.PS" -Filter *.nuspec -Recurse | Copy-Item -Destination "$SystemDefaultWorkingDirectory/_OmadaWeb.PS Build\BuildOutput\OmadaWeb.PS" -Force
-# }
-# catch {
-#     Write-Error "Failed to copy nuspec file: $_"
-#     exit 1
-# }
-
 try {
-    "Publish-Module to PSGallery"
-    Publish-Module -Path "$SystemDefaultWorkingDirectory/_OmadaWeb.PS Build/BuildOutput/OmadaWeb.PS" -NuGetApiKey "$PsGalleryKey" -Verbose
+    "Publish-Module to PSGallery" | Write-Host
+    $SourcePath = "{0}/_Artifact/{1}" -f $SystemDefaultWorkingDirectory,$BuildPath.TrimStart('/')
+    Publish-Module -Path $SourcePath -NuGetApiKey "$PsGalleryKey" -Verbose
 }
 catch {
     Write-Error "Failed to deploy to PowerShell Gallery: $_"

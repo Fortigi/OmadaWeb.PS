@@ -8,8 +8,8 @@
         <copyright>Copyright $YEAR$ Fortigi</copyright>
     </metadata>
     <files>
-        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psd1" target="" />
-        <file src="output\OmadaWeb.PS\OmadaWeb.PS.psm1" target="" />
-        <file src="output\OmadaWeb.PS\OmadaWeb.PS.nuspec" target="" />
+        <file src="buildoutput\OmadaWeb.PS\OmadaWeb.PS.psd1" target="" />
+        <file src="buildoutput\OmadaWeb.PS\OmadaWeb.PS.psm1" target="" />
+        <file src="buildoutput\OmadaWeb.PS\OmadaWeb.PS.nuspec" target="" />
     </files>
 </package>

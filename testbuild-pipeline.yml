@@ -1,0 +1,24 @@
+﻿pool:
+  name: PH
+
+jobs:
+- job: TestBuildJob
+  steps:
+  - task: PowerShell@2
+    displayName: 'Install Modules'
+    name: "InstallModules"
+    inputs:
+      filePath: '$(System.DefaultWorkingDirectory)/Build/InstallModules.ps1'
+      pwsh: true
+      failOnStderr: true
+    condition: succeeded()
+
+  - task: PowerShell@2
+    displayName: 'Build Module'
+    name: "BuildTask"
+    inputs:
+      filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
+      arguments: ' -Task Build -BuildVersion "0.0"'
+      pwsh: true
+      failOnStderr: true
+    condition: succeeded()

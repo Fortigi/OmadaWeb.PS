@@ -84,7 +84,11 @@ function Invoke-OmadaRequest {
             }
 
             $BoundParams.Add("WebSession", $Session)
-            $BoundParams.Add("UseBasicParsing", $true)
+
+            # UseBasicParsing is deprecated since PowerShell Core 6, there it is only set when using PowerShell 5 (https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest?view=powershell-7.4#-usebasicparsing)
+            if ($PSVersionTable.PSVersion.Major -lt 6) {
+                $Arguments.Add("UseBasicParsing", $true)
+            }
 
             "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json) | Write-Verbose
             try {

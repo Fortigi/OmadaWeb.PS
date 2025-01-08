@@ -5,13 +5,13 @@ Properties {
     $ParentPath = (Get-Item -Path $PSScriptRoot -Verbose:$false).Parent.FullName
     $ModuleSource = Join-Path -Path $ParentPath -ChildPath 'OmadaWeb.PS'
     $TestSource = Join-Path -Path $ParentPath -ChildPath 'tests'
-    $OutputDir = Join-Path -Path $ParentPath -ChildPath 'output\OmadaWeb.PS'
+    $OutputDir = Join-Path -Path $ParentPath -ChildPath 'buildoutput\OmadaWeb.PS'
     New-Item -Path $OutputDir -ItemType Directory -Force | Out-Null
 }
 
 
-Task default -depends Analyze, Test, Build, ImportModule
-Task DeployOnly -depends Build, Deploy
+Task default -Depends Analyze, Test, Build, ImportModule
+Task DeployOnly -Depends Build, Deploy
 
 Task Analyze {
 
@@ -27,10 +27,10 @@ Task Analyze {
     }
 }
 
-Task Test -depends Analyze {
+Task Test -Depends Analyze {
 }
 
-Task Build -depends Test {
+Task Build -Depends Test {
 
     $FormattingSettings = @{
         IncludeRules = @("PSPlaceOpenBrace", "PSUseConsistentIndentation", "PsAvoidUsingCmdletAliases", "PSUseConsistentWhitespace", "PSAlignAssignmentStatement", "PSPlaceCloseBrace")
@@ -125,17 +125,26 @@ Task Build -depends Test {
 
     $SerializedContent = $PrivateData.GetEnumerator() | ForEach-Object {
         if ($_ -is [System.Collections.DictionaryEntry]) {
+            $String = "$($_.Key) = @{"
             if ($_.Value -is [System.Collections.Hashtable]) {
                 # Serialize nested hashtables into a string
-                "$($_.Key) = @{`n$($_.Value.GetEnumerator() | ForEach-Object {`"$($_.Key) = `'$($_.Value)`'`n"})"
-            } else {
-                "$($_.Key) = `'$($_.Value)`'"
+                $_.Value.GetEnumerator() | ForEach-Object {
+                    $String += "`n"
+                    if (($_.Value | Measure-Object).Count -gt 1) {
+                        $String += "{0} = @({1})" -f $_.Key, (($_.Value | ForEach-Object {"`"{0}`"" -f $_}) -join ",")
+                    }
+                    else {
+                        $String += "{0} = `"{1}`"" -f $($_.Key) , $($_.Value)
+                    }
+                }
+                return $String
             }
         }
     }
+
     $ModulePsd1Path = (Join-Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName))
     New-ModuleManifest -Path $ModulePsd1Path @ModulePsd1
-    (Get-Content -Path $ModulePsd1Path) -replace 'PSData = @{',$SerializedContent   | Set-Content -Path $ModulePsd1Path -Encoding UTF8 -Force
+    (Get-Content -Path $ModulePsd1Path) -replace 'PSData = @{', $SerializedContent | Set-Content -Path $ModulePsd1Path -Encoding UTF8 -Force
 
     #    New-ModuleManifest @Modulepsd1
     "Module psd1 output file: {0}" -f $($ModulePsd1Path) | Write-Host
@@ -206,7 +215,7 @@ Task Build -depends Test {
 
 }
 
-Task ImportModule -depends Build {
+Task ImportModule -Depends Build {
     $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
     if ($Test) {
         "Module loaded successfully" | Write-Verbose
