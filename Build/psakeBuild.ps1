@@ -118,6 +118,7 @@ Task Build -Depends Test {
     }
 
     $ModulePsd1.ModuleVersion = $NewVersion
+    $ModulePsd1.Copyright = $ModulePsd1.Copyright -f $Date.ToString("yyyy")
 
     #Work-around for the bug in New-ModuleManifest that breaks the PrivateData key (Source: https://github.com/PowerShell/PowerShell/issues/5922)
     $PrivateData = $ModulePsd1.PrivateData | ConvertTo-Json | ConvertFrom-Json -AsHashtable
@@ -227,6 +228,8 @@ Task ImportModule -Depends Build {
 
     Test-ModuleManifest -Path "$OutputDir\$ModuleName.psd1"
 
+    Set-StrictMode -Version Latest
+
     $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
     if ($Test) {
         "Module loaded successfully" | Write-Verbose
@@ -235,4 +238,5 @@ Task ImportModule -Depends Build {
     else {
         "Module failed to load" | Write-Error -ErrorAction Stop
     }
+    Set-StrictMode -Off
 }
