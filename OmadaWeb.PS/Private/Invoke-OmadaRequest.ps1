@@ -129,7 +129,7 @@ function Invoke-OmadaRequest {
                     $BoundParams.UserAgent = $EdgeDriverData[1]
 
                     try {
-                        $Parameters = Set-RequestParameter
+                        $Parameters = Set-RequestParameter -InvokeOmadaRequest
                         return (Invoke-OmadaRequest @Parameters)
                     }
                     catch {
