@@ -6,6 +6,7 @@
 
     if ($InvokeOmadaRequest) {
         $InvokeOmadaRequestFunction = Get-Command -Name Invoke-OmadaRequest
+        $ExcludedParameters = @()
         $BoundParams.Keys | ForEach-Object {
             if ($_ -notin $InvokeOmadaRequestFunction.Parameters.Keys) {
                 $ExcludedParameters += $_
