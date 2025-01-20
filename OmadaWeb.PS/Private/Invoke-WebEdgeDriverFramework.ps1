@@ -1,10 +1,12 @@
 function Invoke-WebEdgeDriverFramework {
     [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'CheckJsonLibrary', Justification = 'The CheckJsonLibrary variable is used in a function called from here')]
     PARAM()
+    
+
     $InstallOrUpdateEdgeDriver = $false
-    $InstalledEdgeVersion = Get-Item $Script:InstalledEdgeFilePath
-    if ($Null -ne $InstalledEdgeVersion) {
-        $InstalledEdgeVersionMajor = "{0:d5}" -f [int]($($InstalledEdgeVersion.VersionInfo.ProductVersion).Substring(0, $($InstalledEdgeVersion.VersionInfo.ProductVersion).IndexOf(".")))
+    $InstalledEdgeFileInfo = Get-Item $Script:InstalledEdgeFilePath
+    if ($Null -ne $InstalledEdgeFileInfo) {
+        $InstalledEdgeVersion = [System.Version]$InstalledEdgeFileInfo.VersionInfo.ProductVersion
     }
     else {
         "Cannot find Edge at '{0}'. Is it installed?" -f $Script:InstalledEdgeFilePath | Write-Error -ErrorAction "Stop"
@@ -15,9 +17,9 @@ function Invoke-WebEdgeDriverFramework {
     }
     elseif (Test-Path $Script:EdgeDriverPath -PathType Leaf) {
         $MsEdgeDriverFileInfo = Get-Item $Script:EdgeDriverPath
-        $MsEdgeDriverFileVersionMajor = "{0:d5}" -f [int]($($MsEdgeDriverFileInfo.VersionInfo.ProductVersion).Substring(0, $($MsEdgeDriverFileInfo.VersionInfo.ProductVersion).IndexOf(".")))
-        if ($InstalledEdgeVersionMajor -ne $MsEdgeDriverFileVersionMajor) {
-            "msedgedriver.exe must be updated, downloading correct version from Microsoft" | Write-Host
+        $MsEdgeDriverVersion = [System.Version]$MsEdgeDriverFileInfo.VersionInfo.ProductVersion
+        if ($InstalledEdgeVersion.Major -ne $MsEdgeDriverVersion.Major) {
+            "msedgedriver.exe version {0} does not match the installed Edge browser version {1}, downloading correct version from Microsoft" -f $InstalledEdgeVersion.Major,$MsEdgeDriverVersion.Major | Write-Host
             $InstallOrUpdateEdgeDriver = $true
         }
     }

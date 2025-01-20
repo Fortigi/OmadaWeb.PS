@@ -10,8 +10,8 @@ Properties {
 }
 
 
-Task default -Depends Analyze, Test, Build, ImportModule
-Task DeployOnly -Depends Build, Deploy
+Task default -depends Analyze, Test, Build, ImportModule
+Task DeployOnly -depends Build, Deploy
 
 Task Analyze {
 
@@ -27,10 +27,10 @@ Task Analyze {
     }
 }
 
-Task Test -Depends Analyze {
+Task Test -depends Analyze {
 }
 
-Task Build -Depends Test {
+Task Build -depends Test {
 
     $FormattingSettings = @{
         IncludeRules = @("PSPlaceOpenBrace", "PSUseConsistentIndentation", "PsAvoidUsingCmdletAliases", "PSUseConsistentWhitespace", "PSAlignAssignmentStatement", "PSPlaceCloseBrace")
@@ -104,20 +104,21 @@ Task Build -Depends Test {
     }
 
     if (![String]::IsNullOrWhiteSpace($Version)) {
-        [version]$NewVersion = "{0}" -f $Version
+        [System.Version]$NewVersion = "{0}" -f $Version
     }
     else {
-        [version]$NewVersion = $Date.ToString('yyyy.MM.dd.001')
+        [System.Version]$NewVersion = $Date.ToString('yyyy.MM.dd.001')
         if ($CurrentModulePsd1) {
-            [version]$CurrentModuleVersion = $CurrentModulePsd1.ModuleVersion
+            [System.Version]$CurrentModuleVersion = $CurrentModulePsd1.ModuleVersion
             if ($CurrentModuleVersion -ge $NewVersion) {
-                $NewVersion = [version]$CurrentModuleVersion
+                $NewVersion = [System.Version]$CurrentModuleVersion
                 $NewVersion = New-Object System.Version($NewVersion.Major, $NewVersion.Minor, $NewVersion.Build, ($NewVersion.Revision + 1))
             }
         }
     }
 
     $ModulePsd1.ModuleVersion = $NewVersion
+    $ModulePsd1.Copyright = $ModulePsd1.Copyright -f $Date.ToString("yyyy")
 
     #Work-around for the bug in New-ModuleManifest that breaks the PrivateData key (Source: https://github.com/PowerShell/PowerShell/issues/5922)
     $PrivateData = $ModulePsd1.PrivateData | ConvertTo-Json | ConvertFrom-Json -AsHashtable
@@ -131,7 +132,7 @@ Task Build -Depends Test {
                 $_.Value.GetEnumerator() | ForEach-Object {
                     $String += "`n"
                     if (($_.Value | Measure-Object).Count -gt 1) {
-                        $String += "{0} = @({1})" -f $_.Key, (($_.Value | ForEach-Object {"`"{0}`"" -f $_}) -join ",")
+                        $String += "{0} = @({1})" -f $_.Key, (($_.Value | ForEach-Object { "`"{0}`"" -f $_ }) -join ",")
                     }
                     else {
                         $String += "{0} = `"{1}`"" -f $($_.Key) , $($_.Value)
@@ -211,21 +212,23 @@ Task Build -Depends Test {
     $Content = "Export-ModuleMember -Function @(""{0}"") -Alias *`n`n" -f ($PublicModules -join '", "')
     $ModuleContent += $Content -join "`n`n"
 
+    $ModuleContent = $ModuleContent -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings
+    if (($ModuleContent | Select-String -SimpleMatch "Wait-Debugger" -AllMatches | Measure-Object).Count -gt 0) {
+        "Use of 'Wait-Debugger' command found in script:{0}. This must be removed before building the module" -f $_.Name | Write-Error -ErrorAction Stop
+    }
+    "Module psm1 output file: {0}" -f $OutputDirFile | Write-Host
+    $ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
 
-
-
-$ModuleContent = $ModuleContent -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings
-"Module psm1 output file: {0}" -f $OutputDirFile | Write-Host
-$ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
-
-"Copy nuspec file" | Write-Host
-Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force
+    "Copy nuspec file" | Write-Host
+    Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force
 
 }
 
-Task ImportModule -Depends Build {
+Task ImportModule -depends Build {
 
     Test-ModuleManifest -Path "$OutputDir\$ModuleName.psd1"
+
+    Set-StrictMode -Version Latest
 
     $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
     if ($Test) {
@@ -235,4 +238,5 @@ Task ImportModule -Depends Build {
     else {
         "Module failed to load" | Write-Error -ErrorAction Stop
     }
+    Set-StrictMode -Off
 }
