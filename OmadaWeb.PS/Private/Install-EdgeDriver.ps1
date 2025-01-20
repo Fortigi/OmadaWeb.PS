@@ -3,10 +3,18 @@ function Install-EdgeDriver {
     $EdgeDriverFileName = "msedgedriver.exe"
 
     try {
+        $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem
+        switch ($ComputerInfo.SystemType) {
+            "x64-based PC" { $Arch = "win64" }
+            "x86-based PC" { $Arch = "win32" }
+            default { $Arch = "win64" }
+        }
+
         #Download correct version
         $EdgeWebdriverDownloadBaseUrl = "https://msedgedriver.azureedge.net/"
         $EdgeWebdriverFileName = "edgedriver_{0}.zip" -f $Arch
         #Example: https://msedgedriver.azureedge.net/128.0.2739.33/edgedriver_win64.zip
+        Wait-Debugger
         $EdgeWebdriverDownloadUrl = "{0}{1}/{2}" -f $EdgeWebdriverDownloadBaseUrl, $($InstalledEdgeFileInfo.VersionInfo.ProductVersion), $EdgeWebdriverFileName
         "Download URL: {0}" -f $EdgeWebdriverDownloadUrl | Write-Verbose
 
@@ -14,13 +22,6 @@ function Install-EdgeDriver {
 
         $TempFile = [System.IO.Path]::GetTempFileName()
         "Invoke-WebEdgeDriverFramework: {0}" -f $$ | Write-Verbose
-
-        $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem
-        switch ($ComputerInfo.SystemType) {
-            "x64-based PC" { $Arch = "win64" }
-            "x86-based PC" { $Arch = "win32" }
-            default { $Arch = "win64" }
-        }
 
         $TempFile = Invoke-DownloadFile -DownloadUrl $EdgeWebdriverDownloadUrl
 
@@ -49,7 +50,7 @@ function Install-EdgeDriver {
     }
 
     if (Test-Path $TempZipPath -PathType Container) {
-        Remove-Item $($TempZipPath.FullName) -Force -Confirm:$false
+        Remove-Item $($TempZipPath.FullName) -Force -Confirm:$false -Recurse
     }
 
     return $false
