@@ -19,7 +19,7 @@ try {
     "ModuleSourceFolder {0}" -f $ModuleTargetFolder | Write-Verbose
 
     $ModulePsd1 = Import-PowerShellDataFile (Join-Path -Path $ModuleSourceFolder -ChildPath ("{0}.psd1" -f $ModuleName))
-    [version]$Version = $ModulePsd1.ModuleVersion
+    [System.Version]$Version = $ModulePsd1.ModuleVersion
 
     "Scope: {0}" -f $Scope | Write-Verbose
     switch ($Scope) {

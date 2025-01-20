@@ -87,7 +87,7 @@ function Get-NuGetPackage {
                 $ValidPackages = @()
                 $Package.items.'@id' | ForEach-Object {
                     $Version = $VersionRegex.Match($_)
-                    if ($Version.Success -and [version]$Version.Groups[1].Value -ge $MinimumVersion -and [version]$Version.Groups[1].Value -le $MaximumVersion) {
+                    if ($Version.Success -and [System.Version]$Version.Groups[1].Value -ge $MinimumVersion -and [System.Version]$Version.Groups[1].Value -le $MaximumVersion) {
                         "Valid package found!" | Write-Verbose
                         $ValidPackages += $_
                     }

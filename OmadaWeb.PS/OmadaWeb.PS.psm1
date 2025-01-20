@@ -122,10 +122,10 @@ try {
         if (-not $GalleryVersion) {
         }
         else {
-            if ([version]$InstalledModule.Version -lt [version]$GalleryVersion) {
+            if ([System.Version]$InstalledModule.Version -lt [System.Version]$GalleryVersion) {
                 "The installed version {0} of '{1}' is outdated. Latest version: {2}. Execute Update-Module {1} to update to the latest version!" -f ($($InstalledModule.Version)), $ModuleName, $GalleryVersion | Write-Warning
             }
-            elseif ([version]$InstalledModule.Version -eq [version]$GalleryVersion) {
+            elseif ([System.Version]$InstalledModule.Version -eq [System.Version]$GalleryVersion) {
                 "The installed version {0} of '{1}' is up-to-date." -f ($($InstalledModule.Version)) , $ModuleName | Write-Verbose
             }
             else {
