@@ -1,4 +1,5 @@
 function Get-GitHubRelease {
+    [CmdletBinding()]
     PARAM(
         $Org = "JamesNK",
         $Repo = "Newtonsoft.Json",

@@ -1,7 +1,7 @@
 function Invoke-WebEdgeDriverFramework {
     [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'CheckJsonLibrary', Justification = 'The CheckJsonLibrary variable is used in a function called from here')]
+    [CmdletBinding()]
     PARAM()
-    
 
     $InstallOrUpdateEdgeDriver = $false
     $InstalledEdgeFileInfo = Get-Item $Script:InstalledEdgeFilePath

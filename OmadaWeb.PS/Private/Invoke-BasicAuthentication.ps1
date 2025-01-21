@@ -1,4 +1,7 @@
 ﻿function Invoke-BasicAuthentication {
+    [CmdletBinding()]
+    PARAM()
+    
     "{0} - Set Basic authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
 
     if ($BoundParams.keys -notcontains "Credential") {

@@ -1,4 +1,5 @@
 function Invoke-DownloadFile {
+    [CmdletBinding()]
     PARAM(
         [parameter(Mandatory = $true)]
         [string]$DownloadUrl,
@@ -22,6 +23,6 @@ function Invoke-DownloadFile {
         return $OutputFile
     }
     catch {
-        Throw $_.Exception.Message
+        Throw
     }
 }

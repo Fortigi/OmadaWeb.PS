@@ -14,7 +14,7 @@
         }
     }
     else {
-        $ExcludedParameters = @("OmadaWebAuthCookieExportLocation", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile")
+        $ExcludedParameters = @("SkipCookieCache","CookiePath", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile")
     }
 
     $Parameters = @{}

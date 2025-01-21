@@ -1,7 +1,7 @@
 ﻿Function New-DynamicParam {
-
     [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Position', Justification = 'It is left there to be used in a later release, it is an private function so no issue for the end user.')]
-    param(
+    [CmdletBinding()]
+    PARAM(
         [string]$Name,
         [System.Object]$Type = [string], # Accept Object to handle deserialized types
         [string[]]$Alias = @(),

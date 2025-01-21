@@ -1,5 +1,6 @@
 ﻿function Get-InstalledModuleInfo {
-    param (
+    [CmdletBinding()]
+    PARAM(
         [string]$ModuleName
     )
 

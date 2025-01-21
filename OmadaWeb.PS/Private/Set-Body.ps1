@@ -1,17 +1,18 @@
 function Set-Body {
-
+    [CmdletBinding()]
+    PARAM()
+    
     "{0} - {1} - Add Body" -f $MyInvocation.MyCommand, $BoundParams.Method | Write-Verbose
     if ($null -eq $BoundParams.Body) {
         "{0} - Provided -Body is empty this is mandatory for a {1} command" -f $MyInvocation.MyCommand , $BoundParams.Method | Write-Error -ErrorAction "Stop"
     }
+
     $BoundParams.Headers.Add("Content-Type", "application/json")
-    if ($BoundParams.Body -is [hashtable]) {
+    if ($BoundParams.Body.GetType().FullName -in @("System.Collections.Hashtable", "System.Collections.Specialized.OrderedDictionary", "System.Management.Automation.PSCustomObject")) {
+        "{0} - Provided -Body data type is {1}, converting it to json" -f $MyInvocation.MyCommand, $BoundParams.Body.GetType().FullName | Write-Verbose
         $BoundParams.Body = $BoundParams.Body | ConvertTo-Json
     }
-    if ($BoundParams.Body -isnot [hashtable] -and $BoundParams.Body -isnot [string]) {
-        "{0} - Content parameter should be a hashtable to string!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+    else {
+        "{0} - Provided -Body will be processed directly without converting it." -f $MyInvocation.MyCommand | Write-Verbose
     }
-    $BoundParams.Body = $BoundParams.Body
-    "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json) | Write-Verbose
-
 }

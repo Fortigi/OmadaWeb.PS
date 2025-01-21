@@ -70,9 +70,9 @@ try {
 catch {
     if ($_.Exception -like "*denied*" -and $Scope -ne "CurrentUser") {
         "Access denied exception occurred,.Running as administrator? Exception:" | Write-Host -ForegroundColor Red
-        Throw $_
+        Throw
     }
     else {
-        Throw $_
+        Throw
     }
 }

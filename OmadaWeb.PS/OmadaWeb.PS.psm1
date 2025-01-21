@@ -139,3 +139,4 @@ catch {}
 
 $Script:EdgeProfiles = Get-EdgeProfile
 $Script:LoginRetryCount = 0
+$Script:LoginCount = 0

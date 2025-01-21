@@ -1,4 +1,6 @@
 function Install-NewtonSoftJson {
+    [CmdletBinding()]
+    PARAM()
 
     $DllFileName = "Newtonsoft.Json.dll"
     if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {
@@ -19,10 +21,10 @@ function Install-NewtonSoftJson {
             return $false
         }
         else {
-            Throw $_
+            Throw
         }
     }
-    
+
     "Installed '{0}' version {1}" -f $DllFileName, (Get-Item (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName)).VersionInfo.ProductVersion | Write-Host
     Remove-Item $($TempZipPath.FullName) -Force -Confirm:$false -Recurse
 

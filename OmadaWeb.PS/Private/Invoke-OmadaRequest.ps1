@@ -43,11 +43,27 @@ function Invoke-OmadaRequest {
                 $BoundParams.Add("AuthenticationType", "Browser")
             }
 
-            if ($BoundParams.Keys -contains "OmadaWebAuthCookieFile") {
-                $Script:OmadaWebAuthCookie = (Import-Clixml $BoundParams.OmadaWebAuthCookieFile).OmadaWebAuthCookie
+            if ($BoundParams.Keys -contains "CacheOmadaCookie") {
+
             }
-            if ("OmadaWebAuthCookieFile" -in $BoundParams.Keys) {
-                $BoundParams.Remove("OmadaWebAuthCookieFile") | Out-Null
+
+            if ($null -eq $Script:OmadaWebAuthCookie) {
+                if ($BoundParams.Keys -contains "CookiePath") {
+                    $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath ("{0}.cookie" -f $Uri.Authority))
+                    "{0} - Loading custom cookie: {1}" -f $MyInvocation.MyCommand, $CookiePath | Write-Verbose
+                    $Script:OmadaWebAuthCookie = (Import-Clixml $CookiePath).OmadaWebAuthCookie
+                    "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($Script:OmadaWebAuthCookie | ConvertTo-Json) | Write-Verbose
+                }
+                elseif ($BoundParams.Keys -notcontains "SkipCookieCache") {
+                    $Script:CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($($Uri.Authority))))).Guid -replace "-", "")
+                    if ($BoundParams.Keys -notcontains "ForceAuthentication" -and (Test-Path $Script:CookieCacheFilePath -PathType Leaf)) {
+                        "{0} - Loading cached encrypted cookie: {1}" -f $MyInvocation.MyCommand, $Script:CookieCacheFilePath | Write-Verbose
+                        $Script:OmadaWebAuthCookie = ([System.Management.Automation.PSSerializer]::Deserialize([System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                                    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml $Script:CookieCacheFilePath))
+                                ))).OmadaWebAuthCookie
+                    }
+                    "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($Script:OmadaWebAuthCookie | ConvertTo-Json) | Write-Verbose
+                }
             }
 
             "{0} - Authentication type: {1}" -f $MyInvocation.MyCommand, $($BoundParams.AuthenticationType) | Write-Verbose
@@ -107,11 +123,15 @@ function Invoke-OmadaRequest {
                             $BoundParams.Headers.Add("Content-Type", "application/json")
                         }
                         $Parameters = Set-RequestParameter
-                        return (Invoke-RestMethod @Parameters)
+                        $Return = (Invoke-RestMethod @Parameters)
+                        $Script:LoginCount++
+                        return $Return
                     }
                     "Invoke-WebRequest" {
                         $Parameters = Set-RequestParameter
-                        return (Invoke-WebRequest @Parameters)
+                        $Return = (Invoke-WebRequest @Parameters)
+                        $Script:LoginCount++
+                        return $Return
                     }
                     default {
                         #Ignored
@@ -122,7 +142,12 @@ function Invoke-OmadaRequest {
             catch {
                 if (($BoundParams.AuthenticationType) -eq "Browser" -and $_.Exception.Response.StatusCode -eq 401) {
 
-                    "Re-authentication needed!" | Write-Host
+                    if ($Script:LoginCount -le 1) {
+                        "Authentication needed!" | Write-Host
+                    }
+                    else {
+                        "Re-authentication failed!" | Write-Host
+                    }
                     "{0} - Re-Authentication - Error message:" -f $MyInvocation.MyCommand, ($_ | ConvertTo-Json) | Write-Verbose
                     $EdgeDriverData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                     $Script:OmadaWebAuthCookie = $EdgeDriverData[0]
@@ -133,16 +158,16 @@ function Invoke-OmadaRequest {
                         return (Invoke-OmadaRequest @Parameters)
                     }
                     catch {
-                        Throw $_
+                        Throw
                     }
                 }
                 else {
-                    Throw $_
+                    Throw
                 }
             }
         }
         catch {
-            Throw $_
+            Throw
         }
     }
 }

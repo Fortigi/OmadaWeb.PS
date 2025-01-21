@@ -41,25 +41,25 @@ When using -AuthenticationType "Browser", on the first authentication attempt, t
 ### Invoke-OmadaRestMethod
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-OmadaWebAuthCookieFile <string>]	[-OmadaWebAuthCookieExportLocation <string>] 	[-ForceAuthentication <string>]	[-EdgeProfile <string>]	[-InPrivate <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-OmadaWebAuthCookieFile <string>]	[-OmadaWebAuthCookieExportLocation <string>] 	[-ForceAuthentication <string>]	[-EdgeProfile <string>]	[-InPrivate <string>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-OmadaWebAuthCookieFile <string>]	[-OmadaWebAuthCookieExportLocation <string>] 	[-ForceAuthentication <string>]	[-EdgeProfile <string>]	[-InPrivate <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-OmadaWebAuthCookieFile <string>]	[-OmadaWebAuthCookieExportLocation <string>] 	[-ForceAuthentication <string>]	[-EdgeProfile <string>]	[-InPrivate <string>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ## EXAMPLES
@@ -126,11 +126,11 @@ Use the specified Edge profile for the authentication request. The acceptable va
         Accept wildcard characters: false
 ```
 
-### -ForceAuthentication <string>
+### -ForceAuthentication <switch>
 Force authentication to Omada even when the cookie is still valid.
 
 ```yaml
-        Type: System.Switch
+        Type: System.Management.Automation.SwitchParameter
         Required: false
         Position: Named
         Accept pipeline input: false
@@ -140,11 +140,11 @@ Force authentication to Omada even when the cookie is still valid.
         Accept wildcard characters: false
 ```
 
-### -InPrivate <string>
+### -InPrivate <switch>
 Use InPrivate mode for the authentication request.
 
 ```yaml
-        Type: System.Switch
+        Type: System.Management.Automation.SwitchParameter
         Required: false
         Position: Named
         Accept pipeline input: false
@@ -154,11 +154,11 @@ Use InPrivate mode for the authentication request.
         Accept wildcard characters: false
 ```
 
-### -OmadaWebAuthCookieExportLocation <string>
-Export the Omada authentication cookie to as a CliXml file.
+### -SkipCookieCache <boolean>
+Do not cache the encrypted Omada authentication cookie. It wil also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationMethod Browser.
 
 ```yaml
-        Type: System.String
+        Type: System.Boolean
         Required: false
         Position: Named
         Accept pipeline input: false
@@ -168,8 +168,11 @@ Export the Omada authentication cookie to as a CliXml file.
         Accept wildcard characters: false
 ```
 
-### -OmadaWebAuthCookieFile <string>
-Use a previously exported Omada authentication cookie using -OmadaWebAuthCookieExportLocation. This must be to the cookie file.
+### -CookiePath <string>
+Attempts to load a stored Omada authentication cookie from this path. This file will be updated re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached. This parameter only applies in combination with parameter -AuthenticationMethod Browser.
+
+> [!IMPORTANT]
+> Be aware that an unencrypted version of the session cookie is stored on the file system. Make sure it is stored at a secure location so it cannot be accessed by unauthorized users.
 
 ```yaml
         Type: System.String

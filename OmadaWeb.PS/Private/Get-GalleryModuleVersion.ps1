@@ -1,5 +1,6 @@
 ﻿function Get-GalleryModuleVersion {
-    param (
+    [CmdletBinding()]
+    PARAM(
         [string]$ModuleName
     )
 
