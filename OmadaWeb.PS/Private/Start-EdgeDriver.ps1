@@ -1,4 +1,5 @@
 function Start-EdgeDriver {
+    [CmdletBinding()]
     PARAM(
         [string]$EdgeProfile,
         [switch]$InPrivate
@@ -101,7 +102,7 @@ function Start-EdgeDriver {
                "It seems that Edge profile '{0}' is currently running.  It is not possible use this profile when it is active. To use this profile, please close that browser session. You can also choose to omit -EdgeProfile parameter." -f $EdgeProfile | Write-Error -ErrorAction "Stop" -ErrorId "EdgeProfileActive"
         }
         else {
-            Throw $_
+            Throw
         }
         Close-EdgeDriver
         break

@@ -1,4 +1,5 @@
 function Invoke-DataFromWebDriver {
+    [CmdletBinding()]
     PARAM(
         [string]$EdgeProfile,
         [switch]$InPrivate

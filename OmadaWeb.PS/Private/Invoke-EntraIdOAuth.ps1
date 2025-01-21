@@ -1,4 +1,7 @@
 ﻿function Invoke-EntraIdOAuth {
+    [CmdletBinding()]
+    PARAM()
+    
     "{0} - Request bearer token" -f $MyInvocation.MyCommand, $_ | Write-Verbose
     if ($null -eq $BoundParams.Credential) {
         "{0} - Credentials not provided! This mandatory for OAuth authentication!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"

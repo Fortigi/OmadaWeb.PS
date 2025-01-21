@@ -1,2 +1,3 @@
 OmadaWeb.PS/Bin/**
 buildoutput/**
+*.cookie

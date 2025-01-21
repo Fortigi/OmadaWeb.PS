@@ -1,4 +1,6 @@
 function Start-EdgeDriverLogin {
+    [CmdletBinding()]
+    PARAM()
 
     if ($null -eq $EdgeDriver) {
         "Browser authentication failed to start!" | Write-Error -ErrorAction "Stop"

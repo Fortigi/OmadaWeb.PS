@@ -1,4 +1,6 @@
 function Get-EdgeProfile {
+    [CmdletBinding()]
+    PARAM()
 
     $UserDataDir = Join-Path $Env:LOCALAPPDATA -ChildPath "Microsoft\Edge\User Data"
 

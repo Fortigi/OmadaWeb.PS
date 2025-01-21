@@ -1,6 +1,8 @@
 function Install-Selenium {
     [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'CheckJsonLibrary', Justification = 'The CheckJsonLibrary variable is used in a function called from here')]
+    [CmdletBinding()]
     PARAM()
+    
     $DllFileName = "WebDriver.dll"
     if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {
         "Failed to update '{0}'. Retry restarting this PowerShell session or manually remove the contents of folder '{1}'. Reuse current version for now. " -f $DllFileName, $WebDriverBasePath | Write-Warning
@@ -39,7 +41,7 @@ function Install-Selenium {
                 "Failed to update 'Webdriver.dll'. Retry restarting this PowerShell session or manually remove the contents of folder '{0}'. Reuse current version for now. Error:`r`n {1}" -f $WebDriverBasePath, $_.Exception | Write-Warning
             }
             else {
-                Throw $_
+                Throw
             }
         }
 
@@ -55,7 +57,7 @@ function Install-Selenium {
                 return $false
             }
             else {
-                Throw $_
+                Throw
             }
         }
 
