@@ -62,7 +62,7 @@
 
         try {
             $CookieObject | Export-Clixml $CookiePath -Force
-            "Find the exported cookie file: {0}" -f $CookiePath | Write-Host
+            "Cookie file exported to: {0}" -f $CookiePath | Write-Verbose
         }
         catch [System.UnauthorizedAccessException] {
             "Unable to export the cookie file due insufficient permissions in folder {0}" -f $($BoundParams.CookiePath) | Write-Warning
