@@ -22,7 +22,6 @@ function Invoke-DataFromWebDriver {
         $PhoneLinkActive = $true
     }
     do {
-
         if (-not $LoginMessageShown) {
             Write-Host "`r`nBrowser opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
             if ($Script:Credential -and ![string]::IsNullOrWhiteSpace($Script:Credential.UserName)) {
@@ -150,9 +149,16 @@ function Invoke-DataFromWebDriver {
             }
         }
 
-        if ($EdgeDriver.url -notlike "*$($Script:OmadaWebBaseUrl)/home*") {
+        $EdgeDriverHost = "-1"
+        $OmadaWebBaseHost = "-2"
+        $EdgeDriverAbsolutePath = $null
+        if ($null -ne $EdgeDriver.url) {
+            $EdgeDriverHost = [System.Uri]::new($EdgeDriver.url).Host
+            $EdgeDriverAbsolutePath = [System.Uri]::new($EdgeDriver.url).AbsolutePath
+            $OmadaWebBaseHost = [System.Uri]::new($Script:OmadaWebBaseUrl).Host
+        }
 
-
+        if ($OmadaWebBaseHost -ne $EdgeDriverHost -and $EdgeDriverAbsolutePath -ne "/home" ) {
             if ($null -eq $EdgeDriver -or $null -eq $EdgeDriver.WindowHandles) {
                 if ($Script:LoginRetryCount -ge 3) {
                     Close-EdgeDriver
