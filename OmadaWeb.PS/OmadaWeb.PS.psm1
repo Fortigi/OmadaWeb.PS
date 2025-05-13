@@ -76,11 +76,11 @@ if ($PSBoundParameters["InstalledEdgeBasePath"] -and -not (Test-Path $Script:Ins
 #OmadaWebAuthCookie
 if ($null -ne $PsBoundParameters["OmadaWebAuthCookie"]) {
     "Using provided OmadaWebAuthCookie when loading module" | Write-Verbose
-    New-Variable OmadaWebAuthCookie -Value $PsBoundParameters["OmadaWebAuthCookie"] -Force -Scope Global | Out-Null
+    New-Variable OmadaWebAuthCookie -Value $PsBoundParameters["OmadaWebAuthCookie"] -Force -Scope Script | Out-Null
 }
 elseif ([string]::IsNullOrEmpty($Script:OmadaWebAuthCookie)) {
     "Initialize OmadaWebAuthCookie" | Write-Verbose
-    New-Variable OmadaWebAuthCookie -Value $null -Force -Scope Global | Out-Null
+    New-Variable OmadaWebAuthCookie -Value $null -Force -Scope Script | Out-Null
 }
 
 if ($UpdateDependencies) {
