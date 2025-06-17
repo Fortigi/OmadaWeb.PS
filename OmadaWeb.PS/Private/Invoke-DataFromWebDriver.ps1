@@ -162,7 +162,7 @@ function Invoke-DataFromWebDriver {
             if ($null -eq $EdgeDriver -or $null -eq $EdgeDriver.WindowHandles) {
                 if ($Script:LoginRetryCount -ge 3) {
                     Close-EdgeDriver
-                    "`nLogin retry count exceeded! Please check your credentials as no cookie could be retrieved!" | Write-Error -ErrorAction "Stop"
+                    "`nLogin retry count exceeded! Please check your credentials as no cookie could be retrieved!" | Write-Error -ErrorAction "Stop" -Category AuthenticationError
                 }
                 else {
                     "`n{0} - Login retry count: {1}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount | Write-Verbose
@@ -181,7 +181,7 @@ function Invoke-DataFromWebDriver {
             $AuthCookie = $EdgeDriver.Manage().Cookies.AllCookies | Where-Object { $_.Name -eq 'oisauthtoken' }
         }
     }
-    until($null -ne $AuthCookie)
+    until($null -ne $AuthCookie -or $Script:LoginRetryCount -gt 3)
     "{0} (Line {1}): {2}" -f $MyInvocation.MyCommand, $MyInvocation.ScriptLineNumber, $$ | Write-Verbose
 
     #$CredentialsEntered = $false
