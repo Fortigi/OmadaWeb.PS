@@ -7,7 +7,6 @@ function Set-Body {
         "{0} - Provided -Body is empty this is mandatory for a {1} command" -f $MyInvocation.MyCommand , $BoundParams.Method | Write-Error -ErrorAction "Stop"
     }
 
-    wait-debugger
     if ("Content-Type" -notin $BoundParams.Headers.Keys) {
         $BoundParams.Headers.Add("Content-Type", "application/json")
     }
