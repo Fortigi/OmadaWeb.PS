@@ -13,9 +13,9 @@ function Install-EdgeDriver {
         }
 
         #Download correct version
-        $EdgeWebdriverDownloadBaseUrl = "https://msedgedriver.azureedge.net/"
+        $EdgeWebdriverDownloadBaseUrl = "https://msedgedriver.microsoft.com/"
         $EdgeWebdriverFileName = "edgedriver_{0}.zip" -f $Arch
-        #Example: https://msedgedriver.azureedge.net/128.0.2739.33/edgedriver_win64.zip
+        #Example: https://msedgedriver.microsoft.com/128.0.2739.33/edgedriver_win64.zip
         $EdgeWebdriverDownloadUrl = "{0}{1}/{2}" -f $EdgeWebdriverDownloadBaseUrl, $($InstalledEdgeFileInfo.VersionInfo.ProductVersion), $EdgeWebdriverFileName
         "Download URL: {0}" -f $EdgeWebdriverDownloadUrl | Write-Verbose
 
