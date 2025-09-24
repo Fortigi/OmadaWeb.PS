@@ -1,8 +1,3 @@
-<#!
-Omada WebView2 Cookie Grabber — Native PowerShell (no C#)
-Fixed: Removed reference to ContextMenus (System.Windows.Forms.ContextMenu conflict). Now uses property assignment safely.
-#>
-
 param(
   [string]$StartUrl = 'https://omada.omada.cloud/',
   [string]$DomainFilter = 'omada.omada.cloud'
@@ -71,48 +66,6 @@ $panel = New-Object System.Windows.Forms.Panel
 $panel.Dock = 'Top'
 $panel.Height = 44
 
-# $lblUrl = New-Object System.Windows.Forms.Label
-# $lblUrl.Text = 'URL:'
-# $lblUrl.AutoSize = $true
-# $lblUrl.Top = 14
-# $lblUrl.Left = 8
-
-# $txtUrl = New-Object System.Windows.Forms.TextBox
-# $txtUrl.Text = $StartUrl
-# $txtUrl.Left = 45
-# $txtUrl.Top = 40
-# $txtUrl.Width = 200
-# $txtUrl.AutoSize = $false
-# $txtUrl.Anchor = 'Top, Left'
-
-# $lblDom = New-Object System.Windows.Forms.Label
-# $lblDom.Text = 'Domain filter:'
-# $lblDom.AutoSize = $true
-# $lblDom.Top = 14
-# $lblDom.Left = 635
-
-# $txtDom = New-Object System.Windows.Forms.TextBox
-# $txtDom.Text = $DomainFilter
-# $txtDom.Left = 720
-# $txtDom.Top = 10
-# $txtDom.Width = 200
-# $txtDom.Anchor = 'Top, Left'
-
-# $btnGo = New-Object System.Windows.Forms.Button
-# $btnGo.Text = 'Go'
-# $btnGo.Left = 925
-# $btnGo.Top = 8
-# $btnGo.Width = 60
-# $btnGo.Anchor = 'Top, Left'
-
-# $btnExport = New-Object System.Windows.Forms.Button
-# $btnExport.Text = 'Export Cookies'
-# $btnExport.Left = 990
-# $btnExport.Top = 8
-# $btnExport.Width = 120
-# $btnExport.Anchor = 'Top, Left'
-
-# $panel.Controls.AddRange([System.Windows.Forms.Control[]] @($lblUrl, $txtUrl, $lblDom, $txtDom, $btnGo, $btnExport))
 
 $wv = New-Object Microsoft.Web.WebView2.WinForms.WebView2
 $wv.Dock = 'Fill'
@@ -139,21 +92,8 @@ function Initialize-WebView2 {
   $Control.add_CoreWebView2InitializationCompleted({
       param($sender, $e)
       if ($e.IsSuccess) {
-        # $Control.CoreWebView2.Settings.IsStatusBarEnabled = $true
-        # $Control.CoreWebView2.Settings.AreDevToolsEnabled = $true
-        # $Control.CoreWebView2.Settings.AreDefaultContextMenusEnabled = $true
-        # [Microsoft.Web.WebView2.Core.CoreWebView2Settings]$Settings = $Control.CoreWebView2.Settings
-        # $Settings.AreDefaultContextMenusEnabled  = $true
-        # $Settings.AreDefaultScriptDialogsEnabled = $true
-        # $Settings.AreDevToolsEnabled             = $FALSE
-        # $Settings.AreHostObjectsAllowed          = $FALSE
-        # $Settings.IsBuiltInErrorPageEnabled      = $FALSE
-        # $Settings.IsScriptEnabled                = $TRUE
-        # $Settings.IsStatusBarEnabled             = $true
-        # $Settings.IsWebMessageEnabled            = $TRUE
-        # $Settings.IsZoomControlEnabled           = $FALSE
 
-        $uriText = $StartUrl #$txtUrl.Text.Trim()
+        $uriText = $StartUrl
         if (-not [Uri]::IsWellFormedUriString($uriText, [UriKind]::Absolute)) { [System.Windows.Forms.MessageBox]::Show('Invalid URL'); return }
         $wv.Source = [Uri]$uriText
         Set-Status "Navigating to $uriText ..."
@@ -185,31 +125,6 @@ function Initialize-WebView2 {
 
 function Set-Status { param([string]$t) $lblStatus.Text = $t }
 
-# $Form.Add_Shown({
-
-# $btnGo.Add_Click({
-#     Initialize-WebView2 -Control $wv -OnReady {
-#       $uriText = $txtUrl.Text.Trim()
-#       if (-not [Uri]::IsWellFormedUriString($uriText, [UriKind]::Absolute)) { [System.Windows.Forms.MessageBox]::Show('Invalid URL'); return }
-#       $wv.Source = [Uri]$uriText
-#       Set-Status "Navigating to $uriText ..."
-#       Write-Host "Timer1" -ForegroundColor Yellow
-
-#       $timer = New-Object System.Windows.Forms.Timer
-#       $timer.Interval = 150
-#       try {
-
-#         $timer.Start()
-#         $timer.Add_Tick({
-#             Set-Status "Add_Tick..."
-#             Invoke-ExecuteScriptAsync
-#           })
-#       }
-#       catch {
-#         Set-Status "Failed..."
-#         $timer.Stop()
-#       }
-#     } })
 
 function Invoke-ExecuteScriptAsync {
   [CmdLetBinding()]
@@ -218,11 +133,6 @@ function Invoke-ExecuteScriptAsync {
     $OnCompletedScriptBlock
   )
   try {
-    #$Script:Tracer::WriteLine(("{0}: Function: {1} - Caller: {2}({3}) - Command: {4}" -f $($Script:RunTimeConfig.ApplicationName), $($MyInvocation.MyCommand.Name), $($MyInvocation.ScriptName), $($MyInvocation.ScriptLineNumber), $MyInvocation.Statement))
-    #if ($null -ne $Script:Webview.Object) {
-    #if ($Script:Webview.Object.IsLoaded) {
-
-    #Write-Host "Getting cookies..." -ForegroundColor Yellow
 
     $Script:Task = $wv.CoreWebView2.CookieManager.GetCookiesAsync($null)
     $Script:Task.GetAwaiter().OnCompleted({
@@ -265,7 +175,7 @@ function Invoke-ExecuteScriptAsync {
             if (!$Exported -and $_.name -eq 'oisauthtoken') {
               Write-Host "Found oisauthtoken" -ForegroundColor Green
 
-              #$exp = $null; if ($_.Expires -gt 0) { $exp = [DateTimeOffset]::FromUnixTimeSeconds([long]$_.Expires).ToString('o') }
+
               $exp = $_.Expires
               [pscustomobject]@{
                 name = $_.Name; value = $_.Value; domain = $_.Domain; path = $_.Path; expires = $exp
@@ -286,103 +196,13 @@ function Invoke-ExecuteScriptAsync {
       }
 
     )
-    #}
-    #else {
-    #Write-LogOutput -Message "WebView2 is not loaded yet." -LogType DEBUG
-    #}
-    #}
-    #else {
-    #    #Write-LogOutput -Message "WebView2 is not initialized." -LogType ERROR
-    #}
+
   }
   catch {
     $_.Exception.Message | Write-LogOutput -LogType ERROR
   }
 }
 
-
-
-# $btnExport.Add_Click({
-#     Initialize-WebView2 -Control $wv -OnReady {
-#       try {
-#         $btnExport.Enabled = $false
-#         Set-Status 'Collecting cookies…'
-#         Wait-Debugger
-
-#         Invoke-ExecuteScriptAsync
-
-
-
-
-
-
-
-#         # Start async cookie retrieval without blocking the UI thread
-#         # $task  = $wv.CoreWebView2.CookieManager.GetCookiesAsync($null)
-#         # $awaiter=$task.GetAwaiter()
-#         # $timer = New-Object System.Windows.Forms.Timer
-#         # $timer.Interval = 150
-#         # $timer.Add_Tick({
-#         # try {
-#         # if ($awaiter.IsFaulted) {
-#         # $timer.Stop()
-#         # $msg = $awaiter.Exception.InnerException?.Message
-#         # if (-not $msg) { $msg = $awaiter.Exception.ToString() }
-#         # [System.Windows.Forms.MessageBox]::Show($msg, 'Cookie retrieval failed')
-#         # Set-Status 'Error'
-#         # $btnExport.Enabled = $true
-#         # } elseif ($awaiter.IsCanceled) {
-#         # $timer.Stop()
-#         # Set-Status 'Canceled'
-#         # $btnExport.Enabled = $true
-#         # } elseif ($awaiter.IsCompleted) {
-#         # $timer.Stop()
-#         # $cookies = $awaiter.Result
-
-#         # $filter = ($txtDom.Text.Trim()).ToLowerInvariant()
-#         # $match = $cookies | Where-Object { ($_.Domain) -and $_.Domain.ToLowerInvariant().EndsWith($filter) }
-#         # if (-not $match -or $match.Count -eq 0) {
-#         # [System.Windows.Forms.MessageBox]::Show("No cookies for '*.$filter' found.")
-#         # Set-Status 'No matching cookies'
-#         # $btnExport.Enabled = $true
-#         # return
-#         # }
-
-#         # $outDir = Split-Path -Parent $PSCommandPath; if (-not $outDir) { $outDir = (Get-Location).Path }
-#         # $cookiesPath = Join-Path $outDir 'cookies.json'
-#         # $headerPath  = Join-Path $outDir 'cookie-header.txt'
-
-#         # $cookieHeader = ($match | ForEach-Object { "{0}={1}" -f $_.Name, $_.Value }) -join '; '
-#         # $json = $match | ForEach-Object {
-#         # $exp = $null; if ($_.Expires -gt 0) { $exp = [DateTimeOffset]::FromUnixTimeSeconds([long]$_.Expires).ToString('o') }
-#         # [pscustomobject]@{
-#         # name=$_.Name; value=$_.Value; domain=$_.Domain; path=$_.Path; expires=$exp;
-#         # httpOnly=$_.IsHttpOnly; secure=$_.IsSecure; sameSite=$_.SameSite.ToString()
-#         # }
-#         # }
-
-#         # $json | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $cookiesPath
-#         # $cookieHeader | Set-Content -Encoding UTF8 $headerPath
-#         # Set-Status "Exported $($match.Count) cookies -> $cookiesPath, $headerPath"
-#         # $btnExport.Enabled = $true
-#         # }
-#         # } catch {
-#         # $timer.Stop()
-#         # [System.Windows.Forms.MessageBox]::Show($_.ToString(), 'Export error')
-#         # Set-Status 'Export failed'
-#         # $btnExport.Enabled = $true
-#         # }
-#         # })
-#         # $timer.Start()
-
-#       }
-#       catch {
-#         [System.Windows.Forms.MessageBox]::Show($_.ToString(), 'Start async error')
-#         $btnExport.Enabled = $true
-#         Set-Status 'Error'
-#       }
-#     }
-#   })
 
 $form.Add_Shown({
     Initialize-WebView2 -Control $wv -OnReady {
