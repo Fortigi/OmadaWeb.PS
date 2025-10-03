@@ -26,7 +26,7 @@ function Find-WebView2Assemblies {
 }
 
 $wv2 = Find-WebView2Assemblies
-Wait-Debugger
+#Wait-Debugger
 if (-not $wv2) { throw "WebView2 assemblies not found" }
 
 try {
@@ -213,5 +213,34 @@ $form.Add_Shown({
       Set-Status "Navigating to $uriText ..."
     }
   })
+
+$wv.add_SourceChanged({
+    param($s, $e)
+    $wv.Source | ConvertTo-Json | Write-Host
+    if ($wv.Source) {
+      $url = $wv.Source.AbsoluteUri
+      Set-Status "SourceChanged → $url"
+    }
+  })
+
+$wv.add_WebMessageReceived({
+  param($s,$e)
+  try {
+    $msg = [System.Text.Json.JsonDocument]::Parse($e.WebMessageAsJson)
+    $msg| ConvertTo-Json | Write-Host
+    # $kind = $msg.RootElement.GetProperty('kind').GetString()
+    # switch ($kind) {
+    #   'ready'    { Set-Status "Injected on: " + $msg.RootElement.GetProperty('url').GetString() }
+    #   'autofill' {
+    #     $page = $msg.RootElement.GetProperty('page').GetString()
+    #     $ok   = $msg.RootElement.GetProperty('ok').GetBoolean()
+    #     Set-Status "Autofill $page → $ok"
+    #   }
+    #}
+  } catch {
+    Set-Status "Msg parse error: $($_.Exception.Message)"
+  }
+})
+
 [System.Windows.Forms.Application]::EnableVisualStyles()
 [System.Windows.Forms.Application]::Run($form)

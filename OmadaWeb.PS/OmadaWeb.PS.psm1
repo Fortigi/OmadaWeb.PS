@@ -12,6 +12,11 @@ if ($PSVersionTable.PSVersion.Major -le 5) {
     "Selenium is restricted to version (v4.23) due compatibility issues in Windows PowerShell Desktop 5. Consider using PowerShell 7 LTS instead, you can get it here: https://aka.ms/powershell-release?tag=stable" | Write-Warning
     $PowerShellType = "Desktop"
 }
+else {
+    if (!$IsWindows) {
+        "This module is not supported on non-Windows platforms. Please use Windows PowerShell or PowerShell Core on Windows." | Write-Error -ErrorAction "Stop"
+    }
+}
 
 $BinPath = (New-Item (Join-Path ([System.Environment]::GetEnvironmentVariable("LOCALAPPDATA")) -ChildPath "$ModuleName\Bin\$PowerShellType") -ItemType Directory -Force).FullName
 $DefaultParams = @{
@@ -140,3 +145,18 @@ catch {}
 $Script:EdgeProfiles = Get-EdgeProfile
 $Script:LoginRetryCount = 0
 $Script:LoginCount = 0
+
+# Initialize WebView2 preference (default to false for backward compatibility)
+$Script:PreferWebView2 = $false
+
+# Initialize WebView2 script variables
+$Script:WebView2Control = $null
+$Script:WebView2Environment = $null
+$Script:WebView2Form = $null
+$Script:WebView2Controller = $null
+$Script:WebView2Core = $null
+$Script:WebView2WinFormsPath = $null
+$Script:WebView2CorePath = $null
+$Script:WebView2MinimalMode = $false
+$Script:WebView2HeadlessMode = $false
+$Script:BinPath = $BinPath

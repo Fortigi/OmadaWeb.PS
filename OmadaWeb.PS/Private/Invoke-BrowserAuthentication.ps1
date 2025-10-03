@@ -37,12 +37,28 @@
     }
     else {
         "{0} - OmadaWebAuthCookie not exists or is for different domain. Need to authenticate!" -f $MyInvocation.MyCommand | Write-Verbose
-        $EdgeDriverData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
-        $Script:OmadaWebAuthCookie = $EdgeDriverData[0]
 
-        $BoundParams.UserAgent = $EdgeDriverData[1]
+        # Check if WebView2 should be used instead of Selenium
+        $useWebView2 = $false
+        if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
+            $useWebView2 = $true
+        }
+        elseif ($Script:PreferWebView2 -eq $true) {
+            $useWebView2 = $true
+        }
 
-        $Session.UserAgent = $EdgeDriverData[1]
+        if ($useWebView2) {
+            "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
+            $BrowserData = Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+        }
+        else {
+            "{0} - Using Selenium WebDriver for authentication" -f $MyInvocation.MyCommand | Write-Verbose
+            $BrowserData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+        }
+
+        $Script:OmadaWebAuthCookie = $BrowserData[0]
+        $BoundParams.UserAgent = $BrowserData[1]
+        $Session.UserAgent = $BrowserData[1]
 
         if ("Cookie" -notin $BoundParams.Headers.Keys) {
             $BoundParams.Headers.Add("Cookie", ($($Script:OmadaWebAuthCookie).Name, $($Script:OmadaWebAuthCookie).Value -join "="))

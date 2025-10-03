@@ -34,32 +34,58 @@ To import the module, use the following command:
 Import-Module OmadaWeb.PS
 ```
 
-When using -AuthenticationType "Browser", on the first authentication attempt, the module will download the latest versions of [Selenium](https://github.com/SeleniumHQ/selenium) and the [Edge Driver](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver). Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS. Edge Webdriver updates automatically when a newer Edge version is detected during execution.
+When using -AuthenticationType "Browser", the module supports two browser engines:
+
+#### Selenium WebDriver (Default)
+On the first authentication attempt, the module will download the latest versions of [Selenium](https://github.com/SeleniumHQ/selenium) and the [Edge Driver](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver). Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS. Edge Webdriver updates automatically when a newer Edge version is detected during execution.
+
+#### WebView2 (Recommended for Hardened Clients)
+For environments where Selenium is restricted, the module can use Microsoft WebView2 instead. WebView2 is built into Windows 10/11 and is often allowed in hardened corporate environments.
+
+```powershell
+# Set WebView2 as the default browser engine
+Set-OmadaBrowserEngine -Engine WebView2
+
+# Or use WebView2 for a specific request
+Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -UseWebView2
+```
 
 ## SYNTAX
 
 ### Invoke-OmadaRestMethod
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [<Invoke-WebRequest Parameters>]
+```
+
+### Set-OmadaBrowserEngine
+
+```powershell
+Set-OmadaBrowserEngine -Engine {Selenium | WebView2}
+```
+
+### Get-OmadaBrowserEngine
+
+```powershell
+Get-OmadaBrowserEngine
 ```
 
 ## EXAMPLES
