@@ -9,8 +9,9 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 function Find-WebView2Assemblies {
-  $base = Join-Path $PSScriptRoot "OmadaWeb.PS"
+  $base = $PSScriptRoot
   $candidates = Get-ChildItem -Path $base -Recurse -Include 'Microsoft.Web.WebView2.WinForms.dll' -ErrorAction SilentlyContinue | Sort-Object ProductVersion -Descending | Select-Object -First 1
+   $candidates
   if (-not $candidates) { return $null }
 
   foreach ($wf in $candidates) {
@@ -24,6 +25,8 @@ function Find-WebView2Assemblies {
   }
   return $null
 }
+
+Wait-Debugger
 
 $wv2 = Find-WebView2Assemblies
 #Wait-Debugger

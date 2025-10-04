@@ -49,7 +49,9 @@
 
         if ($useWebView2) {
             "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-            $BrowserData = Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+            #$BrowserData = Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+            Wait-Debugger
+            $BrowserData = Get-CookieFromWebView2Basic -Url $Script:OmadaWebBaseUrl
         }
         else {
             "{0} - Using Selenium WebDriver for authentication" -f $MyInvocation.MyCommand | Write-Verbose
