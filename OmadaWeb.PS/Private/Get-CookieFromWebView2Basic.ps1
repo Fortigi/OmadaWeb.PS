@@ -1,8 +1,7 @@
 function Get-CookieFromWebView2Basic {
 
     param(
-        [string]$StartUrl = 'https://omada.omada.cloud/test',
-        [string]$DomainFilter = 'omada.omada.cloud'
+        [string]$StartUrl = 'https://omada.omada.cloud/test'
     )
 
     $ErrorActionPreference = 'Stop'
@@ -10,29 +9,9 @@ function Get-CookieFromWebView2Basic {
     $DomainFilter = [System.Uri]::New($StartUrl).Host
     $Url = "{0}://{1}" -f [System.Uri]::New($StartUrl).Scheme, [System.Uri]::New($StartUrl).Host
 
-    Add-Type -AssemblyName System.Windows.Forms
-    Add-Type -AssemblyName System.Drawing
 
-    # function Find-WebView2Assemblies {
-    #     $base = Join-Path $PSScriptRoot "OmadaWeb.PS"
-    #     $candidates = Get-ChildItem -Path $base -Recurse -Include 'Microsoft.Web.WebView2.WinForms.dll' -ErrorAction SilentlyContinue | Sort-Object ProductVersion -Descending | Select-Object -First 1
-    #     if (-not $candidates) { return $null }
 
-    #     foreach ($wf in $candidates) {
-    #         $corePeer = Join-Path (Split-Path $wf.fullname) 'Microsoft.Web.WebView2.Core.dll'
-    #         if (Test-Path $corePeer) {
-    #             return [pscustomobject]@{
-    #                 WinForms = $wf.FullName
-    #                 Core     = $corePeer
-    #             }
-    #         }
-    #     }
-    #     return $null
-    # }
-
-    # $wv2 = Find-WebView2Assemblies
-    # if (-not $wv2) {
-        Install-WebView2
+    Install-WebView2
     # }
 
 
@@ -60,64 +39,113 @@ function Get-CookieFromWebView2Basic {
         }
     }
 
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
 
-    #$WebView2Type = [Microsoft.Web.WebView2.WinForms.WebView2]
 
+    [System.Windows.Forms.Application]::EnableVisualStyles()
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = 'Omada Cookie Grabber (WebView2, PowerShell)'
-    $form.Width = 1100
-    $form.Height = 800
-    $form.StartPosition = 'CenterScreen'
-
-    $panel = New-Object System.Windows.Forms.Panel
-    $panel.Dock = 'Top'
-    $panel.Height = 44
 
 
-    $wv = New-Object Microsoft.Web.WebView2.WinForms.WebView2
-    $wv.Dock = 'Fill'
+    [Microsoft.Web.WebView2.WinForms.WebView2] $webview = New-Object Microsoft.Web.WebView2.WinForms.WebView2
+    $webview.CreationProperties = New-Object Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties
+    $Script:UserAgent = $webview.CoreWebView2.Settings.UserAgent
+    $userDataFolder = Join-Path $env:TEMP 'OmadaWebView2Profile'
+    if (-not (Test-Path $userDataFolder)) {
+        New-Item -ItemType Directory -Force -Path $userDataFolder | Out-Null
+    }
+    $webview.CreationProperties.UserDataFolder = $userDataFolder
+    $webview.CreationProperties.ProfileName = "OmadaWebProfile"
 
-    $status = New-Object System.Windows.Forms.StatusStrip
-    $lblStatus = New-Object System.Windows.Forms.ToolStripStatusLabel
-    $lblStatus.Text = 'Ready.'
-    $status.Items.Add($lblStatus) | Out-Null
+    #https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags
+    $EnvironmentOptions = "--msSingleSignOnForInPrivateWebView2 --disable-features=msWebView2EnableInPrivateWebView2"
+    $webview.CreationProperties.AdditionalBrowserArguments = $EnvironmentOptions
 
-    $form.Controls.Add($wv)
-    $form.Controls.Add($panel)
-    $form.Controls.Add($status)
+    $InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
+    #endregion Generated Form Objects
 
+    #----------------------------------------------
+    # User Generated Script
+    #----------------------------------------------
     function Initialize-WebView2 {
-        param([Microsoft.Web.WebView2.WinForms.WebView2]$Control, [scriptblock]$OnReady)
+        param(
+            [Microsoft.Web.WebView2.WinForms.WebView2]$WebView
+        )
 
-        if ($Control.CoreWebView2 -ne $null) { & $OnReady; return }
-        $userDataFolder = Join-Path $env:TEMP 'OmadaWebView2Profile'
-        if (-not (Test-Path $userDataFolder)) { New-Item -ItemType Directory -Force -Path $userDataFolder | Out-Null }
-        # Use CreationProperties to set UserDataFolder before async init (best practice for WinForms)
-        $props = New-Object Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties
-        $props.UserDataFolder = $userDataFolder
-        $Control.CreationProperties = $props
-        $Control.add_CoreWebView2InitializationCompleted({
+        $WebView.add_CoreWebView2InitializationCompleted({
                 param($sender, $e)
                 if ($e.IsSuccess) {
 
-                    $uriText = $Url
-                    if (-not [Uri]::IsWellFormedUriString($uriText, [UriKind]::Absolute)) { [System.Windows.Forms.MessageBox]::Show('Invalid URL'); return }
-                    $wv.Source = [Uri]$uriText
-                    Set-Status "Navigating to $uriText ..."
                     Write-Host "Timer1" -ForegroundColor Yellow
+
 
                     $timer = New-Object System.Windows.Forms.Timer
                     $timer.Interval = 150
                     try {
-
                         $timer.Start()
                         $timer.Add_Tick({
-                                Set-Status "Add_Tick..."
-                                Invoke-ExecuteScriptAsync
+                                try {
+                                    $Script:Task = $webview.CoreWebView2.CookieManager.GetCookiesAsync($null)
+                                    $Script:Task.GetAwaiter().OnCompleted({
+
+                                            if ($Script:Task.IsFaulted) {
+                                                #$timer.Stop()
+                                                $msg = $Script:Task.Exception.InnerException.Message
+
+                                                if (-not $msg) { $msg = $Script:Task.Exception.ToString() }
+                                                [System.Windows.Forms.MessageBox]::Show($msg, 'Cookie retrieval failed')
+                                                # Set-Status 'Error'
+                                            }
+                                            elseif ($Script:Task.IsCanceled) {
+                                                #$timer.Stop()
+                                                # Set-Status 'Canceled'
+                                            }
+                                            elseif ($Script:Task.IsCompleted) {
+                                                #$timer.Stop()
+                                                $cookies = $Script:Task.Result
+
+                                                $filter = $DomainFilter.tolower() #($txtDom.Text.Trim()).ToLowerInvariant()
+                                                $match = $cookies | Where-Object { ($_.Domain) -and $_.Domain.ToLowerInvariant().EndsWith($filter) }
+                                                if (-not $match -or $match.Count -eq 0) {
+                                                    [System.Windows.Forms.MessageBox]::Show("No cookies for '*.$filter' found.")
+                                                    # Set-Status 'No matching cookies'
+                                                    #return
+                                                }
+                                                $Script:OmadaWebAuthCookie = [pscustomobject]@{}
+                                                $Exported = $false
+                                                $match | ForEach-Object {
+
+                                                    if (!$Exported -and $_.name -eq 'oisauthtoken') {
+                                                        Write-Host "Found oisauthtoken" -ForegroundColor Green
+                                                        $Script:UserAgent = $webview.CoreWebView2.Settings.UserAgent
+                                                        $Script:OmadaWebAuthCookie = [pscustomobject]@{
+                                                            name     = $_.Name
+                                                            value    = $_.Value
+                                                            domain   = $_.Domain
+                                                            path     = $_.Path
+                                                            expires  = $exp
+                                                            httpOnly = $_.IsHttpOnly
+                                                            secure   = $_.IsSecure
+                                                            sameSite = $_.SameSite.ToString()
+                                                        }
+                                                        # Set-Status "Exported oisauthtoken cookie"
+                                                        $Exported = $true
+                                                    }
+                                                }
+                                                if ($Exported) {
+                                                    $form.Close()
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                                catch {
+                                    $_
+                                }
                             })
                     }
                     catch {
-                        Set-Status "Failed..."
+                        # Set-Status "Failed..."
                         $timer.Stop()
                     }
 
@@ -127,122 +155,88 @@ function Get-CookieFromWebView2Basic {
                     [System.Windows.Forms.MessageBox]::Show("WebView2 init failed: $($e.InitializationException.Message)")
                 }
             })
-        $null = $Control.EnsureCoreWebView2Async()
+        $null = $WebView.EnsureCoreWebView2Async()
+    }
+    $form_Load = {
+        #TODO: Initialize Form Controls here
+        $webview.Source = ([System.Uri]::New($StartUrl))
+        $webview.Visible = $true
     }
 
-    function Set-Status { param([string]$t) $lblStatus.Text = $t }
-    $Cookie = [pscustomobject]@{}
+    $webview_SourceChanged = {
+        $form.Text = $webview.Source.AbsoluteUri
+    }
 
-    function Invoke-ExecuteScriptAsync {
-        [CmdLetBinding()]
-        param(
-            $ScriptToExecute,
-            $OnCompletedScriptBlock
-        )
+    # --End User Generated Script--
+    #----------------------------------------------
+    #region Generated Events
+    #----------------------------------------------
+
+
+    $Form_StateCorrection_Load =
+    {
+        #Correct the initial state of the form to prevent the .Net maximized form issue
+        $form.WindowState = $InitialFormWindowState
+    }
+
+    $Form_Cleanup_FormClosed =
+    {
+        #Remove all event handlers from the controls
         try {
-
-            $Script:Task = $wv.CoreWebView2.CookieManager.GetCookiesAsync($null)
-            $Cookie = $Script:Task.GetAwaiter().OnCompleted({
-
-                    if ($Script:Task.IsFaulted) {
-                        $msg = $Script:Task.Exception.InnerException.Message
-
-                        if (-not $msg) { $msg = $Script:Task.Exception.ToString() }
-                        [System.Windows.Forms.MessageBox]::Show($msg, 'Cookie retrieval failed')
-                        Set-Status 'Error'
-                        $btnExport.Enabled = $true
-                    }
-                    elseif ($Script:Task.IsCanceled) {
-                        Set-Status 'Canceled'
-                        $btnExport.Enabled = $true
-                    }
-                    elseif ($Script:Task.IsCompleted) {
-                        $cookies = $Script:Task.Result
-
-                        $filter = $DomainFilter.tolower() #($txtDom.Text.Trim()).ToLowerInvariant()
-                        $match = $cookies | Where-Object { ($_.Domain) -and $_.Domain.ToLowerInvariant().EndsWith($filter) }
-                        if (-not $match -or $match.Count -eq 0) {
-                            [System.Windows.Forms.MessageBox]::Show("No cookies for '*.$filter' found.")
-                            Set-Status 'No matching cookies'
-                            $btnExport.Enabled = $true
-                            return $Cookie
-                        }
-
-                        $Exported = $false
-                        $match | ForEach-Object {
-
-                            if (!$Exported -and $_.name -eq 'oisauthtoken') {
-                                Write-Host "Found oisauthtoken" -ForegroundColor Green
-
-
-                                $exp = $_.Expires
-                                $Cookie = [pscustomobject]@{
-                                    name     = $_.Name;
-                                    value    = $_.Value;
-                                    domain   = $_.Domain;
-                                    path     = $_.Path;
-                                    expires  = $exp;
-                                    httpOnly = $_.IsHttpOnly;
-                                    secure   = $_.IsSecure;
-                                    sameSite = $_.SameSite.ToString()
-                                }
-                                Set-Status "Cookies found $($match.Count)"
-                                $Exported = $true
-                                #$btnExport.Enabled = $true
-                            }
-                        }
-                        if ($Exported) {
-                            "Cookie export complete. Exiting in 5 seconds..." | Write-Host -ForegroundColor Green
-                            Start-Sleep -Seconds 2
-                            $form.Close()
-                            return $Cookie
-                        }
-                    }
-                }
-
-            )
-
+            $webview.remove_SourceChanged($webview_SourceChanged)
+            $form.remove_Load($form_Load)
+            $form.remove_Load($Form_StateCorrection_Load)
+            $form.remove_FormClosed($Form_Cleanup_FormClosed)
         }
-        catch {
-            $_.Exception.Message | Write-LogOutput -LogType ERROR
-        }
+        catch { Out-Null <# Prevent PSScriptAnalyzer warning #> }
     }
+    #endregion Generated Events
 
-
+    #----------------------------------------------
+    #region Generated Form Code
+    #----------------------------------------------
+    $form.SuspendLayout()
+    #
+    # form1
+    #
+    $form.Controls.Add($webview)
+    $form.AutoScaleDimensions = New-Object System.Drawing.SizeF(6, 13)
+    $form.AutoScaleMode = 'Font'
+    $form.ClientSize = New-Object System.Drawing.Size(619, 413)
+    $form.Name = 'OmadaWeb.PS'
+    $form.Text = 'Form'
+    $form.Width = 1100
+    $form.Height = 800
+    $form.StartPosition = 'CenterScreen'
+    $form.add_Load($form_Load)
     $form.Add_Shown({
-            Initialize-WebView2 -Control $wv -OnReady {
-                $uriText = $null #$txtUrl.Text.Trim()
-                if ([string]::IsNullOrWhiteSpace($uriText)) { $uriText = $Url }
-                if (-not [Uri]::IsWellFormedUriString($uriText, [UriKind]::Absolute)) { return }
-                $wv.Source = [Uri]$uriText
-                Set-Status "Navigating to $uriText ..."
-            }
+            param($sender, $e)
+            Initialize-WebView2 -WebView $webview
         })
+    #
+    # webview
+    #
+    $webview.Location = New-Object System.Drawing.Point(0, 49)
+    $webview.Name = 'webview'
+    $webview.Size = New-Object System.Drawing.Size(619, 364)
+    $webview.TabIndex = 0
+    $webview.ZoomFactor = 1
+    $webview.add_SourceChanged($webview_SourceChanged)
 
-    $wv.add_SourceChanged({
-            param($s, $e)
-            $wv.Source | ConvertTo-Json | Write-Host
-            if ($wv.Source) {
-                $url = $wv.Source.AbsoluteUri
-                Set-Status "SourceChanged → $url"
-            }
-        })
+    $form.ResumeLayout()
+    #endregion Generated Form Code
 
-    $wv.add_WebMessageReceived({
-            param($s, $e)
-            try {
-                $msg = [System.Text.Json.JsonDocument]::Parse($e.WebMessageAsJson)
-                $msg | ConvertTo-Json | Write-Host
-            }
-            catch {
-                Set-Status "Msg parse error: $($_.Exception.Message)"
-            }
-        })
+    #----------------------------------------------
 
-    [System.Windows.Forms.Application]::EnableVisualStyles()
-    [System.Windows.Forms.Application]::Run($form)
-    $AgentString = $wv.CoreWebView2.Settings.UserAgent
-    $wv.Dispose()
+    #Save the initial state of the form
+    $InitialFormWindowState = $form.WindowState
+    #Init the OnLoad event to correct the initial state of the form
+    $form.add_Load($Form_StateCorrection_Load)
+    #Clean up the control events
+    $form.add_FormClosed($Form_Cleanup_FormClosed)
+    #Show the Form
+    $form.ShowDialog()
+
+    $webview.Dispose()
     $form.Dispose()
-    return $Cookie, $AgentString
 }

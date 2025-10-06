@@ -50,8 +50,8 @@
         if ($useWebView2) {
             "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
             #$BrowserData = Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
-            Wait-Debugger
-            $BrowserData = Get-CookieFromWebView2Basic -Url $Script:OmadaWebBaseUrl
+            Get-CookieFromWebView2Basic -StartUrl $Script:OmadaWebBaseUrl
+            $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
         }
         else {
             "{0} - Using Selenium WebDriver for authentication" -f $MyInvocation.MyCommand | Write-Verbose
@@ -68,7 +68,6 @@
         else {
             $BoundParams.Headers.Cookie = ($($Script:OmadaWebAuthCookie).Name, $($Script:OmadaWebAuthCookie).Value -join "=")
         }
-
         $Session.Cookies.Add((New-Object System.Net.Cookie("oisauthtoken", $($Script:OmadaWebAuthCookie.Value), "/", $($Script:OmadaWebAuthCookie.domain))))
     }
 

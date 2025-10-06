@@ -25,7 +25,7 @@ function Invoke-WebView2Task {
                     $btnExport.Enabled = $true
                 }
                 elseif ($Script:Task.IsCompleted) {
-                    
+
                 }
             }
 
@@ -33,6 +33,6 @@ function Invoke-WebView2Task {
 
     }
     catch {
-        $_.Exception.Message | Write-LogOutput -LogType ERROR
+        throw $_
     }
 }
