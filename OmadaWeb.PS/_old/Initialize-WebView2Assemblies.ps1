@@ -84,8 +84,8 @@ function Initialize-WebView2Assemblies {
 
         # Load WebView2 WinForms
         try {
-            $winFormsAssembly = [System.Reflection.Assembly]::LoadFrom($Script:WebView2WinFormsPath)
-            "WebView2 WinForms assembly loaded: {0}" -f $winFormsAssembly.FullName | Write-Verbose
+            $Script:WinFormsAssembly = [System.Reflection.Assembly]::LoadFrom($Script:WebView2WinFormsPath)
+            "WebView2 WinForms assembly loaded: {0}" -f $Script:WinFormsAssembly.FullName | Write-Verbose
         }
         catch {
             if ($_.Exception.Message -like '*Assembly with same name is already loaded*') {

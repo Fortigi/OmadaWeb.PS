@@ -39,8 +39,8 @@ try {
 
     # Step 4: Initialize WebView2 helper
     Write-Host "4. Initializing WebView2 helper..." -NoNewline
-    $webView2 = Start-WebView2Helper -InPrivate
-    if ($webView2) {
+    $Script:WebView2 = Start-WebView2Helper -InPrivate
+    if ($Script:WebView2) {
         Write-Host " ✓" -ForegroundColor Green
     } else {
         Write-Host " ✗" -ForegroundColor Red

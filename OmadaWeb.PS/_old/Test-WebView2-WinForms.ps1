@@ -20,18 +20,18 @@ try {
     }
 
     Write-Host "2. Creating WebView2 (WinForms, invisible)..." -NoNewline
-    $webView2Core = Start-WebView2Simple -Visible:$false -Verbose
-    if ($webView2Core) {
+    $Script:WebView2Core = Start-WebView2Simple -Visible:$false -Verbose
+    if ($Script:WebView2Core) {
         Write-Host " ✓" -ForegroundColor Green
 
         Write-Host "3. Testing navigation..." -NoNewline
-        $webView2Core.Navigate("https://httpbin.org/html")
+        $Script:WebView2Core.Navigate("https://httpbin.org/html")
         Start-Sleep -Seconds 3
         Write-Host " ✓" -ForegroundColor Green
 
         Write-Host "4. Getting page title..." -NoNewline
         Start-Sleep -Seconds 2
-        $title = $webView2Core.DocumentTitle
+        $title = $Script:WebView2Core.DocumentTitle
         if ($title) {
             Write-Host " ✓ Title: $title" -ForegroundColor Green
         } else {
@@ -40,7 +40,7 @@ try {
 
         Write-Host "5. Testing JavaScript execution..." -NoNewline
         try {
-            $jsResult = $webView2Core.ExecuteScriptAsync("document.title").GetAwaiter().GetResult()
+            $jsResult = $Script:WebView2Core.ExecuteScriptAsync("document.title").GetAwaiter().GetResult()
             if ($jsResult) {
                 Write-Host " ✓ JS Result: $jsResult" -ForegroundColor Green
             } else {

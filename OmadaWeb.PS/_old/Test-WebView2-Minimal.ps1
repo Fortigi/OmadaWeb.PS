@@ -20,20 +20,20 @@ try {
     }
 
     Write-Host "2. Creating minimal WebView2..." -NoNewline
-    $webView2Core = Start-WebView2Minimal -Verbose
-    if ($webView2Core) {
+    $Script:WebView2Core = Start-WebView2Minimal -Verbose
+    if ($Script:WebView2Core) {
         Write-Host " ✓" -ForegroundColor Green
 
         Write-Host "3. Testing navigation to simple page..." -NoNewline
-        $webView2Core.Navigate("https://httpbin.org/html")
+        $Script:WebView2Core.Navigate("https://httpbin.org/html")
         Start-Sleep -Seconds 4
         Write-Host " ✓" -ForegroundColor Green
 
         Write-Host "4. Getting page information..." -NoNewline
         Start-Sleep -Seconds 2
         try {
-            $url = $webView2Core.Source
-            $title = $webView2Core.DocumentTitle
+            $url = $Script:WebView2Core.Source
+            $title = $Script:WebView2Core.DocumentTitle
             Write-Host " ✓ URL: $url, Title: $title" -ForegroundColor Green
         } catch {
             Write-Host " ! Error getting page info: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -41,7 +41,7 @@ try {
 
         Write-Host "5. Testing JavaScript execution..." -NoNewline
         try {
-            $jsTask = $webView2Core.ExecuteScriptAsync("document.title")
+            $jsTask = $Script:WebView2Core.ExecuteScriptAsync("document.title")
             $maxWait = 5
             $waited = 0
             while (-not $jsTask.IsCompleted -and $waited -lt $maxWait) {

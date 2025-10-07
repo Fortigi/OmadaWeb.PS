@@ -2,59 +2,101 @@ function Get-WebView2Cookies {
     <#
     .SYNOPSIS
     Gets cookies from the WebView2 browser.
-
-    .PARAMETER Url
-    The URL to get cookies for (defaults to current page).
     #>
 
     [CmdletBinding()]
-    param(
-        [string]$Url,
-        $Cookies
-    )
-
+    param()
     try {
-        $Uri = [System.Uri]::new($Url)
-        $Output = [pscustomobject]@{}
+        "{0} - {1}" -f $MyInvocation.MyCommand, ($Script:WebView.Source | ConvertTo-Json ) | Write-Verbose
 
-        $Match = $cookies | Where-Object { $null -ne $_.Domain -and [System.Uri]::new($_.Domain).Host.ToLower() -eq $Uri.Host.ToLower() }
-        if (-not $Match -or $Match.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("No cookies for '$($Uri.Host)' found.", "No cookies", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-            Set-WebView2Status 'No matching cookies'
-            return $Output
+        if ($null -eq $Script:WebView.CoreWebView2.CookieManager) {
+            return
         }
 
-        $Exported = $false
-        $Match | ForEach-Object {
+        $Script:Task = $Script:WebView.CoreWebView2.CookieManager.GetCookiesAsync($null)
 
-            if ($_.name -eq 'oisauthtoken') {
-                Write-Host "Found oisauthtoken" -ForegroundColor Green
+        if ($null -eq $Script:Task) {
+            return
+        }
 
-                $exp = $_.Expires
-                $Output = [pscustomobject]@{
-                    name     = $_.Name
-                    value    = $_.Value
-                    domain   = $_.Domain
-                    path     = $_.Path
-                    expires  = $exp
-                    httpOnly = $_.IsHttpOnly
-                    secure   = $_.IsSecure
-                    sameSite = $_.SameSite.ToString()
+        $Script:Task.GetAwaiter().OnCompleted({
+                try {
+                    if ($Script:Task.IsFaulted) {
+                        $Message = if ($Script:Task.Exception.InnerException) {
+                            $Script:Task.Exception.InnerException.Message
+                        }
+                        else {
+                            $Script:Task.Exception.ToString()
+                        }
+                        [System.Windows.Forms.MessageBox]::Show($Message, 'Cookie retrieval failed')
+                    }
+                    elseif ($Script:Task.IsCanceled) {
+                    }
+                    elseif ($Script:Task.IsCompleted) {
+                        $Cookies = $Script:Task.Result
+
+                        if ($null -eq $Cookies) {
+                            return
+                        }
+                        $Filter = [System.Uri]::New($Script:OmadaWebBaseUrl).Host.ToLower()
+                        $Match = $Cookies | Where-Object { ($null -ne $_.Domain) -and $_.Domain.ToLowerInvariant().EndsWith($Filter) }
+                        $Script:OmadaWebAuthCookie = [pscustomobject]@{}
+                        $Exported = $false
+
+                        if ($Match -and $Match.Count -gt 0) {
+                            $Match | ForEach-Object {
+                                if (!$Exported -and $_.name -eq 'oisauthtoken') {
+                                    "Get-WebView2Cookies - Found oisauthtoken" | Write-Verbose
+
+                                    if ($null -ne $Script:WebView -and $null -ne $Script:WebView.CoreWebView2 -and $null -ne $Script:WebView.CoreWebView2.Settings) {
+                                        $Script:UserAgent = $Script:WebView.CoreWebView2.Settings.UserAgent
+                                    }
+
+                                    $Script:OmadaWebAuthCookie = [pscustomobject]@{
+                                        name     = $_.Name
+                                        value    = $_.Value
+                                        domain   = $_.Domain
+                                        path     = $_.Path
+                                        expires  = $_.Expires
+                                        httpOnly = $_.IsHttpOnly
+                                        secure   = $_.IsSecure
+                                        sameSite = $_.SameSite.ToString()
+                                    }
+                                    $Exported = $true
+                                }
+                            }
+                            if ($Exported) {
+                                if ($null -ne $Timer -and $Timer.Enabled) {
+                                    $Timer.Stop()
+                                }
+                                # Close the WebView form
+                                if ($null -ne $Script:WebView -and $null -ne $Script:WebView.FindForm()) {
+                                    $Script:WebView.FindForm().Close()
+                                }
+                            }
+                        }
+                        if ($Exported) {
+                            if ($null -ne $Timer -and $Timer.Enabled) {
+                                $Timer.Stop()
+                            }
+                            return
+                        }
+                    }
                 }
-                Set-WebView2Status "Cookie retrieved"
-                $Exported = $true
-                break
+                catch [System.Management.Automation.PipelineStoppedException] {
+                    # Ctrl+C was pressed - silently ignore
+                    [Console]::WriteLine("PipelineStoppedException")
+                    return
+                }
+                catch {
+                    # Silently catch to prevent crash - log to console
+                    [Console]::WriteLine("Cookie callback error: $_")
+                }
             }
-        }
-        if ($Exported) {
-            "Cookie export complete. Exiting in 2 seconds..." | Write-Host -ForegroundColor Green
-            Start-Sleep -Seconds 2
-            $form.Close()
-        }
-        return $Output
+        )
     }
     catch {
-        "Failed to get WebView2 cookies: {0}" -f $_.Exception.Message | Write-Error
+        Write-Host "Error in Initialize-WebView2: $_" -ForegroundColor Red
         throw
     }
 }

@@ -80,12 +80,12 @@ try {
             exit 1
         }
         $controller = $controllerTask.Result
-        $webView2Core = $controller.CoreWebView2
+        $Script:WebView2Core = $controller.CoreWebView2
         Write-Host " ✓" -ForegroundColor Green
 
         Write-Host "5. Testing basic functionality..." -NoNewline
         try {
-            $webView2Core.Navigate("about:blank")
+            $Script:WebView2Core.Navigate("about:blank")
             Start-Sleep -Seconds 1
             Write-Host " ✓" -ForegroundColor Green
 

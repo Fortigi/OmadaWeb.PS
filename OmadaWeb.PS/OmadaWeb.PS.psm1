@@ -1,5 +1,5 @@
 #Add parameters like: Import-Module OmadaWeb.PS -ArgumentList "C:\Temp\","C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-PARAM(
+param(
     [parameter(Mandatory = $false)]
     [hashtable]$Parameters
 )
@@ -25,6 +25,7 @@ $DefaultParams = @{
     NewtonsoftJsonPath    = $BinPath
     SystemTextJsonPath    = $BinPath
     SystemRuntimePath     = $BinPath
+    WebView2Path          = $BinPath
     OmadaWebAuthCookie    = $null
     UpdateDependencies    = $false
     LastSessionType       = "Normal"
@@ -51,6 +52,7 @@ catch {}
 
 "PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json) | Write-Verbose
 
+"{0} - Set paths" -f $MyInvocation.MyCommand | Write-Verbose
 #EdgeDriver Location
 $Script:EdgeDriverPath = [System.IO.Path]::Combine($WebDriverBasePath, "msedgedriver.exe")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:EdgeDriverPath | Write-Verbose
@@ -70,6 +72,14 @@ $Script:SystemRuntimePath = [System.IO.Path]::Combine($($SystemRuntimePath), "Sy
 #WebDriver Location
 $Script:WebDriverPath = [System.IO.Path]::Combine($WebDriverBasePath, "WebDriver.dll")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebDriverPath | Write-Verbose
+
+#WebView2 Core Location
+$Script:WebView2CorePath = [System.IO.Path]::Combine($WebDriverBasePath, "Microsoft.Web.WebView2.Core.dll")
+"{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2CorePath | Write-Verbose
+
+#WebView2 WinForms Location
+$Script:WebView2WinFormsPath = [System.IO.Path]::Combine($WebDriverBasePath, "Microsoft.Web.WebView2.WinForms.dll")
+"{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2WinFormsPath | Write-Verbose
 
 #Edge Location
 $Script:InstalledEdgeFilePath = [System.IO.Path]::Combine($InstalledEdgeBasePath, "msedge.exe")
@@ -101,7 +111,7 @@ if ($UpdateDependencies) {
 #region exclude
 $Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
 $Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1)
-Foreach ($Import in @($Public + $Private)) {
+foreach ($Import in @($Public + $Private)) {
     try {
         . $Import.FullName
     }
@@ -118,10 +128,14 @@ Export-ModuleMember -Function $Public.Basename -Alias *
 try {
     $InstalledModule = Get-InstalledModuleInfo -ModuleName $ModuleName
 
+    $Script:UserAgent = "OmadaWeb.PS/{0}"
+
     if (-not $InstalledModule.RepositorySource -or $InstalledModule.RepositorySource -notlike "*powershellgallery.com*") {
         "Module '{0}' was not sourced from the PowerShell Gallery. Skipping version check." -f $ModuleName | Write-Verbose
+        $Script:UserAgent = $Script:UserAgent -f "Development"
     }
     else {
+        $Script:UserAgent = $Script:UserAgent -f $($InstalledModule.Version)
         $GalleryVersion = Get-GalleryModuleVersion -ModuleName $ModuleName
 
         if (-not $GalleryVersion) {
@@ -146,17 +160,4 @@ $Script:EdgeProfiles = Get-EdgeProfile
 $Script:LoginRetryCount = 0
 $Script:LoginCount = 0
 
-# Initialize WebView2 preference (default to false for backward compatibility)
-$Script:PreferWebView2 = $false
-
-# Initialize WebView2 script variables
-$Script:WebView2Control = $null
-$Script:WebView2Environment = $null
-$Script:WebView2Form = $null
-$Script:WebView2Controller = $null
-$Script:WebView2Core = $null
-$Script:WebView2WinFormsPath = $null
-$Script:WebView2CorePath = $null
-$Script:WebView2MinimalMode = $false
-$Script:WebView2HeadlessMode = $false
-$Script:BinPath = $BinPath
+"Module {0} loaded successfully" -f $ModuleName | Write-Verbose

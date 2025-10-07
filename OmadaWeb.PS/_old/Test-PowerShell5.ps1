@@ -65,8 +65,8 @@ try {
         Write-Host " PASS" -ForegroundColor Green
 
         # Quick test
-        $webView2 = $controller.CoreWebView2
-        $webView2.Navigate("about:blank")
+        $Script:WebView2 = $controller.CoreWebView2
+        $Script:WebView2.Navigate("about:blank")
 
         Write-Host "4. WebView2 ready for use!" -ForegroundColor Green
 

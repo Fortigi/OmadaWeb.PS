@@ -17,35 +17,32 @@ function Install-WebView2 {
     try {
         "{0}" -f $MyInvocation.MyCommand | Write-Verbose
 
-        $Webview2WinformsDll = "Microsoft.Web.WebView2.WinForms.dll"
-        $Webview2CoreDll = "Microsoft.Web.WebView2.Core.dll"
+        if (-not (Test-Path $Script:WebView2WinFormsPath -PathType Leaf) -or -not (Test-Path $Script:WebView2CorePath -PathType Leaf)) {
+            "'Microsoft.Web.WebView2' needs to be downloaded. Downloading from NuGet" | Write-Host
 
-        $WebView2PackagePath = Join-Path -Path $Script:BinPath -ChildPath "Microsoft.Web.WebView2"
-
-        if (-not (Test-Path $WebView2PackagePath -PathType Container) -or -not (Get-ChildItem -Path $WebView2PackagePath -Filter $Webview2WinformsDll -Recurse -ErrorAction SilentlyContinue) -or -not (Get-ChildItem -Path $WebView2PackagePath -Filter $Webview2CoreDll -Recurse -ErrorAction SilentlyContinue)) {
-            "Installing WebView2 NuGet package..." | Write-Verbose
-
-            $WebView2PackagePath = (New-Item -Path $WebView2PackagePath -ItemType Directory -Force).FullName
+            #TODO: Troubleshoot why Get-NuGetPackage does not work here as expected
+            #$NuGetResults = Get-NuGetPackage -PackageName "Microsoft.Web.WebView2"
 
             $PackageUrl = "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2"
-            $PackageBasePath = Join-Path -Path $Env:Temp -ChildPath ([system.IO.Path]::GetRandomFileName())
-            New-Item -Path $PackageBasePath -ItemType Directory -Force | Out-Null
-            $PackageFile = Join-Path -Path $PackageBasePath -ChildPath "Microsoft.Web.WebView2.nupkg"
 
             try {
-                Invoke-WebRequest -Uri $PackageUrl -OutFile $PackageFile -UseBasicParsing
+                $TempFile = Invoke-DownloadFile -DownloadUrl $PackageUrl
 
-                Expand-Archive -Path $PackageFile -DestinationPath $PackageBasePath -Force
+                $TempZipPath = Expand-DownloadFile -FilePath $TempFile
 
                 if ($PSVersionTable.PSEdition -eq "Core") {
-                    Get-ChildItem -Path $PackageBasePath -Filter "Microsoft.Web.WebView2.WinForms.dll" -Recurse | Where-Object { $_.Directory.Name -eq "netcoreapp3.0" } | Select-Object -First 1 | Copy-Item -Destination $WebView2PackagePath -Force
-                    Get-ChildItem -Path $PackageBasePath -Filter "Microsoft.Web.WebView2.Core.dll" -Recurse | Where-Object { $_.Directory.Name -eq "netcoreapp3.0" } | Select-Object -First 1 | Copy-Item -Destination $WebView2PackagePath -Force
+                    Get-ChildItem -Path $TempZipPath -Filter "Microsoft.Web.WebView2.WinForms.dll" -Recurse | Where-Object { $_.Directory.Name -eq "netcoreapp3.0" } | Select-Object -First 1 | Copy-Item -Destination $Script:BinPath -Force
+                    "Installed 'Microsoft.Web.WebView2.WinForms.dll' version {0}" -f (Get-Item $Script:WebView2WinFormsPath).VersionInfo.ProductVersion | Write-Host
+                    Get-ChildItem -Path $TempZipPath -Filter "Microsoft.Web.WebView2.Core.dll" -Recurse | Where-Object { $_.Directory.Name -eq "netcoreapp3.0" } | Select-Object -First 1 | Copy-Item -Destination $Script:BinPath -Force
+                    "Installed 'Microsoft.Web.WebView2.Core.dll' version {0}" -f (Get-Item $Script:WebView2CorePath).VersionInfo.ProductVersion | Write-Host
                 }
                 else {
-                    Get-ChildItem -Path $PackageBasePath -Filter "Microsoft.Web.WebView2.WinForms.dll" -Recurse | Where-Object { $_.Directory.Name -eq "net462" } | Select-Object -First 1 | Copy-Item -Destination $WebView2PackagePath -Force
-                    Get-ChildItem -Path $PackageBasePath -Filter "Microsoft.Web.WebView2.Core.dll" -Recurse | Where-Object { $_.Directory.Name -eq "net462" } | Select-Object -First 1 | Copy-Item -Destination $WebView2PackagePath -Force
+                    Get-ChildItem -Path $TempZipPath -Filter "Microsoft.Web.WebView2.WinForms.dll" -Recurse | Where-Object { $_.Directory.Name -eq "net462" } | Select-Object -First 1 | Copy-Item -Destination $Script:BinPath -Force
+                    "Installed 'Microsoft.Web.WebView2.WinForms.dll' version {0}" -f (Get-Item $Script:WebView2WinFormsPath).VersionInfo.ProductVersion | Write-Host
+                    Get-ChildItem -Path $TempZipPath -Filter "Microsoft.Web.WebView2.Core.dll" -Recurse | Where-Object { $_.Directory.Name -eq "net462" } | Select-Object -First 1 | Copy-Item -Destination $Script:BinPath -Force
+                    "Installed 'Microsoft.Web.WebView2.Core.dll' version {0}" -f (Get-Item $Script:WebView2CorePath).VersionInfo.ProductVersion | Write-Host
                 }
-                Remove-Item -Path $PackageBasePath -Force -Recurse
+                Remove-Item -Path $TempZipPath -Force -Recurse
                 "WebView2 package installed successfully" | Write-Verbose
             }
             catch {
@@ -53,17 +50,6 @@ function Install-WebView2 {
                 return $false
             }
         }
-
-        $Script:WebView2WinFormsPath = Get-ChildItem -Path  $WebView2PackagePath -Filter "Microsoft.Web.WebView2.WinForms.dll" -Recurse | Select-Object -First 1
-        $Script:WebView2CorePath = Get-ChildItem -Path  $WebView2PackagePath -Filter "Microsoft.Web.WebView2.Core.dll" -Recurse | Select-Object -First 1
-
-        if (-not $Script:WebView2WinFormsPath -or -not $Script:WebView2CorePath) {
-            "WebView2 assemblies not found in package" | Write-Error
-            return $false
-        }
-
-        "WebView2 WinForms assembly: {0}" -f $Script:WebView2WinFormsPath | Write-Verbose
-        "WebView2 Core assembly: {0}" -f $Script:WebView2CorePath | Write-Verbose
 
         return $true
     }

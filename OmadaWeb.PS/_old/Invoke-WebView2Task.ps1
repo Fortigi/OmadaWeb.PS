@@ -1,13 +1,13 @@
 function Invoke-WebView2Task {
     [CmdLetBinding()]
     param(
-        $Webview2Task = $wv.CoreWebView2.CookieManager.GetCookiesAsync($null),
+        $Script:WebView2Task = $wv.CoreWebView2.CookieManager.GetCookiesAsync($null),
         $ScriptToExecute  ,
         $OnCompletedScriptBlock
     )
     try {
 
-        $Script:Task = $Webview2Task
+        $Script:Task = $Script:WebView2Task
         $Script:Task.GetAwaiter().OnCompleted({
 
                 if ($Script:Task.IsFaulted) {

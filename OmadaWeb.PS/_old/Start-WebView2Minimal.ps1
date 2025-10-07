@@ -19,7 +19,7 @@ function Start-WebView2Minimal {
     .EXAMPLE
     Start-WebView2Minimal -InPrivate
     #>
-    
+
     [CmdletBinding()]
     param(
         [string]$EdgeProfile,
@@ -28,7 +28,7 @@ function Start-WebView2Minimal {
 
     try {
         "{0}" -f $MyInvocation.MyCommand | Write-Verbose
-        
+
         # Initialize WebView2 assemblies
         if (-not (Initialize-WebView2Assemblies)) {
             throw "Failed to initialize WebView2 assemblies"
@@ -36,7 +36,7 @@ function Start-WebView2Minimal {
 
         # Configure WebView2 environment
         $userDataFolder = Join-Path $env:LOCALAPPDATA "OmadaWeb.PS\WebView2"
-        
+
         if ($InPrivate) {
             $userDataFolder = Join-Path $env:TEMP "OmadaWeb.PS\WebView2\InPrivate\$(Get-Random)"
             "Using InPrivate mode with temporary profile: {0}" -f $userDataFolder | Write-Verbose
@@ -68,9 +68,9 @@ function Start-WebView2Minimal {
         # Create a minimal control without Windows Forms
         try {
             # Use reflection to create the WebView2 control to avoid direct Windows Forms dependencies
-            $webView2Type = [Microsoft.Web.WebView2.WinForms.WebView2]
-            $Script:WebView2Control = [System.Activator]::CreateInstance($webView2Type)
-            
+            $Script:WebView2Type = [Microsoft.Web.WebView2.WinForms.WebView2]
+            $Script:WebView2Control = [System.Activator]::CreateInstance($Script:WebView2Type)
+
             "WebView2 control created using reflection" | Write-Verbose
         }
         catch {
@@ -102,7 +102,7 @@ function Start-WebView2Minimal {
             # Set custom user agent
             $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
             $Script:WebView2Control.CoreWebView2.Settings.UserAgent = $userAgent
-            
+
             "WebView2 settings configured successfully" | Write-Verbose
         }
         catch {

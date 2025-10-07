@@ -35,7 +35,7 @@ function Invoke-WebView2Script {
                     #$timer.Stop()
                     $cookies = $Script:Task.Result
 
-                    $filter = $DomainFilter.tolower() #($txtDom.Text.Trim()).ToLowerInvariant()
+                    $filter = $DomainFilter.tolower()
                     $match = $cookies | Where-Object { ($_.Domain) -and $_.Domain.ToLowerInvariant().EndsWith($filter) }
                     if (-not $match -or $match.Count -eq 0) {
                         [System.Windows.Forms.MessageBox]::Show("No cookies for '*.$filter' found.")
@@ -79,6 +79,6 @@ function Invoke-WebView2Script {
 
     }
     catch {
-        $_.Exception.Message | Write-LogOutput -LogType ERROR
+        throw $_
     }
 }
