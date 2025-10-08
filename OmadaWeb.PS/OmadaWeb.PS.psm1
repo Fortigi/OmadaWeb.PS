@@ -18,9 +18,10 @@ else {
     }
 }
 
-$BinPath = (New-Item (Join-Path ([System.Environment]::GetEnvironmentVariable("LOCALAPPDATA")) -ChildPath "$ModuleName\Bin\$PowerShellType") -ItemType Directory -Force).FullName
+$ModuleAppDataPath = (New-Item (Join-Path ([System.Environment]::GetFolderPath("LocalApplicationData")) -ChildPath $ModuleName) -ItemType Directory -Force).FullName
+$BinPath = (New-Item (Join-Path $ModuleAppDataPath -ChildPath "Bin\$PowerShellType") -ItemType Directory -Force).FullName
 $DefaultParams = @{
-    WebDriverBasePath     = $BinPath
+    WebBinBasePath        = $BinPath
     InstalledEdgeBasePath = "C:\Program Files (x86)\Microsoft\Edge\Application"
     NewtonsoftJsonPath    = $BinPath
     SystemTextJsonPath    = $BinPath
@@ -46,7 +47,7 @@ $Parameters.GetEnumerator() | ForEach-Object {
 }
 
 try {
-    $null = New-Item $WebDriverBasePath -ItemType Directory -Force
+    $null = New-Item $WebBinBasePath -ItemType Directory -Force
 }
 catch {}
 
@@ -54,7 +55,7 @@ catch {}
 
 "{0} - Set paths" -f $MyInvocation.MyCommand | Write-Verbose
 #EdgeDriver Location
-$Script:EdgeDriverPath = [System.IO.Path]::Combine($WebDriverBasePath, "msedgedriver.exe")
+$Script:EdgeDriverPath = [System.IO.Path]::Combine($WebBinBasePath, "msedgedriver.exe")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:EdgeDriverPath | Write-Verbose
 
 #Newtonsoft.Json Location
@@ -70,16 +71,33 @@ $Script:SystemRuntimePath = [System.IO.Path]::Combine($($SystemRuntimePath), "Sy
 "{0} - {1}" -f $MyInvocation.MyCommand, $($Script:SystemRuntimePath) | Write-Verbose
 
 #WebDriver Location
-$Script:WebDriverPath = [System.IO.Path]::Combine($WebDriverBasePath, "WebDriver.dll")
+$Script:WebDriverPath = [System.IO.Path]::Combine($WebBinBasePath, "WebDriver.dll")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebDriverPath | Write-Verbose
 
+#WebView2 Base Path
+if ($Env:PROCESSOR_ARCHITECTURE -eq "AMD64") {
+    $WebView2BasePath = [System.IO.Path]::Combine($WebBinBasePath, "win-x64")
+}
+else {
+    $WebView2BasePath = [System.IO.Path]::Combine($WebBinBasePath, "win-x86")
+}
+New-Item -ItemType Directory -Path $WebView2BasePath -Force | Out-Null
+
 #WebView2 Core Location
-$Script:WebView2CorePath = [System.IO.Path]::Combine($WebDriverBasePath, "Microsoft.Web.WebView2.Core.dll")
+$Script:WebView2CorePath = [System.IO.Path]::Combine($WebView2BasePath, "Microsoft.Web.WebView2.Core.dll")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2CorePath | Write-Verbose
 
 #WebView2 WinForms Location
-$Script:WebView2WinFormsPath = [System.IO.Path]::Combine($WebDriverBasePath, "Microsoft.Web.WebView2.WinForms.dll")
+$Script:WebView2WinFormsPath = [System.IO.Path]::Combine($WebView2BasePath, "Microsoft.Web.WebView2.WinForms.dll")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2WinFormsPath | Write-Verbose
+
+#WebView2 Loader Location
+$Script:WebView2LoaderPath = [System.IO.Path]::Combine($WebView2BasePath, "WebView2Loader.dll")
+"{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2LoaderPath | Write-Verbose
+
+#WebView2 User Profile Location
+$Script:WebView2UserProfilePath = [System.IO.Path]::Combine($ModuleAppDataPath, "Edge User Data\OmadaWebView2Profile")
+"{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2UserProfilePath | Write-Verbose
 
 #Edge Location
 $Script:InstalledEdgeFilePath = [System.IO.Path]::Combine($InstalledEdgeBasePath, "msedge.exe")
@@ -101,16 +119,16 @@ elseif ([string]::IsNullOrEmpty($Script:OmadaWebAuthCookie)) {
 if ($UpdateDependencies) {
     "Update Dependencies" | Write-Verbose
     try {
-        Get-ChildItem $WebDriverBasePath | Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem $WebBinBasePath | Remove-Item -Force -ErrorAction SilentlyContinue
     }
     catch {
-        "Failed to initiate dependency updates. Retry restarting this PowerShell session or manually remove the contents of folder '{0}'. Error:`r`n {1}" -f $WebDriverBasePath, $_.Exception | Write-Warning
+        "Failed to initiate dependency updates. Retry restarting this PowerShell session or manually remove the contents of folder '{0}'. Error:`r`n {1}" -f $WebBinBasePath, $_.Exception | Write-Warning
     }
 }
 
 #region exclude
 $Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
-$Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1)
+$Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1 -Recurse)
 foreach ($Import in @($Public + $Private)) {
     try {
         . $Import.FullName

@@ -3,8 +3,9 @@ function Initialize-WebView2 {
     param()
 
     try {
-        Write-Host "`r`nWebview2 opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
-        $Script:WebView.add_CoreWebView2InitializationCompleted({
+        Write-Host "`r`nWebView2 opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
+
+        $Script:WebView2.add_CoreWebView2InitializationCompleted({
 
                 param($sender, $e)
 
@@ -17,7 +18,7 @@ function Initialize-WebView2 {
                         $Timer.Add_Tick({
                                 # Use .NET methods only - no PowerShell cmdlets that can throw PipelineStoppedException
                                 try {
-                                    if ($null -eq $Script:WebView -or $null -eq $Script:WebView.CoreWebView2) {
+                                    if ($null -eq $Script:WebView2 -or $null -eq $Script:WebView2.CoreWebView2) {
                                         return
                                     }
 
@@ -25,15 +26,16 @@ function Initialize-WebView2 {
                                     if (-not $Script:ProgressCounter) { $Script:ProgressCounter = 0 }
                                     $Script:ProgressCounter++
                                     if ($Script:ProgressCounter % 3 -eq 0) {
+                                        [Console]::ForegroundColor = 'Yellow'
                                         [Console]::Write(".")
+                                        [Console]::ResetColor()
                                     }
 
-                                    if ($Script:LastSource -ne $Script:WebView.Source) {
-                                        "Initialize-WebView2 - {0}" -f ($Script:WebView.Source | ConvertTo-Json ) | Write-Verbose
-                                        $Script:LastSource = $Script:WebView.Source
+                                    if ($Script:LastSource -ne $Script:WebView2.Source) {
+                                        "Initialize-WebView2 - {0}" -f ($Script:WebView2.Source | ConvertTo-Json ) | Write-Verbose
+                                        $Script:LastSource = $Script:WebView2.Source
                                     }
-
-                                    switch ($Script:WebView.Source) {
+                                    switch ($Script:WebView2.Source) {
                                         { $_.Host -eq [System.Uri]::New($Script:OmadaWebBaseUrl).Host } {
                                             Get-WebView2Cookies
                                         }

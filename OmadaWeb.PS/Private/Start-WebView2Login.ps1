@@ -20,27 +20,23 @@ function Start-WebView2Login {
 
         [System.Windows.Forms.Application]::EnableVisualStyles()
         $Script:WinForm = New-Object System.Windows.Forms.Form
-
-        [Microsoft.Web.WebView2.WinForms.WebView2] $Script:WebView = New-Object Microsoft.Web.WebView2.WinForms.WebView2
-        $Script:WebView.CreationProperties = New-Object Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties
-        $UserDataFolder = Join-Path $env:LOCALAPPDATA 'OmadaWeb.PS\Edge User Data\OmadaWebView2Profile'
-        if (-not (Test-Path $UserDataFolder -PathType Container)) {
-            New-Item -ItemType Directory -Force -Path $UserDataFolder | Out-Null
-        }
-        $Script:WebView.CreationProperties.UserDataFolder = $UserDataFolder
-        $Script:WebView.CreationProperties.ProfileName = $EdgeProfile
+        [Microsoft.Web.WebView2.WinForms.WebView2] $Script:WebView2 = New-Object Microsoft.Web.WebView2.WinForms.WebView2
+        $Script:WebView2.CreationProperties = New-Object Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties
+        if (-not (Test-Path $Script:WebView2UserProfilePath -PathType Container)) { New-Item -ItemType Directory -Force -Path $Script:WebView2UserProfilePath | Out-Null }
+        $Script:WebView2.CreationProperties.UserDataFolder = $Script:WebView2UserProfilePath
+        $Script:WebView2.CreationProperties.ProfileName = $EdgeProfile
 
         #https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags
         #$EnvironmentOptions = "--msSingleSignOnOSForPrimaryAccountIsShared"
-        #$Script:WebView.CreationProperties.AdditionalBrowserArguments = $EnvironmentOptions
+        #$Script:WebView2.CreationProperties.AdditionalBrowserArguments = $EnvironmentOptions
 
         $InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
 
         $Script:WinForm_Load = {
             try {
-                if ($null -ne $Script:WebView) {
-                    $Script:WebView.Source = ([System.Uri]::New($Script:OmadaWebBaseUrl))
-                    $Script:WebView.Visible = $true
+                if ($null -ne $Script:WebView2) {
+                    $Script:WebView2.Source = ([System.Uri]::New($Script:OmadaWebBaseUrl))
+                    $Script:WebView2.Visible = $true
                 }
             }
             catch {
@@ -50,8 +46,8 @@ function Start-WebView2Login {
 
         $Script:WebView_SourceChanged = {
             try {
-                if ($null -ne $Script:WebView -and $null -ne $Script:WebView.Source -and $null -ne $Script:WinForm) {
-                    $Script:WinForm.Text = $Script:WebView.Source.AbsoluteUri
+                if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.Source -and $null -ne $Script:WinForm) {
+                    $Script:WinForm.Text = $Script:WebView2.Source.AbsoluteUri
                 }
             }
             catch [System.Management.Automation.PipelineStoppedException] {
@@ -60,7 +56,9 @@ function Start-WebView2Login {
             }
             catch {
                 # Use Console.WriteLine to prevent crashes in event handlers
+                [Console]::ForegroundColor = 'Red'
                 [Console]::WriteLine("Error in SourceChanged: $_")
+                [Console]::ResetColor()
             }
         }
 
@@ -75,13 +73,15 @@ function Start-WebView2Login {
                 return
             }
             catch {
+                [Console]::ForegroundColor = 'Red'
                 [Console]::WriteLine("Error in StateCorrection: $_")
+                [Console]::ResetColor()
             }
         }
 
         $Script:WinForm_Cleanup_FormClosed = {
             try {
-                $Script:WebView.remove_SourceChanged($Script:WebView_SourceChanged)
+                $Script:WebView2.remove_SourceChanged($Script:WebView_SourceChanged)
                 $Script:WinForm.remove_Load($Script:WinForm_Load)
                 $Script:WinForm.remove_Load($Script:WinForm_StateCorrection_Load)
                 $Script:WinForm.remove_FormClosed($Script:WinForm_Cleanup_FormClosed)
@@ -90,7 +90,7 @@ function Start-WebView2Login {
         }
 
         $Script:WinForm.SuspendLayout()
-        $Script:WinForm.Controls.Add($Script:WebView)
+        $Script:WinForm.Controls.Add($Script:WebView2)
         $Script:WinForm.AutoScaleDimensions = New-Object System.Drawing.SizeF(6, 13)
         $Script:WinForm.AutoScaleMode = 'Font'
         $Script:WinForm.Dock = 'Fill'
@@ -108,7 +108,9 @@ function Start-WebView2Login {
                     Initialize-WebView2
                 }
                 catch {
+                    [Console]::ForegroundColor = 'Red'
                     [Console]::WriteLine("Error in Add_Shown: $_")
+                    [Console]::ResetColor()
                 }
             })
         # $Script:WinForm.add_FormClosing({
@@ -133,38 +135,24 @@ function Start-WebView2Login {
 
         $Script:WinForm.add_FormClosed($Script:WinForm_Cleanup_FormClosed)
 
-        $Script:WebView.Location = New-Object System.Drawing.Point(0, 49)
-        $Script:WebView.Name = 'webview'
-        $Script:WebView.Dock = 'Fill'
-        $Script:WebView.AutoSize = $true
-        $Script:WebView.TabIndex = 0
-        $Script:WebView.ZoomFactor = 1
-        $Script:WebView.add_SourceChanged($Script:WebView_SourceChanged)
-
-        function New-WebView2EnvironmentWithWam {
-            param(
-                [Parameter(Mandatory)] [string] $UserDataFolder
-            )
-            $envOpts = [Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions]::new()
-            $envOpts.AllowSingleSignOnUsingOSPrimaryAccount = $true
-
-
-            $task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $UserDataFolder, $envOpts)
-            return $task.GetAwaiter().GetResult()
-        }
-
-        $userDataFolder = Join-Path $env:LOCALAPPDATA 'User Data\OmadaWebView2Profile'
-        if (-not (Test-Path $userDataFolder)) { New-Item -ItemType Directory -Force -Path $userDataFolder | Out-Null }
-
+        $Script:WebView2.Location = New-Object System.Drawing.Point(0, 49)
+        $Script:WebView2.Name = 'WebView'
+        $Script:WebView2.Dock = 'Fill'
+        $Script:WebView2.AutoSize = $true
+        $Script:WebView2.TabIndex = 0
+        $Script:WebView2.ZoomFactor = 1
+        $Script:WebView2.add_SourceChanged($Script:WebView_SourceChanged)
 
         # Create the env once and reuse it for all WebView2 instances in this session
         if ($null -eq $Script:WebViewEnv) {
-            $Script:WebViewEnv = New-WebView2EnvironmentWithWam -UserDataFolder $userDataFolder
+            $EnvOptions = [Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions]::new()
+            $EnvOptions.AllowSingleSignOnUsingOSPrimaryAccount = $true
+            $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $Script:WebView2UserProfilePath, $EnvOptions)
+            $Script:WebViewEnv = $Task.GetAwaiter().GetResult()
         }
-        if ($Script:WebView.CoreWebView2 -eq $null) {
-            $null = $WebView.EnsureCoreWebView2Async($Script:WebViewEnv)
+        if ($null -eq $Script:WebView2.CoreWebView2) {
+            $null = $Script:WebView2.EnsureCoreWebView2Async($Script:WebViewEnv)
         }
-
 
         # Disable Ctrl+C handling while form is open avoiding crashing the sessions when CTRL+C is pressed
         $OriginalTreatControlCAsInput = [Console]::TreatControlCAsInput
@@ -174,13 +162,13 @@ function Start-WebView2Login {
 
         [Console]::TreatControlCAsInput = $OriginalTreatControlCAsInput
 
-        $Script:WebView.Dispose()
+        $Script:WebView2.Dispose()
         $Script:WinForm.Dispose()
 
     }
     catch {
         try {
-            $Script:WebView.Dispose()
+            $Script:WebView2.Dispose()
             $Script:WinForm.Dispose()
             if ($null -ne $OriginalTreatControlCAsInput) {
                 [Console]::TreatControlCAsInput = $OriginalTreatControlCAsInput

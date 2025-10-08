@@ -15,8 +15,8 @@ function Get-WebView2PageInfo {
         }
 
         # Update script variables
-        $Script:WebView2Core.Source = $response.Data.url
-        $Script:WebView2Core.DocumentTitle = $response.Data.title
+        $Script:WebViewCore.Source = $response.Data.url
+        $Script:WebViewCore.DocumentTitle = $response.Data.title
 
         return $response.Data
     }

@@ -8,11 +8,6 @@ function Invoke-WebView2MicrosoftLogin {
             return
         }
 
-        # Check if we're on Microsoft login page
-        if ($null -eq $WebView.Source -or $WebView.Source.Host -ne "login.microsoftonline.com") {
-            return
-        }
-
         # Element IDs used by Microsoft login
         $UserNameElementId = "i0116"
         $PasswordElementId = "i0118"
@@ -87,12 +82,29 @@ function Invoke-WebView2MicrosoftLogin {
 "@
 
         # Get all IDs on the page
-        $task = $WebView.CoreWebView2.ExecuteScriptAsync($getAllIdsScript)
-   
-        $idsJson = $Task.GetAwaiter().OnCompleted({
-                return $task.Result
-            })
-        $IdAttributes = $idsJson | ConvertFrom-Json
+        $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($getAllIdsScript)
+
+        $ScriptBlock = {
+            if ($Script:LoginTask.IsFaulted) {
+                return $null
+            }
+            elseif ($Script:LoginTask.IsCompleted) {
+                [Console]::WriteLine("PipelineStoppedException")
+
+                 $Script:LoginTask.Result | ConvertFrom-Json | Out-File ".\Result.json";
+                 1/0
+            }
+            else {
+                return $null
+            }
+        }
+        if ($null -eq $Script:LoginTask) {
+            return
+        }
+        $Result = $Script:LoginTask.GetAwaiter().OnCompleted($ScriptBlock)
+
+        Write-Host "Hier"
+        return
 
         if ($null -eq $IdAttributes) {
             return $false
@@ -106,7 +118,7 @@ function Invoke-WebView2MicrosoftLogin {
                 -and $IdAttributes -contains $CantAccessAccountId) {
 
             # Check if button says "Next"
-            $task = $WebView.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$SubmitButtonId', 'textContent')")
+            $task = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$SubmitButtonId', 'textContent')")
             $task.Wait()
             $buttonText = $task.Result -replace '"', ''
 
@@ -116,14 +128,14 @@ function Invoke-WebView2MicrosoftLogin {
 
                 # Set username
                 $usernameScript = "$setElementValueScript('$UserNameElementId', '$($Script:Credential.UserName)')"
-                $task = $WebView.CoreWebView2.ExecuteScriptAsync($usernameScript)
+                $task = $WebView2.CoreWebView2.ExecuteScriptAsync($usernameScript)
                 $task.Wait()
 
                 Start-Sleep -Milliseconds 200
 
                 # Click submit
                 $clickScript = "$clickElementScript('$SubmitButtonId')"
-                $task = $WebView.CoreWebView2.ExecuteScriptAsync($clickScript)
+                $task = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
                 $task.Wait()
 
                 return $true
@@ -137,7 +149,7 @@ function Invoke-WebView2MicrosoftLogin {
                 -and $IdAttributes -notcontains $CantAccessAccountId) {
 
             # Check if button says "Sign in"
-            $task = $WebView.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$SubmitButtonId', 'textContent')")
+            $task = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$SubmitButtonId', 'textContent')")
             $task.Wait()
             $buttonText = $task.Result -replace '"', ''
 
@@ -148,14 +160,14 @@ function Invoke-WebView2MicrosoftLogin {
                 # Set password
                 $password = $Script:Credential.GetNetworkCredential().Password
                 $passwordScript = "$setElementValueScript('$PasswordElementId', '$password')"
-                $task = $WebView.CoreWebView2.ExecuteScriptAsync($passwordScript)
+                $task = $WebView2.CoreWebView2.ExecuteScriptAsync($passwordScript)
                 $task.Wait()
 
                 Start-Sleep -Milliseconds 200
 
                 # Click submit
                 $clickScript = "$clickElementScript('$SubmitButtonId')"
-                $task = $WebView.CoreWebView2.ExecuteScriptAsync($clickScript)
+                $task = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
                 $task.Wait()
 
                 return $true
@@ -169,11 +181,11 @@ function Invoke-WebView2MicrosoftLogin {
                 -and $IdAttributes -contains $SubmitButtonId) {
 
             # Check button labels
-            $task = $WebView.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$ButtonBackId', 'textContent')")
+            $task = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$ButtonBackId', 'textContent')")
             $task.Wait()
             $backText = $task.Result -replace '"', ''
 
-            $task = $WebView.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$SubmitButtonId', 'textContent')")
+            $task = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$SubmitButtonId', 'textContent')")
             $task.Wait()
             $submitText = $task.Result -replace '"', ''
 
@@ -182,7 +194,7 @@ function Invoke-WebView2MicrosoftLogin {
 
                 # Click "No"
                 $clickScript = "$clickElementScript('$ButtonBackId')"
-                $task = $WebView.CoreWebView2.ExecuteScriptAsync($clickScript)
+                $task = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
                 $task.Wait()
 
                 return $true
@@ -195,7 +207,7 @@ function Invoke-WebView2MicrosoftLogin {
 
             # Try to click account with matching data-test-id
             $clickAccountScript = "$getElementByDataTestIdScript('$($Script:Credential.UserName)')"
-            $task = $WebView.CoreWebView2.ExecuteScriptAsync($clickAccountScript)
+            $task = $WebView2.CoreWebView2.ExecuteScriptAsync($clickAccountScript)
             $task.Wait()
             $result = $task.Result
 
@@ -214,7 +226,7 @@ function Invoke-WebView2MicrosoftLogin {
                 -and $IdAttributes -notcontains $MfaRetryId2) {
 
             # Get MFA code
-            $task = $WebView.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$MfaElementId', 'textContent')")
+            $task = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$MfaElementId', 'textContent')")
             $task.Wait()
             $mfaText = $task.Result -replace '"', ''
 

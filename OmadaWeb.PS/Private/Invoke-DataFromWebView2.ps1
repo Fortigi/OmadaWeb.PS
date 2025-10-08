@@ -4,18 +4,17 @@ function Invoke-DataFromWebView2 {
         $EdgeProfile = "Default"
     )
 
-    "{0} - Opening Webview2 to retrieve authentication cookie" -f $MyInvocation.MyCommand | Write-Host
+    "{0} - Opening WebView2 to retrieve authentication cookie" -f $MyInvocation.MyCommand | Write-Host
 
-    $Url = "{0}://{1}" -f [System.Uri]::New($Script:OmadaWebBaseUrl).Scheme, [System.Uri]::New($Script:OmadaWebBaseUrl).Host
-
-    Install-WebView2
+    if(!(Install-WebView2)){
+        "WebView2 Runtime could not be installed! Cannot continue." | Write-Error -ErrorAction "Stop"
+    }
     $Script:LoginRetryCount = 0
 
     Add-ReflectionAssembly -Object $Script:WebView2CorePath
     Add-ReflectionAssembly -Object $Script:WebView2WinFormsPath
     Add-ReflectionAssembly -Object "System.Drawing" -Type LoadWithPartialName
     Add-ReflectionAssembly -Object "System.Windows.Forms" -Type LoadWithPartialName
-
     do {
         try {
 
@@ -28,10 +27,11 @@ function Invoke-DataFromWebView2 {
                         throw $_
                     }
                 }
-                elseif ($Script:LoginRetryCount -ge 3) {
+                elseif ($Script:LoginRetryCount -gt 3) {
                     "`nLogin retry count exceeded! Please check your credentials as no cookie could be retrieved!" | Write-Error -ErrorAction "Stop" -Category AuthenticationError
                 }
                 else {
+                    "WebView2 window seems to be closed before authentication was completed. Re-open WebView2!" | Write-Host -ForegroundColor Yellow
                     "`n{0} - Login retry count: {1}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount | Write-Verbose
                     try {
                         Start-WebView2Login -EdgeProfile $EdgeProfile
@@ -40,8 +40,6 @@ function Invoke-DataFromWebView2 {
                         throw $_
                     }
                 }
-                "" | Write-Host
-                "WebView2 window seems to be closed before authentication was completed. Re-open WebView2!" | Write-Host -ForegroundColor Yellow
             }
         }
         catch {
@@ -49,7 +47,6 @@ function Invoke-DataFromWebView2 {
         }
     }
     until(($null -ne $Script:OmadaWebAuthCookie -and ($Script:OmadaWebAuthCookie -is [PSCustomObject] -and ($Script:OmadaWebAuthCookie.PsObject.Properties | Measure-Object).Count -gt 0)) -or $Script:LoginRetryCount -gt 3)
-
 
     if ($null -ne $Script:OmadaWebAuthCookie -and ($Script:OmadaWebAuthCookie -is [PSCustomObject] -and ($Script:OmadaWebAuthCookie.PsObject.Properties | Measure-Object).Count -gt 0)) {
         $Script:LoginRetryCount = 0
