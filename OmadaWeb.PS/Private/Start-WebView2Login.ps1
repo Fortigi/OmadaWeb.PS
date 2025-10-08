@@ -4,14 +4,21 @@ function Start-WebView2Login {
         Starts a WebView2 login session for Omada Controller.
     .DESCRIPTION
         This function initializes and starts a WebView2 login session for the Omada Controller. It creates a Windows Form with a WebView2 control to facilitate user authentication.
+    .PARAMETER EdgeProfile
+        The Edge profile name to use. Default is "Default".
+    .PARAMETER InPrivate
+        If specified, enables InPrivate browsing mode. This creates an ephemeral session that doesn't persist cookies, cache, or browsing history.
     .EXAMPLE
         Start-WebView2Login
+    .EXAMPLE
+        Start-WebView2Login -InPrivate
     .NOTES
 
     #>
     [CmdletBinding()]
     param(
-        $EdgeProfile = "Default"
+        [string]$EdgeProfile = "Default",
+        [switch]$InPrivate
     )
 
     try {
@@ -25,6 +32,12 @@ function Start-WebView2Login {
         if (-not (Test-Path $Script:WebView2UserProfilePath -PathType Container)) { New-Item -ItemType Directory -Force -Path $Script:WebView2UserProfilePath | Out-Null }
         $Script:WebView2.CreationProperties.UserDataFolder = $Script:WebView2UserProfilePath
         $Script:WebView2.CreationProperties.ProfileName = $EdgeProfile
+
+        # Enable InPrivate mode if switch is specified
+        if ($InPrivate) {
+            Write-Verbose "Enabling InPrivate browsing mode"
+            $Script:WebView2.CreationProperties.IsInPrivateModeEnabled = $true
+        }
 
         #https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags
         #$EnvironmentOptions = "--msSingleSignOnOSForPrimaryAccountIsShared"

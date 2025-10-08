@@ -1,12 +1,13 @@
 function Invoke-DataFromWebView2 {
     [CmdletBinding()]
     param(
-        $EdgeProfile = "Default"
+        [string]$EdgeProfile = "Default",
+        [switch]$InPrivate
     )
 
     "{0} - Opening WebView2 to retrieve authentication cookie" -f $MyInvocation.MyCommand | Write-Host
 
-    if(!(Install-WebView2)){
+    if (!(Install-WebView2)) {
         "WebView2 Runtime could not be installed! Cannot continue." | Write-Error -ErrorAction "Stop"
     }
     $Script:LoginRetryCount = 0
@@ -21,7 +22,7 @@ function Invoke-DataFromWebView2 {
             if ($null -eq $Script:OmadaWebAuthCookie -or ($Script:OmadaWebAuthCookie -is [PSCustomObject] -and ($Script:OmadaWebAuthCookie.PsObject.Properties | Measure-Object).Count -eq 0)) {
                 if ($Script:LoginRetryCount -eq 0) {
                     try {
-                        Start-WebView2Login -EdgeProfile $EdgeProfile
+                        Start-WebView2Login -EdgeProfile $EdgeProfile -InPrivate:$InPrivate
                     }
                     catch {
                         throw $_
@@ -34,7 +35,7 @@ function Invoke-DataFromWebView2 {
                     "WebView2 window seems to be closed before authentication was completed. Re-open WebView2!" | Write-Host -ForegroundColor Yellow
                     "`n{0} - Login retry count: {1}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount | Write-Verbose
                     try {
-                        Start-WebView2Login -EdgeProfile $EdgeProfile
+                        Start-WebView2Login -EdgeProfile $EdgeProfile -InPrivate:$InPrivate
                     }
                     catch {
                         throw $_
