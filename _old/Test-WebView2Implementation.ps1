@@ -33,13 +33,13 @@ catch {
 # Test 2: Headless WebView2 creation
 Write-Host "2. Testing headless WebView2 creation..." -NoNewline
 try {
-    $Script:WebView2Core = Start-WebView2Headless -Verbose
-    if ($Script:WebView2Core) {
+    $Script:WebViewCore = Start-WebView2Headless -Verbose
+    if ($Script:WebViewCore) {
         Write-Host " ✓ PASSED" -ForegroundColor Green
 
         # Test navigation
         Write-Host "3. Testing navigation..." -NoNewline
-        $Script:WebView2Core.Navigate("https://www.microsoft.com")
+        $Script:WebViewCore.Navigate("https://www.microsoft.com")
         Start-Sleep -Seconds 2
         Write-Host " ✓ PASSED" -ForegroundColor Green
 

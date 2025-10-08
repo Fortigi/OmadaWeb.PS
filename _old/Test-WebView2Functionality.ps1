@@ -50,13 +50,13 @@ function Test-WebView2Functionality {
             $environment = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder, $environmentOptions).GetAwaiter().GetResult()
 
             # Create control (but don't show it)
-            $Script:WebView2Control = New-Object Microsoft.Web.WebView2.WinForms.WebView2
+            $Script:WebViewControl = New-Object Microsoft.Web.WebView2.WinForms.WebView2
 
             # Initialize (this is the critical test)
-            $Script:WebView2Control.EnsureCoreWebView2Async($environment).GetAwaiter().GetResult()
+            $Script:WebViewControl.EnsureCoreWebView2Async($environment).GetAwaiter().GetResult()
 
             # Clean up
-            $Script:WebView2Control.Dispose()
+            $Script:WebViewControl.Dispose()
             $environment.Dispose()
 
             # Clean up temp folder

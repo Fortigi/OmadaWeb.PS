@@ -19,7 +19,7 @@ function Start-WebView2Simple {
     .EXAMPLE
     Start-WebView2Simple -InPrivate
     #>
-    
+
     [CmdletBinding()]
     param(
         [string]$EdgeProfile,
@@ -28,7 +28,7 @@ function Start-WebView2Simple {
 
     try {
         "{0}" -f $MyInvocation.MyCommand | Write-Verbose
-        
+
         # Initialize WebView2 assemblies
         if (-not (Initialize-WebView2Assemblies)) {
             throw "Failed to initialize WebView2 assemblies"
@@ -36,7 +36,7 @@ function Start-WebView2Simple {
 
         # Configure WebView2 environment options
         $userDataFolder = Join-Path $env:LOCALAPPDATA "OmadaWeb.PS\WebView2"
-        
+
         if ($InPrivate) {
             $userDataFolder = Join-Path $env:TEMP "OmadaWeb.PS\WebView2\InPrivate\$(Get-Random)"
             "Using InPrivate mode with temporary profile: {0}" -f $userDataFolder | Write-Verbose
@@ -57,44 +57,44 @@ function Start-WebView2Simple {
         # Create WebView2 environment options
         $environmentOptions = New-Object Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions
         $environmentOptions.AdditionalBrowserArguments = "--disable-web-security --disable-features=VizDisplayCompositor --lang=en"
-        
+
         if ($InPrivate) {
             $environmentOptions.AdditionalBrowserArguments += " --inprivate"
         }
 
         # Create WebView2 environment
         $createEnvironmentTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder, $environmentOptions)
-        $Script:WebView2Environment = $createEnvironmentTask.GetAwaiter().GetResult()
+        $Script:WebViewEnvironment = $createEnvironmentTask.GetAwaiter().GetResult()
 
         # Create a simple form using basic properties only
-        $Script:WebView2Form = New-Object System.Windows.Forms.Form
-        $Script:WebView2Form.Text = "Omada Authentication"
-        $Script:WebView2Form.Width = 564
-        $Script:WebView2Form.Height = 973
-        $Script:WebView2Form.MinimizeBox = $false
-        $Script:WebView2Form.MaximizeBox = $false
-        
+        $Script:WebViewForm = New-Object System.Windows.Forms.Form
+        $Script:WebViewForm.Text = "Omada Authentication"
+        $Script:WebViewForm.Width = 564
+        $Script:WebViewForm.Height = 973
+        $Script:WebViewForm.MinimizeBox = $false
+        $Script:WebViewForm.MaximizeBox = $false
+
         # Center the form manually
         $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Width
         $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height
-        $Script:WebView2Form.Left = [System.Math]::Max(0, ($screenWidth - $Script:WebView2Form.Width) / 2)
-        $Script:WebView2Form.Top = [System.Math]::Max(0, ($screenHeight - $Script:WebView2Form.Height) / 2)
+        $Script:WebViewForm.Left = [System.Math]::Max(0, ($screenWidth - $Script:WebViewForm.Width) / 2)
+        $Script:WebViewForm.Top = [System.Math]::Max(0, ($screenHeight - $Script:WebViewForm.Height) / 2)
 
         # Create WebView2 control
-        $Script:WebView2Control = New-Object Microsoft.Web.WebView2.WinForms.WebView2
-        $Script:WebView2Control.Width = $Script:WebView2Form.ClientSize.Width
-        $Script:WebView2Control.Height = $Script:WebView2Form.ClientSize.Height
-        $Script:WebView2Control.Left = 0
-        $Script:WebView2Control.Top = 0
-        
+        $Script:WebViewControl = New-Object Microsoft.Web.WebView2.WinForms.WebView2
+        $Script:WebViewControl.Width = $Script:WebViewForm.ClientSize.Width
+        $Script:WebViewControl.Height = $Script:WebViewForm.ClientSize.Height
+        $Script:WebViewControl.Left = 0
+        $Script:WebViewControl.Top = 0
+
         # Set anchor styles manually instead of using Dock
         # This avoids the DockStyle enum issue
         try {
-            $anchorProperty = $Script:WebView2Control.GetType().GetProperty("Anchor")
+            $anchorProperty = $Script:WebViewControl.GetType().GetProperty("Anchor")
             if ($anchorProperty) {
                 $anchorStyleType = [System.Type]::GetType("System.Windows.Forms.AnchorStyles")
                 $anchorValue = [System.Enum]::Parse($anchorStyleType, "Top, Bottom, Left, Right")
-                $anchorProperty.SetValue($Script:WebView2Control, $anchorValue)
+                $anchorProperty.SetValue($Script:WebViewControl, $anchorValue)
                 "Set Anchor property for WebView2 control" | Write-Verbose
             }
         }
@@ -103,35 +103,35 @@ function Start-WebView2Simple {
         }
 
         # Initialize WebView2 control with environment
-        $initializeTask = $Script:WebView2Control.EnsureCoreWebView2Async($Script:WebView2Environment)
+        $initializeTask = $Script:WebViewControl.EnsureCoreWebView2Async($Script:WebViewEnvironment)
         $initializeTask.GetAwaiter().GetResult()
 
         # Configure WebView2 settings
-        $Script:WebView2Control.CoreWebView2.Settings.IsGeneralAutofillEnabled = $true
-        $Script:WebView2Control.CoreWebView2.Settings.IsPasswordAutosaveEnabled = $true
-        $Script:WebView2Control.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = $true
-        $Script:WebView2Control.CoreWebView2.Settings.AreDevToolsEnabled = $false
-        $Script:WebView2Control.CoreWebView2.Settings.AreHostObjectsAllowed = $false
-        $Script:WebView2Control.CoreWebView2.Settings.IsScriptEnabled = $true
-        $Script:WebView2Control.CoreWebView2.Settings.IsWebMessageEnabled = $false
+        $Script:WebViewControl.CoreWebView2.Settings.IsGeneralAutofillEnabled = $true
+        $Script:WebViewControl.CoreWebView2.Settings.IsPasswordAutosaveEnabled = $true
+        $Script:WebViewControl.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = $true
+        $Script:WebViewControl.CoreWebView2.Settings.AreDevToolsEnabled = $false
+        $Script:WebViewControl.CoreWebView2.Settings.AreHostObjectsAllowed = $false
+        $Script:WebViewControl.CoreWebView2.Settings.IsScriptEnabled = $true
+        $Script:WebViewControl.CoreWebView2.Settings.IsWebMessageEnabled = $false
 
         # Set custom user agent
         $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
-        $Script:WebView2Control.CoreWebView2.Settings.UserAgent = $userAgent
+        $Script:WebViewControl.CoreWebView2.Settings.UserAgent = $userAgent
 
         # Add resize event handler to keep WebView2 control sized properly
-        $Script:WebView2Form.Add_Resize({
-            if ($Script:WebView2Control) {
-                $Script:WebView2Control.Width = $Script:WebView2Form.ClientSize.Width
-                $Script:WebView2Control.Height = $Script:WebView2Form.ClientSize.Height
+        $Script:WebViewForm.Add_Resize({
+            if ($Script:WebViewControl) {
+                $Script:WebViewControl.Width = $Script:WebViewForm.ClientSize.Width
+                $Script:WebViewControl.Height = $Script:WebViewForm.ClientSize.Height
             }
         })
 
         # Add the WebView2 control to the form
-        $Script:WebView2Form.Controls.Add($Script:WebView2Control)
+        $Script:WebViewForm.Controls.Add($Script:WebViewControl)
 
         "WebView2 control initialized successfully (simple mode)" | Write-Verbose
-        return $Script:WebView2Control
+        return $Script:WebViewControl
     }
     catch {
         "Failed to start WebView2 (simple mode): {0}" -f $_.Exception.Message | Write-Error

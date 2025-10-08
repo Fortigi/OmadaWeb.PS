@@ -60,23 +60,23 @@ function Start-WebView2Simple {
             Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
 
             # Create the main form
-            $Script:WebView2Form = New-Object System.Windows.Forms.Form
-            $Script:WebView2Form.Text = "OmadaWeb.PS WebView2"
-            $Script:WebView2Form.Size = New-Object System.Drawing.Size(1024, 768)
-            $Script:WebView2Form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+            $Script:WebViewForm = New-Object System.Windows.Forms.Form
+            $Script:WebViewForm.Text = "OmadaWeb.PS WebView2"
+            $Script:WebViewForm.Size = New-Object System.Drawing.Size(1024, 768)
+            $Script:WebViewForm.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
 
             if (-not $Visible) {
-                $Script:WebView2Form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
-                $Script:WebView2Form.ShowInTaskbar = $false
-                $Script:WebView2Form.Visible = $false
+                $Script:WebViewForm.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+                $Script:WebViewForm.ShowInTaskbar = $false
+                $Script:WebViewForm.Visible = $false
             }
 
             # Create WebView2 control using WinForms wrapper
-            $Script:WebView2Control = New-Object Microsoft.Web.WebView2.WinForms.WebView2
-            $Script:WebView2Control.Dock = [System.Windows.Forms.DockStyle]::Fill
+            $Script:WebViewControl = New-Object Microsoft.Web.WebView2.WinForms.WebView2
+            $Script:WebViewControl.Dock = [System.Windows.Forms.DockStyle]::Fill
 
             # Add control to form
-            $Script:WebView2Form.Controls.Add($Script:WebView2Control)
+            $Script:WebViewForm.Controls.Add($Script:WebViewControl)
 
             "WebView2 form and control created" | Write-Verbose
 
@@ -84,9 +84,9 @@ function Start-WebView2Simple {
             $environmentOptions = New-Object Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions
 
             # Configure the WebView2 control's environment
-            $Script:WebView2Control.CreationProperties = New-Object Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties
-            $Script:WebView2Control.CreationProperties.UserDataFolder = $userDataFolder
-            $Script:WebView2Control.CreationProperties.EnvironmentOptions = $environmentOptions
+            $Script:WebViewControl.CreationProperties = New-Object Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties
+            $Script:WebViewControl.CreationProperties.UserDataFolder = $userDataFolder
+            $Script:WebViewControl.CreationProperties.EnvironmentOptions = $environmentOptions
 
             "WebView2 environment configuration set" | Write-Verbose
 
@@ -102,7 +102,7 @@ function Start-WebView2Simple {
             $navigationCompletedHandler = {
                 param($eventSender, $eventArgs)
                 try {
-                    $Script:WebView2Core = $Script:WebView2Control.CoreWebView2
+                    $Script:WebViewCore = $Script:WebViewControl.CoreWebView2
                     $script:initSuccess = $true
                     "WebView2 core ready" | Write-Verbose
                 } catch {
@@ -113,14 +113,14 @@ function Start-WebView2Simple {
             }
 
             # Register event handler
-            $Script:WebView2Control.add_CoreWebView2InitializationCompleted($navigationCompletedHandler)
+            $Script:WebViewControl.add_CoreWebView2InitializationCompleted($navigationCompletedHandler)
 
             # Start initialization
-            $null = $Script:WebView2Control.EnsureCoreWebView2Async($null)
+            $null = $Script:WebViewControl.EnsureCoreWebView2Async($null)
 
             # Wait for initialization with timeout
             if ($initEvent.Wait(15000)) { # 15 seconds timeout
-                if ($script:initSuccess -and $Script:WebView2Core) {
+                if ($script:initSuccess -and $Script:WebViewCore) {
                     "WebView2 initialization successful" | Write-Verbose
                 } else {
                     throw "WebView2 initialization failed: $script:initError"
@@ -130,7 +130,7 @@ function Start-WebView2Simple {
             }
 
             # Configure settings
-            $settings = $Script:WebView2Core.Settings
+            $settings = $Script:WebViewCore.Settings
             $settings.IsGeneralAutofillEnabled = $true
             $settings.IsPasswordAutosaveEnabled = $true
             $settings.AreDefaultScriptDialogsEnabled = $true
@@ -146,22 +146,22 @@ function Start-WebView2Simple {
             "WebView2 settings configured" | Write-Verbose
 
             # Store references
-            $Script:WebView2HeadlessMode = (-not $Visible)
-            $Script:WebView2Controller = $null  # Using WinForms control instead
-            $Script:WebView2Environment = $null  # Managed by WinForms control
+            $Script:WebViewHeadlessMode = (-not $Visible)
+            $Script:WebViewController = $null  # Using WinForms control instead
+            $Script:WebViewEnvironment = $null  # Managed by WinForms control
 
             "WebView2 started successfully (WinForms mode, Visible: $Visible)" | Write-Verbose
-            return $Script:WebView2Core
+            return $Script:WebViewCore
 
         } catch {
             "Failed to create WebView2 control: {0}" -f $_.Exception.Message | Write-Error
-            if ($Script:WebView2Form) {
-                $Script:WebView2Form.Dispose()
-                $Script:WebView2Form = $null
+            if ($Script:WebViewForm) {
+                $Script:WebViewForm.Dispose()
+                $Script:WebViewForm = $null
             }
-            if ($Script:WebView2Control) {
-                $Script:WebView2Control.Dispose()
-                $Script:WebView2Control = $null
+            if ($Script:WebViewControl) {
+                $Script:WebViewControl.Dispose()
+                $Script:WebViewControl = $null
             }
             throw
         }

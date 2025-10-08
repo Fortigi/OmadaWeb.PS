@@ -1,9 +1,4 @@
-function Get-WebView2Cookies {
-    <#
-    .SYNOPSIS
-    Gets cookies from the WebView2 browser.
-    #>
-
+function Get-WebView2Cookie {
     [CmdletBinding()]
     param()
     try {
@@ -45,7 +40,7 @@ function Get-WebView2Cookies {
                     if ($Match -and $Match.Count -gt 0) {
                         $Match | ForEach-Object {
                             if (!$Exported -and $_.name -eq 'oisauthtoken') {
-                                "Get-WebView2Cookies - Found oisauthtoken" | Write-Verbose
+                                "Get-WebView2Cookie - Found oisauthtoken" | Write-Verbose
 
                                 if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.CoreWebView2 -and $null -ne $Script:WebView2.CoreWebView2.Settings) {
                                     $Script:UserAgent = $Script:WebView2.CoreWebView2.Settings.UserAgent

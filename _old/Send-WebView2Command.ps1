@@ -19,7 +19,7 @@ function Send-WebView2Command {
     )
 
     try {
-        if (-not $Script:WebView2HelperProcess -or $Script:WebView2HelperProcess.HasExited) {
+        if (-not $Script:WebViewHelperProcess -or $Script:WebViewHelperProcess.HasExited) {
             throw "WebView2 helper process not running"
         }
 
@@ -31,10 +31,10 @@ function Send-WebView2Command {
         $commandJson = ConvertTo-Json $command -Depth 10 -Compress
         "Sending command: {0}" -f $commandJson | Write-Verbose
 
-        $Script:WebView2HelperProcess.StandardInput.WriteLine($commandJson)
-        $Script:WebView2HelperProcess.StandardInput.Flush()
+        $Script:WebViewHelperProcess.StandardInput.WriteLine($commandJson)
+        $Script:WebViewHelperProcess.StandardInput.Flush()
 
-        $responseJson = $Script:WebView2HelperProcess.StandardOutput.ReadLine()
+        $responseJson = $Script:WebViewHelperProcess.StandardOutput.ReadLine()
         "Received response: {0}" -f $responseJson | Write-Verbose
 
         $response = ConvertFrom-Json $responseJson

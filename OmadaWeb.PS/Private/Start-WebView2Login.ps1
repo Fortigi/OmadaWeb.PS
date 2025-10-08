@@ -1,21 +1,8 @@
 function Start-WebView2Login {
-    <#
-    .SYNOPSIS
-        Starts a WebView2 login session for Omada Controller.
-    .DESCRIPTION
-        This function initializes and starts a WebView2 login session for the Omada Controller. It creates a Windows Form with a WebView2 control to facilitate user authentication.
-    .PARAMETER EdgeProfile
-        The Edge profile name to use. Default is "Default".
-    .PARAMETER InPrivate
-        If specified, enables InPrivate browsing mode. This creates an ephemeral session that doesn't persist cookies, cache, or browsing history.
-    .EXAMPLE
-        Start-WebView2Login
-    .EXAMPLE
-        Start-WebView2Login -InPrivate
-    .NOTES
-
-    #>
     [CmdletBinding()]
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidAssignmentToAutomaticVariable', 'sender', Justification = 'The use of sender is intended here for event handlers.')]
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'sender', Justification = 'The use of sender is intended here for event handlers.')]
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'e', Justification = 'The use of e is intended here for event handlers.')]
     param(
         [string]$EdgeProfile = "Default",
         [switch]$InPrivate

@@ -17,13 +17,13 @@ function Close-WebView2 {
         "{0}" -f $MyInvocation.MyCommand | Write-Verbose
 
         # Dispose WebView2 controller (headless mode)
-        if ($Script:WebView2Controller) {
+        if ($Script:WebViewController) {
             try {
                 # Close the controller properly
-                if ($Script:WebView2Controller.GetType().GetMethod("Close")) {
-                    $Script:WebView2Controller.Close()
+                if ($Script:WebViewController.GetType().GetMethod("Close")) {
+                    $Script:WebViewController.Close()
                 }
-                $Script:WebView2Controller = $null
+                $Script:WebViewController = $null
                 "WebView2 controller disposed" | Write-Verbose
             }
             catch {
@@ -32,10 +32,10 @@ function Close-WebView2 {
         }
 
         # Dispose dummy form (headless mode)
-        if ($Script:WebView2DummyForm) {
+        if ($Script:WebViewDummyForm) {
             try {
-                $Script:WebView2DummyForm.Dispose()
-                $Script:WebView2DummyForm = $null
+                $Script:WebViewDummyForm.Dispose()
+                $Script:WebViewDummyForm = $null
                 "WebView2 dummy form disposed" | Write-Verbose
             }
             catch {
@@ -44,10 +44,10 @@ function Close-WebView2 {
         }
 
         # Dispose WebView2 core (headless mode)
-        if ($Script:WebView2Core) {
+        if ($Script:WebViewCore) {
             try {
                 # CoreWebView2 doesn't have a dispose method, just null it
-                $Script:WebView2Core = $null
+                $Script:WebViewCore = $null
                 "WebView2 core disposed" | Write-Verbose
             }
             catch {
@@ -56,21 +56,21 @@ function Close-WebView2 {
         }
 
         # Dispose WebView2 control (UI modes)
-        if ($Script:WebView2Control) {
+        if ($Script:WebViewControl) {
             try {
-                $Script:WebView2Control.Dispose()
+                $Script:WebViewControl.Dispose()
                 "WebView2 control disposed" | Write-Verbose
             }
             catch {
                 "Error disposing WebView2 control: {0}" -f $_.Exception.Message | Write-Verbose
             }
-            $Script:WebView2Control = $null
+            $Script:WebViewControl = $null
         }
 
-        if ($Script:WebView2Environment) {
+        if ($Script:WebViewEnvironment) {
             try {
                 # WebView2 environment doesn't have a dispose method, just null it
-                $Script:WebView2Environment = $null
+                $Script:WebViewEnvironment = $null
                 "WebView2 environment disposed" | Write-Verbose
             }
             catch {
@@ -78,18 +78,18 @@ function Close-WebView2 {
             }
         }
 
-        if ($Script:WebView2Form) {
+        if ($Script:WebViewForm) {
             try {
-                if ($Script:WebView2Form.Visible) {
-                    $Script:WebView2Form.Hide()
+                if ($Script:WebViewForm.Visible) {
+                    $Script:WebViewForm.Hide()
                 }
-                $Script:WebView2Form.Dispose()
+                $Script:WebViewForm.Dispose()
                 "WebView2 form disposed" | Write-Verbose
             }
             catch {
                 "Error disposing WebView2 form: {0}" -f $_.Exception.Message | Write-Verbose
             }
-            $Script:WebView2Form = $null
+            $Script:WebViewForm = $null
         }
 
         # Clean up temporary InPrivate folders
@@ -107,8 +107,8 @@ function Close-WebView2 {
         }
 
         # Reset mode flags
-        $Script:WebView2MinimalMode = $false
-        $Script:WebView2HeadlessMode = $false
+        $Script:WebViewMinimalMode = $false
+        $Script:WebViewHeadlessMode = $false
 
         "WebView2 cleanup completed" | Write-Verbose
     }

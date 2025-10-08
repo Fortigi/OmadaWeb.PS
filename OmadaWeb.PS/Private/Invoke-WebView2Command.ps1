@@ -1,9 +1,4 @@
 function Invoke-WebView2Command {
-    <#
-    .SYNOPSIS
-    Invoke commands for WebView2 operations.
-    #>
-
     [CmdletBinding()]
     param(
         [scriptblock]$ScriptBlock

@@ -57,7 +57,7 @@ function Start-WebView2Minimal {
         # Create WebView2 environment without options to avoid constructor issues
         try {
             $createEnvironmentTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder)
-            $Script:WebView2Environment = $createEnvironmentTask.GetAwaiter().GetResult()
+            $Script:WebViewEnvironment = $createEnvironmentTask.GetAwaiter().GetResult()
             "WebView2 environment created successfully" | Write-Verbose
         }
         catch {
@@ -68,8 +68,8 @@ function Start-WebView2Minimal {
         # Create a minimal control without Windows Forms
         try {
             # Use reflection to create the WebView2 control to avoid direct Windows Forms dependencies
-            $Script:WebView2Type = [Microsoft.Web.WebView2.WinForms.WebView2]
-            $Script:WebView2Control = [System.Activator]::CreateInstance($Script:WebView2Type)
+            $Script:WebViewType = [Microsoft.Web.WebView2.WinForms.WebView2]
+            $Script:WebViewControl = [System.Activator]::CreateInstance($Script:WebViewType)
 
             "WebView2 control created using reflection" | Write-Verbose
         }
@@ -80,7 +80,7 @@ function Start-WebView2Minimal {
 
         # Initialize WebView2 control with environment
         try {
-            $initializeTask = $Script:WebView2Control.EnsureCoreWebView2Async($Script:WebView2Environment)
+            $initializeTask = $Script:WebViewControl.EnsureCoreWebView2Async($Script:WebViewEnvironment)
             $initializeTask.GetAwaiter().GetResult()
             "WebView2 control initialized with environment" | Write-Verbose
         }
@@ -91,17 +91,17 @@ function Start-WebView2Minimal {
 
         # Configure WebView2 settings
         try {
-            $Script:WebView2Control.CoreWebView2.Settings.IsGeneralAutofillEnabled = $true
-            $Script:WebView2Control.CoreWebView2.Settings.IsPasswordAutosaveEnabled = $true
-            $Script:WebView2Control.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = $true
-            $Script:WebView2Control.CoreWebView2.Settings.AreDevToolsEnabled = $false
-            $Script:WebView2Control.CoreWebView2.Settings.AreHostObjectsAllowed = $false
-            $Script:WebView2Control.CoreWebView2.Settings.IsScriptEnabled = $true
-            $Script:WebView2Control.CoreWebView2.Settings.IsWebMessageEnabled = $false
+            $Script:WebViewControl.CoreWebView2.Settings.IsGeneralAutofillEnabled = $true
+            $Script:WebViewControl.CoreWebView2.Settings.IsPasswordAutosaveEnabled = $true
+            $Script:WebViewControl.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = $true
+            $Script:WebViewControl.CoreWebView2.Settings.AreDevToolsEnabled = $false
+            $Script:WebViewControl.CoreWebView2.Settings.AreHostObjectsAllowed = $false
+            $Script:WebViewControl.CoreWebView2.Settings.IsScriptEnabled = $true
+            $Script:WebViewControl.CoreWebView2.Settings.IsWebMessageEnabled = $false
 
             # Set custom user agent
             $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
-            $Script:WebView2Control.CoreWebView2.Settings.UserAgent = $userAgent
+            $Script:WebViewControl.CoreWebView2.Settings.UserAgent = $userAgent
 
             "WebView2 settings configured successfully" | Write-Verbose
         }
@@ -111,11 +111,11 @@ function Start-WebView2Minimal {
         }
 
         # Store a flag indicating we're using minimal mode
-        $Script:WebView2MinimalMode = $true
-        $Script:WebView2Form = $null  # No form in minimal mode
+        $Script:WebViewMinimalMode = $true
+        $Script:WebViewForm = $null  # No form in minimal mode
 
         "WebView2 control initialized successfully (minimal mode)" | Write-Verbose
-        return $Script:WebView2Control
+        return $Script:WebViewControl
     }
     catch {
         "Failed to start WebView2 (minimal mode): {0}" -f $_.Exception.Message | Write-Error

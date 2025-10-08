@@ -74,7 +74,7 @@ try {
     # Step 7: Test cookie retrieval
     Write-Host "7. Testing cookie retrieval..." -NoNewline
     try {
-        $cookies = Get-WebView2Cookies
+        $cookies = Get-WebView2Cookie
         if ($cookies -and $cookies.Count -gt 0) {
             Write-Host " ✓ Found $($cookies.Count) cookies" -ForegroundColor Green
         } else {
@@ -107,7 +107,7 @@ try {
         $null = Invoke-WebView2Script -Script $setCookieScript
 
         # Verify cookie was set
-        $updatedCookies = Get-WebView2Cookies
+        $updatedCookies = Get-WebView2Cookie
         $authCookie = $updatedCookies | Where-Object { $_.name -eq "oisauthtoken" }
 
         if ($authCookie) {

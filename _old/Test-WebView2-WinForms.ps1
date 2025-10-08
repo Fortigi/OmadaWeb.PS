@@ -1,13 +1,13 @@
-# Test the fixed WebView2 headless implementation
+# Test the WinForms-based WebView2 implementation
 param()
 
-Write-Host "Testing Fixed WebView2 Headless Implementation..." -ForegroundColor Yellow
+Write-Host "Testing WinForms-based WebView2 Implementation..." -ForegroundColor Yellow
 
 try {
     # Dot-source required functions
     . ".\OmadaWeb.PS\Private\Install-WebView2.ps1"
     . ".\OmadaWeb.PS\Private\Initialize-WebView2Assemblies.ps1"
-    . ".\OmadaWeb.PS\Private\Start-WebView2Headless-Fixed.ps1"
+    . ".\OmadaWeb.PS\Private\Start-WebView2Simple-Fixed.ps1"
     . ".\OmadaWeb.PS\Private\Close-WebView2.ps1"
 
     Write-Host "1. Initializing assemblies..." -NoNewline
@@ -19,26 +19,38 @@ try {
         exit 1
     }
 
-    Write-Host "2. Creating headless WebView2..." -NoNewline
-    $Script:WebView2Core = Start-WebView2Headless -Verbose
-    if ($Script:WebView2Core) {
+    Write-Host "2. Creating WebView2 (WinForms, invisible)..." -NoNewline
+    $Script:WebViewCore = Start-WebView2Simple -Visible:$false -Verbose
+    if ($Script:WebViewCore) {
         Write-Host " ✓" -ForegroundColor Green
 
         Write-Host "3. Testing navigation..." -NoNewline
-        $Script:WebView2Core.Navigate("https://www.microsoft.com")
+        $Script:WebViewCore.Navigate("https://httpbin.org/html")
         Start-Sleep -Seconds 3
         Write-Host " ✓" -ForegroundColor Green
 
         Write-Host "4. Getting page title..." -NoNewline
         Start-Sleep -Seconds 2
-        $title = $Script:WebView2Core.DocumentTitle
+        $title = $Script:WebViewCore.DocumentTitle
         if ($title) {
             Write-Host " ✓ Title: $title" -ForegroundColor Green
         } else {
             Write-Host " ! No title yet" -ForegroundColor Yellow
         }
 
-        Write-Host "5. Cleaning up..." -NoNewline
+        Write-Host "5. Testing JavaScript execution..." -NoNewline
+        try {
+            $jsResult = $Script:WebViewCore.ExecuteScriptAsync("document.title").GetAwaiter().GetResult()
+            if ($jsResult) {
+                Write-Host " ✓ JS Result: $jsResult" -ForegroundColor Green
+            } else {
+                Write-Host " ! No JS result" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host " ! JS Error: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+
+        Write-Host "6. Cleaning up..." -NoNewline
         Close-WebView2
         Write-Host " ✓" -ForegroundColor Green
 
@@ -47,7 +59,7 @@ try {
         exit 1
     }
 
-    Write-Host "Fixed WebView2 test completed successfully!" -ForegroundColor Green
+    Write-Host "WinForms WebView2 test completed successfully!" -ForegroundColor Green
 }
 catch {
     Write-Host " ✗ FAILED: $($_.Exception.Message)" -ForegroundColor Red

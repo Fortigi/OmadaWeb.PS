@@ -10,7 +10,7 @@ function Stop-WebView2Helper {
     try {
         "{0}" -f $MyInvocation.MyCommand | Write-Verbose
 
-        if ($Script:WebView2HelperProcess -and -not $Script:WebView2HelperProcess.HasExited) {
+        if ($Script:WebViewHelperProcess -and -not $Script:WebViewHelperProcess.HasExited) {
             try {
                 # Send close command
                 $response = Send-WebView2Command -Action "close"
@@ -24,18 +24,18 @@ function Stop-WebView2Helper {
             Start-Sleep -Milliseconds 500
 
             # Kill the process if it's still running
-            if (-not $Script:WebView2HelperProcess.HasExited) {
-                $Script:WebView2HelperProcess.Kill()
-                $Script:WebView2HelperProcess.WaitForExit(2000)
+            if (-not $Script:WebViewHelperProcess.HasExited) {
+                $Script:WebViewHelperProcess.Kill()
+                $Script:WebViewHelperProcess.WaitForExit(2000)
             }
 
-            $Script:WebView2HelperProcess.Dispose()
+            $Script:WebViewHelperProcess.Dispose()
         }
 
         # Clean up script variables
-        $Script:WebView2HelperProcess = $null
-        $Script:WebView2HelperInitialized = $false
-        $Script:WebView2Core = $null
+        $Script:WebViewHelperProcess = $null
+        $Script:WebViewHelperInitialized = $false
+        $Script:WebViewCore = $null
 
         "WebView2 helper stopped and cleaned up" | Write-Verbose
     }

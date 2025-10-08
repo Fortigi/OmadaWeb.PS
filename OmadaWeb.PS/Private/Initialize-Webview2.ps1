@@ -1,5 +1,7 @@
 function Initialize-WebView2 {
     [CmdletBinding()]
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidAssignmentToAutomaticVariable', 'sender', Justification = 'The use of sender is intended here for event handlers.')]
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'sender', Justification = 'The use of sender is intended here for event handlers.')]
     param()
 
     try {
@@ -38,7 +40,7 @@ function Initialize-WebView2 {
                                     }
                                     switch ($Script:WebView2.Source) {
                                         { $_.Host -eq [System.Uri]::New($Script:OmadaWebBaseUrl).Host } {
-                                            Get-WebView2Cookies
+                                            Get-WebView2Cookie
                                         }
                                         { $_.Host -eq [System.Uri]::New("https://login.microsoftonline.com").Host -and $Script:MicrosoftOnlineLogin} {
                                             Invoke-WebView2MicrosoftLogin

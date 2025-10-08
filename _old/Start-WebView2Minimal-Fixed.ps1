@@ -69,7 +69,7 @@ function Start-WebView2Minimal {
                 if ($environmentTask.IsFaulted) {
                     throw "Environment creation failed: $($environmentTask.Exception.InnerException.Message)"
                 }
-                $Script:WebView2Environment = $environmentTask.Result
+                $Script:WebViewEnvironment = $environmentTask.Result
                 "WebView2 environment created successfully" | Write-Verbose
             } else {
                 throw "WebView2 environment creation timed out after $maxWait seconds"
@@ -110,15 +110,15 @@ function Start-WebView2Minimal {
                 }
 '@
 
-            $Script:WebView2MessageWindow = [Win32Window]::CreateMessageWindow()
-            if ($Script:WebView2MessageWindow -eq [IntPtr]::Zero) {
+            $Script:WebViewMessageWindow = [Win32Window]::CreateMessageWindow()
+            if ($Script:WebViewMessageWindow -eq [IntPtr]::Zero) {
                 throw "Failed to create message window"
             }
 
-            "Message window created: 0x{0:X}" -f $Script:WebView2MessageWindow.ToInt64() | Write-Verbose
+            "Message window created: 0x{0:X}" -f $Script:WebViewMessageWindow.ToInt64() | Write-Verbose
 
             # Create controller using the message window
-            $controllerTask = $Script:WebView2Environment.CreateCoreWebView2ControllerAsync($Script:WebView2MessageWindow)
+            $controllerTask = $Script:WebViewEnvironment.CreateCoreWebView2ControllerAsync($Script:WebViewMessageWindow)
 
             # Wait for controller creation
             $maxWait = 30 # seconds
@@ -132,8 +132,8 @@ function Start-WebView2Minimal {
                 if ($controllerTask.IsFaulted) {
                     throw "Controller creation failed: $($controllerTask.Exception.InnerException.Message)"
                 }
-                $Script:WebView2Controller = $controllerTask.Result
-                $Script:WebView2Core = $Script:WebView2Controller.CoreWebView2
+                $Script:WebViewController = $controllerTask.Result
+                $Script:WebViewCore = $Script:WebViewController.CoreWebView2
                 "WebView2 controller created successfully" | Write-Verbose
             } else {
                 throw "WebView2 controller creation timed out after $maxWait seconds"
@@ -141,16 +141,16 @@ function Start-WebView2Minimal {
         }
         catch {
             "Failed to create WebView2 controller: {0}" -f $_.Exception.Message | Write-Error
-            if ($Script:WebView2MessageWindow -ne [IntPtr]::Zero) {
-                [Win32Window]::DestroyWindow($Script:WebView2MessageWindow)
-                $Script:WebView2MessageWindow = [IntPtr]::Zero
+            if ($Script:WebViewMessageWindow -ne [IntPtr]::Zero) {
+                [Win32Window]::DestroyWindow($Script:WebViewMessageWindow)
+                $Script:WebViewMessageWindow = [IntPtr]::Zero
             }
             throw
         }
 
         # Configure WebView2 settings
         try {
-            $settings = $Script:WebView2Core.Settings
+            $settings = $Script:WebViewCore.Settings
             $settings.IsGeneralAutofillEnabled = $true
             $settings.IsPasswordAutosaveEnabled = $true
             $settings.AreDefaultScriptDialogsEnabled = $true
@@ -171,12 +171,12 @@ function Start-WebView2Minimal {
         }
 
         # Store flags
-        $Script:WebView2HeadlessMode = $true
-        $Script:WebView2Form = $null
-        $Script:WebView2Control = $null
+        $Script:WebViewHeadlessMode = $true
+        $Script:WebViewForm = $null
+        $Script:WebViewControl = $null
 
         "WebView2 initialized successfully (minimal mode)" | Write-Verbose
-        return $Script:WebView2Core
+        return $Script:WebViewCore
     }
     catch {
         "Failed to start WebView2 (minimal mode): {0}" -f $_.Exception.Message | Write-Error

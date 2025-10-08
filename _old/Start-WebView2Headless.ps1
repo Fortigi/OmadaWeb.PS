@@ -57,7 +57,7 @@ function Start-WebView2Headless {
         # Create WebView2 environment
         try {
             $createEnvironmentTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder)
-            $Script:WebView2Environment = $createEnvironmentTask.GetAwaiter().GetResult()
+            $Script:WebViewEnvironment = $createEnvironmentTask.GetAwaiter().GetResult()
             "WebView2 environment created successfully" | Write-Verbose
         }
         catch {
@@ -71,11 +71,11 @@ function Start-WebView2Headless {
             $dummyHwnd = [System.IntPtr]::Zero
 
             # Create controller
-            $createControllerTask = $Script:WebView2Environment.CreateAsync($dummyHwnd)
-            $Script:WebView2Controller = $createControllerTask.GetAwaiter().GetResult()
+            $createControllerTask = $Script:WebViewEnvironment.CreateAsync($dummyHwnd)
+            $Script:WebViewController = $createControllerTask.GetAwaiter().GetResult()
 
             # Get the CoreWebView2 from the controller
-            $Script:WebView2Core = $Script:WebView2Controller.CoreWebView2
+            $Script:WebViewCore = $Script:WebViewController.CoreWebView2
 
             "WebView2 controller created successfully (headless)" | Write-Verbose
         }
@@ -86,17 +86,17 @@ function Start-WebView2Headless {
 
         # Configure WebView2 settings
         try {
-            $Script:WebView2Core.Settings.IsGeneralAutofillEnabled = $true
-            $Script:WebView2Core.Settings.IsPasswordAutosaveEnabled = $true
-            $Script:WebView2Core.Settings.AreDefaultScriptDialogsEnabled = $true
-            $Script:WebView2Core.Settings.AreDevToolsEnabled = $false
-            $Script:WebView2Core.Settings.AreHostObjectsAllowed = $false
-            $Script:WebView2Core.Settings.IsScriptEnabled = $true
-            $Script:WebView2Core.Settings.IsWebMessageEnabled = $false
+            $Script:WebViewCore.Settings.IsGeneralAutofillEnabled = $true
+            $Script:WebViewCore.Settings.IsPasswordAutosaveEnabled = $true
+            $Script:WebViewCore.Settings.AreDefaultScriptDialogsEnabled = $true
+            $Script:WebViewCore.Settings.AreDevToolsEnabled = $false
+            $Script:WebViewCore.Settings.AreHostObjectsAllowed = $false
+            $Script:WebViewCore.Settings.IsScriptEnabled = $true
+            $Script:WebViewCore.Settings.IsWebMessageEnabled = $false
 
             # Set custom user agent
             $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
-            $Script:WebView2Core.Settings.UserAgent = $userAgent
+            $Script:WebViewCore.Settings.UserAgent = $userAgent
 
             "WebView2 settings configured successfully" | Write-Verbose
         }
@@ -106,12 +106,12 @@ function Start-WebView2Headless {
         }
 
         # Store flags
-        $Script:WebView2HeadlessMode = $true
-        $Script:WebView2Form = $null
-        $Script:WebView2Control = $null
+        $Script:WebViewHeadlessMode = $true
+        $Script:WebViewForm = $null
+        $Script:WebViewControl = $null
 
         "WebView2 initialized successfully (headless mode)" | Write-Verbose
-        return $Script:WebView2Core
+        return $Script:WebViewCore
     }
     catch {
         "Failed to start WebView2 (headless mode): {0}" -f $_.Exception.Message | Write-Error

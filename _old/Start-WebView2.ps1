@@ -19,7 +19,7 @@ function Start-WebView2 {
     .EXAMPLE
     Start-WebView2 -InPrivate
     #>
-    
+
     [CmdletBinding()]
     param(
         [string]$EdgeProfile,
@@ -28,7 +28,7 @@ function Start-WebView2 {
 
     try {
         "{0}" -f $MyInvocation.MyCommand | Write-Verbose
-        
+
         # Ensure WebView2 is installed
         if (-not (Install-WebView2)) {
             throw "WebView2 installation failed"
@@ -37,7 +37,7 @@ function Start-WebView2 {
         # Load required assemblies
         Add-Type -AssemblyName System.Windows.Forms
         Add-Type -AssemblyName System.Drawing
-        
+
         try {
             Add-Type -Path $Script:WebView2WinFormsPath
             Add-Type -Path $Script:WebView2CorePath
@@ -48,21 +48,21 @@ function Start-WebView2 {
         }
 
         # Create the form
-        $Script:WebView2Form = New-Object System.Windows.Forms.Form
-        $Script:WebView2Form.Text = "Omada Authentication"
-        $Script:WebView2Form.Size = New-Object System.Drawing.Size(564, 973)
-        $Script:WebView2Form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
-        $Script:WebView2Form.MinimizeBox = $false
-        $Script:WebView2Form.MaximizeBox = $false
-        $Script:WebView2Form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
+        $Script:WebViewForm = New-Object System.Windows.Forms.Form
+        $Script:WebViewForm.Text = "Omada Authentication"
+        $Script:WebViewForm.Size = New-Object System.Drawing.Size(564, 973)
+        $Script:WebViewForm.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+        $Script:WebViewForm.MinimizeBox = $false
+        $Script:WebViewForm.MaximizeBox = $false
+        $Script:WebViewForm.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
 
         # Create WebView2 control
-        $Script:WebView2Control = New-Object Microsoft.Web.WebView2.WinForms.WebView2
-        $Script:WebView2Control.Dock = [System.Windows.Forms.DockStyle]::Fill
-        
+        $Script:WebViewControl = New-Object Microsoft.Web.WebView2.WinForms.WebView2
+        $Script:WebViewControl.Dock = [System.Windows.Forms.DockStyle]::Fill
+
         # Configure WebView2 environment
         $userDataFolder = Join-Path $env:LOCALAPPDATA "OmadaWeb.PS\WebView2"
-        
+
         if ($InPrivate) {
             # For InPrivate mode, use a temporary folder that gets cleaned up
             $userDataFolder = Join-Path $env:TEMP "OmadaWeb.PS\WebView2\InPrivate\$(Get-Random)"
@@ -85,35 +85,35 @@ function Start-WebView2 {
         # Create WebView2 environment
         $environmentOptions = New-Object Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions
         $environmentOptions.AdditionalBrowserArguments = "--disable-web-security --disable-features=VizDisplayCompositor --lang=en"
-        
+
         if ($InPrivate) {
             $environmentOptions.AdditionalBrowserArguments += " --inprivate"
         }
 
         # Initialize WebView2 environment
-        $Script:WebView2Environment = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder, $environmentOptions).GetAwaiter().GetResult()
-        
+        $Script:WebViewEnvironment = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder, $environmentOptions).GetAwaiter().GetResult()
+
         # Initialize WebView2 control
-        $Script:WebView2Control.EnsureCoreWebView2Async($Script:WebView2Environment).GetAwaiter().GetResult()
+        $Script:WebViewControl.EnsureCoreWebView2Async($Script:WebViewEnvironment).GetAwaiter().GetResult()
 
         # Add the WebView2 control to the form
-        $Script:WebView2Form.Controls.Add($Script:WebView2Control)
+        $Script:WebViewForm.Controls.Add($Script:WebViewControl)
 
         # Configure additional WebView2 settings
-        $Script:WebView2Control.CoreWebView2.Settings.IsGeneralAutofillEnabled = $true
-        $Script:WebView2Control.CoreWebView2.Settings.IsPasswordAutosaveEnabled = $true
-        $Script:WebView2Control.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = $true
-        $Script:WebView2Control.CoreWebView2.Settings.AreDevToolsEnabled = $false
-        $Script:WebView2Control.CoreWebView2.Settings.AreHostObjectsAllowed = $false
-        $Script:WebView2Control.CoreWebView2.Settings.IsScriptEnabled = $true
-        $Script:WebView2Control.CoreWebView2.Settings.IsWebMessageEnabled = $false
+        $Script:WebViewControl.CoreWebView2.Settings.IsGeneralAutofillEnabled = $true
+        $Script:WebViewControl.CoreWebView2.Settings.IsPasswordAutosaveEnabled = $true
+        $Script:WebViewControl.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = $true
+        $Script:WebViewControl.CoreWebView2.Settings.AreDevToolsEnabled = $false
+        $Script:WebViewControl.CoreWebView2.Settings.AreHostObjectsAllowed = $false
+        $Script:WebViewControl.CoreWebView2.Settings.IsScriptEnabled = $true
+        $Script:WebViewControl.CoreWebView2.Settings.IsWebMessageEnabled = $false
 
         # Set custom user agent to match Edge
         $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
-        $Script:WebView2Control.CoreWebView2.Settings.UserAgent = $userAgent
+        $Script:WebViewControl.CoreWebView2.Settings.UserAgent = $userAgent
 
         "WebView2 control initialized successfully" | Write-Verbose
-        return $Script:WebView2Control
+        return $Script:WebViewControl
     }
     catch {
         "Failed to start WebView2: {0}" -f $_.Exception.Message | Write-Error

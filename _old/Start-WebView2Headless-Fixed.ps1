@@ -57,7 +57,7 @@ function Start-WebView2Headless {
         # Create WebView2 environment
         try {
             $createEnvironmentTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $userDataFolder)
-            $Script:WebView2Environment = $createEnvironmentTask.GetAwaiter().GetResult()
+            $Script:WebViewEnvironment = $createEnvironmentTask.GetAwaiter().GetResult()
             "WebView2 environment created successfully" | Write-Verbose
         }
         catch {
@@ -73,22 +73,22 @@ function Start-WebView2Headless {
             }
 
             # Create a proper form that can be shown/hidden quickly
-            $Script:WebView2Form = New-Object System.Windows.Forms.Form
-            $Script:WebView2Form.Text = "OmadaWeb.PS WebView2"
-            $Script:WebView2Form.Size = New-Object System.Drawing.Size(1024, 768)
-            $Script:WebView2Form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
-            $Script:WebView2Form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
-            $Script:WebView2Form.ShowInTaskbar = $false
-            $Script:WebView2Form.Visible = $false
+            $Script:WebViewForm = New-Object System.Windows.Forms.Form
+            $Script:WebViewForm.Text = "OmadaWeb.PS WebView2"
+            $Script:WebViewForm.Size = New-Object System.Drawing.Size(1024, 768)
+            $Script:WebViewForm.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+            $Script:WebViewForm.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+            $Script:WebViewForm.ShowInTaskbar = $false
+            $Script:WebViewForm.Visible = $false
 
             # Create the form handle
-            $formHandle = $Script:WebView2Form.Handle
+            $formHandle = $Script:WebViewForm.Handle
 
             # Use synchronous approach with timeout for PowerShell compatibility
             "Creating WebView2 controller (this may take a moment)..." | Write-Verbose
 
             # Create controller with proper timeout handling
-            $createControllerTask = $Script:WebView2Environment.CreateCoreWebView2ControllerAsync($formHandle)
+            $createControllerTask = $Script:WebViewEnvironment.CreateCoreWebView2ControllerAsync($formHandle)
 
             # PowerShell-friendly synchronous wait with timeout
             $timeoutMs = 30000  # 30 seconds
@@ -98,27 +98,27 @@ function Start-WebView2Headless {
                 throw "WebView2 controller creation timed out after $($timeoutMs/1000) seconds"
             }
 
-            $Script:WebView2Controller = $createControllerTask.Result
-            $Script:WebView2Core = $Script:WebView2Controller.CoreWebView2
+            $Script:WebViewController = $createControllerTask.Result
+            $Script:WebViewCore = $Script:WebViewController.CoreWebView2
 
             # Configure the controller for headless operation
-            $Script:WebView2Controller.IsVisible = $false
-            $Script:WebView2Controller.Bounds = New-Object System.Drawing.Rectangle(0, 0, 1024, 768)
+            $Script:WebViewController.IsVisible = $false
+            $Script:WebViewController.Bounds = New-Object System.Drawing.Rectangle(0, 0, 1024, 768)
 
             "WebView2 controller created successfully (headless mode)" | Write-Verbose
         }
         catch {
             "Failed to create WebView2 controller: {0}" -f $_.Exception.Message | Write-Error
-            if ($Script:WebView2Form) {
-                $Script:WebView2Form.Dispose()
-                $Script:WebView2Form = $null
+            if ($Script:WebViewForm) {
+                $Script:WebViewForm.Dispose()
+                $Script:WebViewForm = $null
             }
             throw
         }
 
         # Configure WebView2 settings
         try {
-            $settings = $Script:WebView2Core.Settings
+            $settings = $Script:WebViewCore.Settings
             $settings.IsGeneralAutofillEnabled = $true
             $settings.IsPasswordAutosaveEnabled = $true
             $settings.AreDefaultScriptDialogsEnabled = $true
@@ -139,11 +139,11 @@ function Start-WebView2Headless {
         }
 
         # Store flags
-        $Script:WebView2HeadlessMode = $true
-        $Script:WebView2Control = $null  # Not using WinForms control in headless mode
+        $Script:WebViewHeadlessMode = $true
+        $Script:WebViewControl = $null  # Not using WinForms control in headless mode
 
         "WebView2 initialized successfully (headless mode)" | Write-Verbose
-        return $Script:WebView2Core
+        return $Script:WebViewCore
     }
     catch {
         "Failed to start WebView2 (headless mode): {0}" -f $_.Exception.Message | Write-Error

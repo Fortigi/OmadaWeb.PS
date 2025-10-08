@@ -39,8 +39,8 @@ function Invoke-WebView2Navigate {
             }
 
             # Update script variables
-            $Script:WebView2Core.Source = $waitResponse.Data.url
-            $Script:WebView2Core.DocumentTitle = $waitResponse.Data.title
+            $Script:WebViewCore.Source = $waitResponse.Data.url
+            $Script:WebViewCore.DocumentTitle = $waitResponse.Data.title
 
             return $waitResponse.Data
         }

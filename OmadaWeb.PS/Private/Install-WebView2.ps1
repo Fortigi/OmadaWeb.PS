@@ -1,16 +1,4 @@
 function Install-WebView2 {
-    <#
-    .SYNOPSIS
-    Installs or verifies the WebView2 runtime and assemblies.
-
-    .DESCRIPTION
-    This function ensures that the Microsoft WebView2 runtime is available and installs the WebView2 NuGet package
-    for PowerShell integration if needed.
-
-    .EXAMPLE
-    Install-WebView2
-    #>
-
     [CmdletBinding()]
     param()
 

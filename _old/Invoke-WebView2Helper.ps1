@@ -55,14 +55,14 @@ function Start-WebView2Helper {
         $startInfo.RedirectStandardError = $true
         $startInfo.CreateNoWindow = $true
 
-        $Script:WebView2HelperProcess = [System.Diagnostics.Process]::Start($startInfo)
+        $Script:WebViewHelperProcess = [System.Diagnostics.Process]::Start($startInfo)
 
-        if (-not $Script:WebView2HelperProcess) {
+        if (-not $Script:WebViewHelperProcess) {
             throw "Failed to start WebView2 helper process"
         }
 
         # Wait for ready message
-        $readyResponse = $Script:WebView2HelperProcess.StandardOutput.ReadLine()
+        $readyResponse = $Script:WebViewHelperProcess.StandardOutput.ReadLine()
         $readyData = ConvertFrom-Json $readyResponse
 
         if ($readyData.status -ne "ready") {
@@ -95,20 +95,20 @@ function Start-WebView2Helper {
         "WebView2 initialized: {0}" -f ($response.Data | ConvertTo-Json -Compress) | Write-Verbose
 
         # Store helper process info
-        $Script:WebView2HelperInitialized = $true
-        $Script:WebView2Core = [PSCustomObject]@{
-            HelperProcess = $Script:WebView2HelperProcess
+        $Script:WebViewHelperInitialized = $true
+        $Script:WebViewCore = [PSCustomObject]@{
+            HelperProcess = $Script:WebViewHelperProcess
             Source = ""
             DocumentTitle = ""
         }
 
-        return $Script:WebView2Core
+        return $Script:WebViewCore
     }
     catch {
         "Failed to start WebView2 helper: {0}" -f $_.Exception.Message | Write-Error
-        if ($Script:WebView2HelperProcess) {
-            $Script:WebView2HelperProcess.Kill()
-            $Script:WebView2HelperProcess = $null
+        if ($Script:WebViewHelperProcess) {
+            $Script:WebViewHelperProcess.Kill()
+            $Script:WebViewHelperProcess = $null
         }
         throw
     }
