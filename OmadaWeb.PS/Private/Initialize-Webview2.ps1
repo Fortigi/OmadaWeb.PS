@@ -4,6 +4,7 @@ function Initialize-WebView2 {
 
     try {
         Write-Host "`r`nWebView2 opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
+        $Script:MicrosoftOnlineLogin = $true
 
         $Script:WebView2.add_CoreWebView2InitializationCompleted({
 
@@ -39,9 +40,8 @@ function Initialize-WebView2 {
                                         { $_.Host -eq [System.Uri]::New($Script:OmadaWebBaseUrl).Host } {
                                             Get-WebView2Cookies
                                         }
-                                        { $_.Host -eq [System.Uri]::New("https://login.microsoftonline.com").Host } {
-                                            #Wait-Debugger
-                                            #Invoke-WebView2MicrosoftLogin
+                                        { $_.Host -eq [System.Uri]::New("https://login.microsoftonline.com").Host -and $Script:MicrosoftOnlineLogin} {
+                                            Invoke-WebView2MicrosoftLogin
                                         }
                                         default {
                                             return
