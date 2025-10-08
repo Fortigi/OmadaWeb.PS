@@ -23,7 +23,7 @@ function Install-WebView2 {
             #TODO: Troubleshoot why Get-NuGetPackage does not work here as expected
             #$NuGetResults = Get-NuGetPackage -PackageName "Microsoft.Web.WebView2"
 
-            $PackageUrl = "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2"
+            $PackageUrl = "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.3537.50"
 
             try {
                 $TempFile = Invoke-DownloadFile -DownloadUrl $PackageUrl

@@ -9,7 +9,7 @@ $ModuleName = "OmadaWeb.PS"
 
 $PowerShellType = "Core"
 if ($PSVersionTable.PSVersion.Major -le 5) {
-    "Selenium is restricted to version (v4.23) due compatibility issues in Windows PowerShell Desktop 5. Consider using PowerShell 7 LTS instead, you can get it here: https://aka.ms/powershell-release?tag=stable" | Write-Warning
+    "When browser authentication type with Selenium is used, it is restricted to version (v4.23) due to compatibility issues in Windows PowerShell Desktop 5. Consider using PowerShell 7 LTS instead, you can get it here: https://aka.ms/powershell-release?tag=stable" | Write-Warning
     $PowerShellType = "Desktop"
 }
 else {
