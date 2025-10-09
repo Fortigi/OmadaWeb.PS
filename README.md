@@ -17,14 +17,22 @@ To install the module from the PowerShell Gallery, you can use the following com
 Install-Module -Name OmadaWeb.PS
 ```
 
+## UPDATE
+
+To update the module from the PowerShell Gallery, you can use the following command:
+
+```powershell
+Update-Module -Name OmadaWeb.PS
+```
+
 ## USAGE
 
 ### Requirements
 
 This module requires:
-- Windows operating system;
+- Windows operating system (x86 or x64 architecture);
 - Windows PowerShell 5.1 or higher (PowerShell 7 is preferred);
-- Windows with Edge Chromium installed (Only for -AuthenticationType "Browser").
+- Windows with Edge Chromium installed (Only for -AuthenticationType "Browser" ).
 
 ### Importing the Module
 
@@ -34,32 +42,54 @@ To import the module, use the following command:
 Import-Module OmadaWeb.PS
 ```
 
-When using -AuthenticationType "Browser", on the first authentication attempt, the module will download the latest versions of [Selenium](https://github.com/SeleniumHQ/selenium) and the [Edge Driver](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver). Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS. Edge Webdriver updates automatically when a newer Edge version is detected during execution.
+When using -AuthenticationType "Browser", the module supports two browser engines:
+
+#### Selenium WebDriver (Default)
+On the first authentication attempt, the module will download the latest versions of [Selenium](https://github.com/SeleniumHQ/selenium) and the [Edge Driver](https://developer.microsoft.com/en-us/microsoft-edge/tools/WebDriver). Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin. Edge WebDriver updates automatically when a newer Edge version is detected during execution.
+
+```powershell
+# Use Selenium for a request
+Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data"
+```
+> [!NOTE]
+> While WebDriver with Selenium is currently still the default browser engine, it is planned to be replaced by WebView2 as default in future releases.
+
+#### WebView2
+For environments where Selenium is restricted, you can use [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin. When the binaries are not present they will be downloaded automatically. WebView2 uses a copy of the default Edge user profile, the profile working directory is located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
+
+
+```powershell
+# Use WebView2 for a request
+Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -UseWebView2
+```
+
+> [!IMPORTANT]
+> The WebView2 is still in development. Some features might not work as expected!
 
 ## SYNTAX
 
 ### Invoke-OmadaRestMethod
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>]	[-SkipCookieCache <switch>] 	[-ForceAuthentication <switch>]	[-EdgeProfile <string>]	[-InPrivate <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ## EXAMPLES
@@ -71,9 +101,14 @@ Here are some example commands you can use with the OmadaWeb.PS module:
 Invoke-OmadaWebRequest -Uri "https://example.omada.cloud"
 ```
 
-### Example 2: Retrieve an Identity object to the OData endpoint using Browser based authentication.
+### Example 2: Retrieve an Identity object to the OData endpoint using Browser based authentication. This uses the default WebDriver with Selenium engine.
 ```powershell
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser"
+```
+
+### Example 3: Retrieve an Identity object to the OData endpoint using Browser based authentication by using the Microsoft WebView2 engine.
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser" -UseWebView2
 ```
 
 ### Example 3: Retrieve Identity object using EntraId OAuth authentication
@@ -128,6 +163,20 @@ Use the specified Edge profile for the authentication request. The acceptable va
 
 ### -ForceAuthentication <switch>
 Force authentication to Omada even when the cookie is still valid.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -UseWebView2 <switch>
+Use WebView2 instead of Selenium WebDriver for browser-based authentication.
 
 ```yaml
         Type: System.Management.Automation.SwitchParameter

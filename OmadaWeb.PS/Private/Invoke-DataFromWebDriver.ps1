@@ -1,6 +1,6 @@
 function Invoke-DataFromWebDriver {
     [CmdletBinding()]
-    PARAM(
+    param(
         [string]$EdgeProfile,
         [switch]$InPrivate
     )
@@ -51,7 +51,7 @@ function Invoke-DataFromWebDriver {
                     $Elements = $EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@id]"))
                     $IdAttributes = $Elements.GetAttribute("id")
 
-                    if (     $IdAttributes -contains $UserNameElementId `
+                    if ($IdAttributes -contains $UserNameElementId `
                             -and $IdAttributes -contains $PasswordElementId `
                             -and $IdAttributes -notcontains $ButtonBackId `
                             -and $IdAttributes -contains $ButtonSubmitId `
@@ -64,7 +64,7 @@ function Invoke-DataFromWebDriver {
                         $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                     }
 
-                    if (     $IdAttributes -notcontains $UserNameElementId `
+                    if ($IdAttributes -notcontains $UserNameElementId `
                             -and $IdAttributes -contains $PasswordElementId `
                             -and $IdAttributes -contains $ButtonSubmitId `
                             -and $IdAttributes -notcontains $CantAccessAccountId `
@@ -75,7 +75,7 @@ function Invoke-DataFromWebDriver {
                         $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                     }
 
-                    if (     $IdAttributes -notcontains $UserNameElementId `
+                    if ($IdAttributes -notcontains $UserNameElementId `
                             -and $IdAttributes -notcontains $PasswordElementId `
                             -and $IdAttributes -contains $SelectUserElementId
                     ) {
@@ -85,7 +85,7 @@ function Invoke-DataFromWebDriver {
                         }
                     }
 
-                    if (     $IdAttributes -notcontains $UserNameElementId `
+                    if ($IdAttributes -notcontains $UserNameElementId `
                             -and $IdAttributes -notcontains $PasswordElementId `
                             -and $IdAttributes -notcontains $SelectUserElementId `
                             -and $IdAttributes -contains $ButtonBackId `
@@ -97,7 +97,7 @@ function Invoke-DataFromWebDriver {
                         $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonBackId)).Click()
                     }
 
-                    if (    $IdAttributes -notcontains $UserNameElementId `
+                    if ($IdAttributes -notcontains $UserNameElementId `
                             -and $IdAttributes -notcontains $PasswordElementId `
                             -and $IdAttributes -notcontains $ButtonBackId `
                             -and ($EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@data-test-id]")) | Measure-Object).Count -gt 0) {
@@ -110,7 +110,7 @@ function Invoke-DataFromWebDriver {
                         }
                     }
 
-                    if (    $MfaRequestDisplayed -ne $true `
+                    if ($MfaRequestDisplayed -ne $true `
                             -and $IdAttributes -notcontains $UserNameElementId `
                             -and $IdAttributes -notcontains $PasswordElementId `
                             -and $IdAttributes -contains $MFAElementId `
@@ -131,7 +131,7 @@ function Invoke-DataFromWebDriver {
                         $MfaRequestDisplayed = $true
                     }
 
-                    if (    $MfaRequestDisplayed `
+                    if ($MfaRequestDisplayed `
                             -and $IdAttributes -notcontains $UserNameElementId `
                             -and $IdAttributes -notcontains $PasswordElementId `
                             -and $IdAttributes -notcontains $MFAElementId `
