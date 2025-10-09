@@ -1,6 +1,6 @@
 function Start-EdgeDriver {
     [CmdletBinding()]
-    PARAM(
+    param(
         [string]$EdgeProfile,
         [switch]$InPrivate
     )
@@ -9,7 +9,7 @@ function Start-EdgeDriver {
         Add-Type -Path $($Script:WebDriverPath)
     }
     catch {
-        [void] [System.Reflection.Assembly]::LoadFrom($Script:WebDriverPath)
+        Add-ReflectionAssembly -Object $Script:WebDriverPath
     }
     try {
         switch ($JsonLibraryType) {
@@ -44,10 +44,12 @@ function Start-EdgeDriver {
         }
     }
     catch {
-        [void] [System.Reflection.Assembly]::LoadWithPartialName("OpenQA.Selenium.Edge")
+        Add-ReflectionAssembly -Object "OpenQA.Selenium.Edge" -Type LoadWithPartialName
+
     }
-    [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
-    [void] [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+    Add-ReflectionAssembly -Object "System.Drawing" -Type LoadWithPartialName
+    Add-ReflectionAssembly -Object "System.Windows.Forms" -Type LoadWithPartialName
+
 
     $WindowWidth = 564
     $WindowHeight = 973
@@ -57,8 +59,8 @@ function Start-EdgeDriver {
     $CenterScreenHeight = [System.Math]::Ceiling((($ScreenSize.WorkingArea.Height - $WindowHeight) / 2))
 
     $EdgeOptions = New-Object  OpenQA.Selenium.Edge.EdgeOptions
-    $EdgeOptions.AddArgument("--disable-logging");
-    $EdgeOptions.AddArgument("--no-first-run");
+    $EdgeOptions.AddArgument("--disable-logging")
+    $EdgeOptions.AddArgument("--no-first-run")
     $EdgeOptions.AddArgument("--window-size=$WindowWidth,$WindowHeight" )
     $EdgeOptions.AddArgument("--window-position=$CenterScreenWidth,$CenterScreenHeight" )
     $EdgeOptions.AddArgument("--content-shell-hide-toolbar")
@@ -93,16 +95,16 @@ function Start-EdgeDriver {
 
     $EdgeDriverService = [OpenQA.Selenium.Edge.EdgeDriverService]::CreateDefaultService($($Script:EdgeDriverPath))
     $EdgeDriverService.HideCommandPromptWindow = $true
-    $EdgeDriverService.SuppressInitialDiagnosticInformation = $true;
+    $EdgeDriverService.SuppressInitialDiagnosticInformation = $true
     try {
         $EdgeDriver = New-Object OpenQA.Selenium.Edge.EdgeDriver($EdgeDriverService, $EdgeOptions)
     }
     catch {
         if (![string]::IsNullOrWhiteSpace($EdgeProfile) -and $EdgeProfile -ne "Default" -and $_.Exception.Message -match "DevToolsActivePort") {
-               "It seems that Edge profile '{0}' is currently running.  It is not possible use this profile when it is active. To use this profile, please close that browser session. You can also choose to omit -EdgeProfile parameter." -f $EdgeProfile | Write-Error -ErrorAction "Stop" -ErrorId "EdgeProfileActive"
+            "It seems that Edge profile '{0}' is currently running.  It is not possible use this profile when it is active. To use this profile, please close that browser session. You can also choose to omit -EdgeProfile parameter." -f $EdgeProfile | Write-Error -ErrorAction "Stop" -ErrorId "EdgeProfileActive"
         }
         else {
-            Throw
+            throw
         }
         Close-EdgeDriver
         break

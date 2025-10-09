@@ -1,8 +1,8 @@
 function Invoke-OmadaRequest {
     [CmdletBinding(DefaultParameterSetName = "StandardMethod")]
-    PARAM()
+    param()
 
-    DynamicParam {
+    dynamicparam {
         return Set-DynamicParameter -FunctionName $Script:FunctionName
     }
     process {
@@ -136,6 +136,7 @@ function Invoke-OmadaRequest {
                             $BoundParams.Headers.Add("Content-Type", "application/json")
                         }
                         $Parameters = Set-RequestParameter
+
                         $Return = (Invoke-RestMethod @Parameters)
 
                         #To support -SkipHttpErrorCheck
@@ -177,25 +178,39 @@ function Invoke-OmadaRequest {
                         "Re-authentication failed!" | Write-Host
                     }
                     "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
-                    $EdgeDriverData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
-                    $Script:OmadaWebAuthCookie = $EdgeDriverData[0]
-                    $BoundParams.UserAgent = $EdgeDriverData[1]
+                    $UseWebView2 = $false
+                    if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
+                        $UseWebView2 = $true
+                    }
+                    elseif ($Script:PreferWebView2 -eq $true) {
+                        $UseWebView2 = $true
+                    }
+                    if ($UseWebView2) {
+                        "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
+                        Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
+                    }
+                    else {
+                        $BrowserData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                    }
+                    $Script:OmadaWebAuthCookie = $BrowserData[0]
+                    $BoundParams.UserAgent = $BrowserData[1]
 
                     try {
                         $Parameters = Set-RequestParameter -InvokeOmadaRequest
                         return (Invoke-OmadaRequest @Parameters)
                     }
                     catch {
-                        Throw
+                        throw
                     }
                 }
                 else {
-                    Throw
+                    throw
                 }
             }
         }
         catch {
-            Throw
+            throw
         }
     }
 }

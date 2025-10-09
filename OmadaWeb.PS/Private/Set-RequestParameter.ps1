@@ -1,6 +1,6 @@
 ﻿function Set-RequestParameter {
     [CmdletBinding()]
-    PARAM(
+    param(
         [switch]$InvokeOmadaRequest
     )
 
@@ -14,7 +14,7 @@
         }
     }
     else {
-        $ExcludedParameters = @("SkipCookieCache","CookiePath", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile")
+        $ExcludedParameters = @("SkipCookieCache", "CookiePath", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile", "UseWebView2")
     }
 
     $Parameters = @{}
