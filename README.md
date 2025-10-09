@@ -76,18 +76,6 @@ Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Bas
 Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [<Invoke-WebRequest Parameters>]
 ```
 
-### Set-OmadaBrowserEngine
-
-```powershell
-Set-OmadaBrowserEngine -Engine {Selenium | WebView2}
-```
-
-### Get-OmadaBrowserEngine
-
-```powershell
-Get-OmadaBrowserEngine
-```
-
 ## EXAMPLES
 
 Here are some example commands you can use with the OmadaWeb.PS module:
@@ -97,9 +85,14 @@ Here are some example commands you can use with the OmadaWeb.PS module:
 Invoke-OmadaWebRequest -Uri "https://example.omada.cloud"
 ```
 
-### Example 2: Retrieve an Identity object to the OData endpoint using Browser based authentication.
+### Example 2: Retrieve an Identity object to the OData endpoint using Browser based authentication. This uses the default WebDriver with Selenium engine.
 ```powershell
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser"
+```
+
+### Example 3: Retrieve an Identity object to the OData endpoint using Browser based authentication by using the Microsoft WebView2 engine.
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser" -UseWebView2
 ```
 
 ### Example 3: Retrieve Identity object using EntraId OAuth authentication
@@ -154,6 +147,20 @@ Use the specified Edge profile for the authentication request. The acceptable va
 
 ### -ForceAuthentication <switch>
 Force authentication to Omada even when the cookie is still valid.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -UseWebView2 <switch>
+In case of selecting -AuthenticationType Browser, use the Microsoft WebView2 runtime instead of the WebDriver with Selenium.
 
 ```yaml
         Type: System.Management.Automation.SwitchParameter

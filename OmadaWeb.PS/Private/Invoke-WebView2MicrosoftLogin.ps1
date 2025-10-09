@@ -64,24 +64,24 @@ function Invoke-WebView2MicrosoftLogin {
 })();
 "@
 
-        $getAllNameElementsScript = @"
-(function() {
-    var namesToFind = [
-        'login'
-    ];
-    var foundElements = [];
-    for (var i = 0; i < namesToFind.length; i++) {
-        var element = document.getElementsByName(namesToFind[i]);
-        if (element != null && element[0].value != null) {
-            foundElements.push({
-                name: element[0].name,
-                value: element[0].value
-             });
-        }
-    }
-    return foundElements;
-})();
-"@
+#         $getAllNameElementsScript = @"
+# (function() {
+#     var namesToFind = [
+#         'login'
+#     ];
+#     var foundElements = [];
+#     for (var i = 0; i < namesToFind.length; i++) {
+#         var element = document.getElementsByName(namesToFind[i]);
+#         if (element != null && element[0].value != null) {
+#             foundElements.push({
+#                 name: element[0].name,
+#                 value: element[0].value
+#              });
+#         }
+#     }
+#     return foundElements;
+# })();
+# "@
 
         # JavaScript to get element property
         $getElementPropertyScript = @"
