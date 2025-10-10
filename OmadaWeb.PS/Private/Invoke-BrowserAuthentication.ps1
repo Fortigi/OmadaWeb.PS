@@ -5,7 +5,9 @@
     "{0} - Set Browser authentication" -f $MyInvocation.MyCommand | Write-Verbose
 
     if ($BoundParams.ForceAuthentication) {
+        "{0} - ForceAuthentication used. Reset OmadaWebAuthCookie and reset Browser authentication engine to default" -f $MyInvocation.MyCommand | Write-Verbose
         $Script:OmadaWebAuthCookie = $null
+        $Script:WebView2Used = $false
     }
     $Script:Credential = $null
     if ($BoundParams.keys -contains "Credential") {
@@ -43,7 +45,8 @@
         if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
             $UseWebView2 = $true
         }
-        elseif ($Script:PreferWebView2 -eq $true) {
+        elseif ($Script:WebView2Used) {
+            "{0} - Continue to use WebView2" -f $MyInvocation.MyCommand | Write-Verbose
             $UseWebView2 = $true
         }
 
@@ -51,6 +54,7 @@
             "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
             Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
             $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
+            $Script:WebView2Used = $true
         }
         else {
             "{0} - Using Selenium WebDriver for authentication" -f $MyInvocation.MyCommand | Write-Verbose

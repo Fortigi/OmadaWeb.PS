@@ -32,7 +32,8 @@ function Invoke-DataFromWebView2 {
                     "`nLogin retry count exceeded! Please check your credentials as no cookie could be retrieved!" | Write-Error -ErrorAction "Stop" -Category AuthenticationError
                 }
                 else {
-                    "WebView2 window seems to be closed before authentication was completed. Re-open WebView2!" | Write-Host -ForegroundColor Yellow
+                    "WebView2 window seems to be closed before authentication was completed. Re-open WebView2 in 2 seconds!" | Write-Host -ForegroundColor Yellow
+                    Start-Sleep -Seconds 2
                     "`n{0} - Login retry count: {1}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount | Write-Verbose
                     try {
                         Start-WebView2Login -EdgeProfile $EdgeProfile -InPrivate:$InPrivate

@@ -169,7 +169,8 @@ function Invoke-DataFromWebDriver {
                 }
 
                 "" | Write-Host
-                "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host -ForegroundColor Yellow
+                "Edge window seems to be closed before authentication was completed. Re-open Edge driver in 2 seconds!" | Write-Host -ForegroundColor Yellow
+                Start-Sleep -Seconds 2
                 $LoginMessageShown = $false
                 Close-EdgeDriver
                 $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile

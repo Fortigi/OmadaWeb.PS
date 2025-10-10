@@ -18,7 +18,8 @@ else {
     }
 }
 
-$ModuleAppDataPath = (New-Item (Join-Path ([System.Environment]::GetFolderPath("LocalApplicationData")) -ChildPath $ModuleName) -ItemType Directory -Force).FullName
+$LocalAppDataPath = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
+$ModuleAppDataPath = (New-Item (Join-Path $LocalAppDataPath -ChildPath $ModuleName) -ItemType Directory -Force).FullName
 $BinPath = (New-Item (Join-Path $ModuleAppDataPath -ChildPath "Bin\$PowerShellType") -ItemType Directory -Force).FullName
 $DefaultParams = @{
     WebBinBasePath        = $BinPath
@@ -30,6 +31,7 @@ $DefaultParams = @{
     OmadaWebAuthCookie    = $null
     UpdateDependencies    = $false
     LastSessionType       = "Normal"
+    WebView2Used          = $false
 }
 
 $DefaultParams.GetEnumerator() | ForEach-Object {
@@ -127,8 +129,8 @@ if ($UpdateDependencies) {
 }
 
 #region exclude
-$Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse)
-$Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1 -Recurse)
+$Public = @(Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -Recurse | Where-Object { $_.Name -notlike "_*.ps1" })
+$Private = @(Get-ChildItem -Path $PSScriptRoot\Private\*.ps1 -Recurse | Where-Object { $_.Name -notlike "_*.ps1" })
 foreach ($Import in @($Public + $Private)) {
     try {
         . $Import.FullName
