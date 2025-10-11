@@ -182,13 +182,15 @@ function Invoke-OmadaRequest {
                     if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
                         $UseWebView2 = $true
                     }
-                    elseif ($Script:PreferWebView2 -eq $true) {
+                    elseif ($Script:WebView2Used) {
+                        "{0} - Continue to use WebView2" -f $MyInvocation.MyCommand | Write-Verbose
                         $UseWebView2 = $true
                     }
                     if ($UseWebView2) {
                         "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
                         Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                         $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
+                        $Script:WebView2Used = $true
                     }
                     else {
                         $BrowserData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
