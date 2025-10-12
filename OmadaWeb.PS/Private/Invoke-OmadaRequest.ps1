@@ -171,13 +171,17 @@ function Invoke-OmadaRequest {
 
                 if (($BoundParams.AuthenticationType) -eq "Browser" -and ($_.Exception.Response.StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
 
+                    "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
+                    $Script:OmadaWebAuthCookie = $null
+                    if (Test-Path $Script:CookieCacheFilePath -PathType Leaf) {
+                        $Script:CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
+                    }
                     if ($Script:LoginCount -le 1) {
                         "Authentication needed!" | Write-Host
                     }
                     else {
                         "Re-authentication failed!" | Write-Host
                     }
-                    "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
                     $UseWebView2 = $false
                     if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
                         $UseWebView2 = $true
