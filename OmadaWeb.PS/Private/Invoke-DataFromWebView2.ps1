@@ -20,6 +20,7 @@ function Invoke-DataFromWebView2 {
         try {
 
             if ($null -eq $Script:OmadaWebAuthCookie -or ($Script:OmadaWebAuthCookie -is [PSCustomObject] -and ($Script:OmadaWebAuthCookie.PsObject.Properties | Measure-Object).Count -eq 0)) {
+                "{0} - Starting login attempt {1}" -f $MyInvocation.MyCommand, ($Script:LoginRetryCount + 1) | Write-Verbose
                 if ($Script:LoginRetryCount -eq 0) {
                     try {
                         Start-WebView2Login -EdgeProfile $EdgeProfile -InPrivate:$InPrivate
@@ -42,6 +43,9 @@ function Invoke-DataFromWebView2 {
                         throw $_
                     }
                 }
+            }
+            else{
+                "{0} - Existing authentication cookie found" -f $MyInvocation.MyCommand | Write-Verbose
             }
         }
         catch {
