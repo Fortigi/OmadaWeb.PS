@@ -13,6 +13,7 @@ function Add-ReflectionAssembly {
     )
 
     try {
+        "{0} - Loading assembly: {1} (Type: {2})" -f $MyInvocation.MyCommand, $Object, $Type | Write-Verbose
         switch ($Type) {
             "LoadFrom" {
                 [void][Reflection.Assembly]::LoadFrom($Object)

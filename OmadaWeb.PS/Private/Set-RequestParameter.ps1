@@ -4,6 +4,8 @@
         [switch]$InvokeOmadaRequest
     )
 
+    "{0} - Setting request parameters" -f $MyInvocation.MyCommand | Write-Verbose
+
     if ($InvokeOmadaRequest) {
         $InvokeOmadaRequestFunction = Get-Command -Name Invoke-OmadaRequest
         $ExcludedParameters = @()

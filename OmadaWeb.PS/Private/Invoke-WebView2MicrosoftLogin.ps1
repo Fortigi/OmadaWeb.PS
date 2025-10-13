@@ -64,24 +64,24 @@ function Invoke-WebView2MicrosoftLogin {
 })();
 "@
 
-#         $getAllNameElementsScript = @"
-# (function() {
-#     var namesToFind = [
-#         'login'
-#     ];
-#     var foundElements = [];
-#     for (var i = 0; i < namesToFind.length; i++) {
-#         var element = document.getElementsByName(namesToFind[i]);
-#         if (element != null && element[0].value != null) {
-#             foundElements.push({
-#                 name: element[0].name,
-#                 value: element[0].value
-#              });
-#         }
-#     }
-#     return foundElements;
-# })();
-# "@
+        #         $getAllNameElementsScript = @"
+        # (function() {
+        #     var namesToFind = [
+        #         'login'
+        #     ];
+        #     var foundElements = [];
+        #     for (var i = 0; i < namesToFind.length; i++) {
+        #         var element = document.getElementsByName(namesToFind[i]);
+        #         if (element != null && element[0].value != null) {
+        #             foundElements.push({
+        #                 name: element[0].name,
+        #                 value: element[0].value
+        #              });
+        #         }
+        #     }
+        #     return foundElements;
+        # })();
+        # "@
 
         # JavaScript to get element property
         $getElementPropertyScript = @"
@@ -162,7 +162,7 @@ function Invoke-WebView2MicrosoftLogin {
 (function(dataTestId) {
     var elements = document.querySelectorAll('[data-test-id]');
     for (var i = 0; i < elements.length; i++) {
-        if (elements[i].getAttribute('data-test-id') === dataTestId) {
+        if (elements[i].getAttribute('data-test-id') != null && elements[i].getAttribute('data-test-id').toLowerCase() === dataTestId.toLowerCase()) {
             elements[i].click();
             return true;
         }
@@ -279,10 +279,10 @@ function Invoke-WebView2MicrosoftLogin {
                         if ($null -ne $Script:PreviousAttributes) {
                             $idsChanged = $false
                             # Check if key elements changed
-                            $prevHadUsername = $Script:PreviousAttributes.id -contains $UserNameElementId -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*'
-                            $prevHadPassword = $Script:PreviousAttributes.id -contains $PasswordElementId -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*'
-                            $nowHasUsername = $Script:IdAttributes.id -contains $UserNameElementId -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*'
-                            $nowHasPassword = $Script:IdAttributes.id -contains $PasswordElementId -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*'
+                            $prevHadUsername = $UserNameElementId -in $Script:PreviousAttributes.id -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*'
+                            $prevHadPassword = $PasswordElementId -in $Script:PreviousAttributes.id -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*'
+                            $nowHasUsername = $UserNameElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*'
+                            $nowHasPassword = $PasswordElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*'
 
                             if ($prevHadUsername -ne $nowHasUsername -or $prevHadPassword -ne $nowHasPassword) {
                                 $idsChanged = $true
@@ -317,18 +317,18 @@ function Invoke-WebView2MicrosoftLogin {
                     # Debug: Log what IDs we found
                     "Page IDs found: $($Script:IdAttributes.id -join ', ')" | Write-Verbose
                     "Looking for username: $UserNameElementId, password: $PasswordElementId, submit: $SubmitButtonId" | Write-Verbose
-                    "Username exists: $($Script:IdAttributes.id -contains $UserNameElementId -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
-                    "Password exists: $($Script:IdAttributes.id -contains $PasswordElementId -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
-                    "Username existed: $($Script:PreviousAttributes.id -contains $UserNameElementId -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
-                    "Password existed: $($Script:PreviousAttributes.id -contains $PasswordElementId -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
-                    "CantAccessAccount exists: $($Script:IdAttributes.id -contains $CantAccessAccountId)" | Write-Verbose
-                    "SubmitButton exists: $($Script:IdAttributes.id -contains $SubmitButtonId)" | Write-Verbose
-                    "ButtonBack exists: $($Script:IdAttributes.id -contains $ButtonBackId)" | Write-Verbose
-                    "MfaElementIds exists: $($Script:IdAttributes.id -contains $MfaElementId1 -or $Script:IdAttributes.id -contains $MfaElementId2)" | Write-Verbose
+                    "Username exists: $($UserNameElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
+                    "Password exists: $($PasswordElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
+                    "Username existed: $($UserNameElementId -in $Script:PreviousAttributes.id -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
+                    "Password existed: $($PasswordElementId -in $Script:PreviousAttributes.id -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
+                    "CantAccessAccount exists: $( $CantAccessAccountId -in $Script:IdAttributes.id)" | Write-Verbose
+                    "SubmitButton exists: $( $SubmitButtonId -in $Script:IdAttributes.id)" | Write-Verbose
+                    "ButtonBack exists: $( $ButtonBackId -in $Script:IdAttributes.id)" | Write-Verbose
+                    "MfaElementIds exists: $( $MfaElementId1 -in $Script:IdAttributes.id -or   $MfaElementId2 -in $Script:IdAttributes.id)" | Write-Verbose
 
                     # Scenario 1: Username entry page
                     # Check if username field exists - we'll verify visibility in the sub-state
-                    if ($Script:IdAttributes.id -contains $UserNameElementId -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*' -and $Script:IdAttributes.id -contains $SubmitButtonId) {
+                    if (  $UserNameElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*' -and $SubmitButtonId -in $Script:IdAttributes.id) {
                         "Scenario 1: Username entry page" | Write-Verbose
                         $Script:CurrentScenario = "UsernameEntry"
                         "Scenario 1: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose
@@ -374,7 +374,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         if ($isVisible -eq "true") {
                                             "Matched Scenario 1: Username entry page" | Write-Verbose
                                             "Username field is visible, entering username..." | Write-Verbose
-                                            $usernameScript = "$setElementValueScript('$UserNameElementId', '$($Script:Credential.UserName)')"
+                                            $usernameScript = "$setElementValueScript('$UserNameElementId', '$($Script:Credential.UserName.Trim())')"
                                             $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($usernameScript)
                                             $Script:LoginSubState = "SettingUsername"
                                         }
@@ -433,7 +433,7 @@ function Invoke-WebView2MicrosoftLogin {
 
                     # Scenario 2: Password entry page
                     # Check if password field exists - we'll verify visibility in the sub-state
-                    if ($Script:IdAttributes.id -contains $PasswordElementId -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*' -and $Script:IdAttributes.id -contains $SubmitButtonId) {
+                    if (  $PasswordElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*' -and $SubmitButtonId -in $Script:IdAttributes.id) {
 
                         "Scenario 2: Password entry page" | Write-Verbose
                         $Script:CurrentScenario = "PasswordEntry"
@@ -534,7 +534,7 @@ function Invoke-WebView2MicrosoftLogin {
                     }
 
                     # Scenario 3: "Stay signed in?" page - Click "No"
-                    if ($Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and $Script:IdAttributes.id -contains $ButtonBackId -and $Script:IdAttributes.id -contains $SubmitButtonId -and $Script:IdAttributes.id -notcontains $MfaElementId1 -and $Script:IdAttributes.id -notcontains $MfaElementId2) {
+                    if ($Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and $ButtonBackId -in $Script:IdAttributes.id -and $SubmitButtonId -in $Script:IdAttributes.id -and $Script:IdAttributes.id -notcontains $MfaElementId1 -and $Script:IdAttributes.id -notcontains $MfaElementId2) {
 
                         "Scenario 3: 'Stay signed in?' page" | Write-Verbose
                         $Script:CurrentScenario = "StaySignedIn"
@@ -616,7 +616,7 @@ function Invoke-WebView2MicrosoftLogin {
                             $null {
                                 # Try to click account with matching data-test-id
                                 "Attempting to select account..." | Write-Verbose
-                                $clickAccountScript = "$getElementByDataTestIdScript('$($Script:Credential.UserName)')"
+                                $clickAccountScript = "$getElementByDataTestIdScript('$($Script:Credential.UserName.Trim())')"
                                 $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickAccountScript)
                                 $Script:LoginSubState = "ClickingAccount"
                                 $Script:AccountSelectionAttempted = $false
@@ -690,7 +690,7 @@ function Invoke-WebView2MicrosoftLogin {
                     }
 
                     # Scenario 5: MFA request
-                    if (-not $Script:MfaRequestDisplayed -and $Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and ($Script:IdAttributes.id -contains $MfaElementId1 -or $Script:IdAttributes.id -contains $MfaElementId2) -and $Script:IdAttributes.id -notcontains $MfaRetryId1 -and $Script:IdAttributes.id -notcontains $MfaRetryId2) {
+                    if (-not $Script:MfaRequestDisplayed -and $Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and (  $MfaElementId1 -in $Script:IdAttributes.id -or $MfaElementId2 -in $Script:IdAttributes.id) -and $Script:IdAttributes.id -notcontains $MfaRetryId1 -and $Script:IdAttributes.id -notcontains $MfaRetryId2) {
 
                         "Scenario 5: MFA request page" | Write-Verbose
                         "Scenario 5: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose
@@ -748,7 +748,7 @@ function Invoke-WebView2MicrosoftLogin {
                     }
 
                     # Scenario 6: MFA retry
-                    if ($Script:MfaRequestDisplayed -and $Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and $Script:IdAttributes.id -notin $MfaElementIds -and ($Script:IdAttributes.id -contains $MfaRetryId1 -or $Script:IdAttributes.id -contains $MfaRetryId2)) {
+                    if ($Script:MfaRequestDisplayed -and $Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and $Script:IdAttributes.id -notin $MfaElementIds -and (  $MfaRetryId1 -in $Script:IdAttributes.id -or $MfaRetryId2 -in $Script:IdAttributes.id)) {
 
                         "Scenario 6: MFA retry page" | Write-Verbose
                         "Scenario 6: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose

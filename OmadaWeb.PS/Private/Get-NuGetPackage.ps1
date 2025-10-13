@@ -19,6 +19,8 @@ function Get-NuGetPackage {
         [switch]$ExcludeDependencies
     )
 
+    "{0} - Retrieving NuGet package: {1}" -f $MyInvocation.MyCommand, $PackageName | Write-Verbose
+
     $NuGetIndexUri = "https://api.nuget.org/v3/index.json"
 
     $BaseReturnObjects = @()

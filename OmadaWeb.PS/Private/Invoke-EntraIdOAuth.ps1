@@ -1,7 +1,9 @@
 ﻿function Invoke-EntraIdOAuth {
     [CmdletBinding()]
     PARAM()
-    
+
+    "{0} - Invoking OAuth authentication" -f $MyInvocation.MyCommand | Write-Verbose
+
     "{0} - Request bearer token" -f $MyInvocation.MyCommand, $_ | Write-Verbose
     if ($null -eq $BoundParams.Credential) {
         "{0} - Credentials not provided! This mandatory for OAuth authentication!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
@@ -12,7 +14,7 @@
 
     $RequestBody = @{
         scope         = ("{0}/.default" -f $Script:OmadaWebBaseUrl)
-        client_id     = $($BoundParams.Credential.UserName)
+        client_id     = $($BoundParams.Credential.UserName.Trim())
         grant_type    = 'client_credentials'
         client_secret = $($BoundParams.Credential.GetNetworkCredential().Password)
     }

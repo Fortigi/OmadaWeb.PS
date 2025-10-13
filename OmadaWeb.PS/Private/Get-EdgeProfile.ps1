@@ -1,7 +1,8 @@
 function Get-EdgeProfile {
     [CmdletBinding()]
-    PARAM()
+    param()
 
+    "{0} - Getting Edge profiles" -f $MyInvocation.MyCommand | Write-Verbose
     $UserDataDir = Join-Path $Env:LOCALAPPDATA -ChildPath "Microsoft\Edge\User Data"
 
     if (Test-Path $UserDataDir -PathType Container) {

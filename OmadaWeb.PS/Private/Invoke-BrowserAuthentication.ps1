@@ -8,6 +8,7 @@
         "{0} - ForceAuthentication used. Reset OmadaWebAuthCookie and reset Browser authentication engine to default" -f $MyInvocation.MyCommand | Write-Verbose
         $Script:OmadaWebAuthCookie = $null
         $Script:WebView2Used = $false
+        $Script:ForceAuthentication = $true
     }
     $Script:Credential = $null
     if ($BoundParams.keys -contains "Credential") {
@@ -43,6 +44,7 @@
         # Check if WebView2 should be used instead of Selenium
         $UseWebView2 = $false
         if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
+            "{0} - UseWebView2 parameter used" -f $MyInvocation.MyCommand | Write-Verbose
             $UseWebView2 = $true
         }
         elseif ($Script:WebView2Used) {
@@ -61,9 +63,10 @@
             $BrowserData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
         }
 
+        "{0} - Setting OmadaWebAuthCookie and user agent" -f $MyInvocation.MyCommand | Write-Verbose
         $Script:OmadaWebAuthCookie = $BrowserData[0]
-        $BoundParams.UserAgent = $BrowserData[1]
-        $Session.UserAgent = $BrowserData[1]
+        $BoundParams.UserAgent = $Script:UserAgent
+        $Session.UserAgent = $Script:UserAgent
 
         if ("Cookie" -notin $BoundParams.Headers.Keys) {
             $BoundParams.Headers.Add("Cookie", ($($Script:OmadaWebAuthCookie).Name, $($Script:OmadaWebAuthCookie).Value -join "="))
@@ -75,6 +78,8 @@
     }
 
     if (![string]::IsNullOrEmpty($($BoundParams.CookiePath))) {
+        "{0} - Export cookie to: {1}" -f $MyInvocation.MyCommand, $BoundParams.CookiePath | Write-Verbose
+
         $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath ("{0}.cookie" -f $Script:OmadaWebAuthCookie.domain))
         $CookieObject = [PSCustomObject]@{
             OmadaWebAuthCookie = $Script:OmadaWebAuthCookie
@@ -89,6 +94,13 @@
         }
         catch {
             throw
+        }
+    }
+    elseif ($BoundParams.Keys -contains "SkipCookieCache") {
+        "{0} - Skipping cookie caching" -f $MyInvocation.MyCommand | Write-Verbose
+        if (Test-Path $Script:CookieCacheFilePath -PathType Leaf) {
+            "{0} - Existing cookie cache file found, removing it" -f $MyInvocation.MyCommand | Write-Verbose
+            $Script:CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
         }
     }
     elseif ($BoundParams.Keys -notcontains "SkipCookieCache") {

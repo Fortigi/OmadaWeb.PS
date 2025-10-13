@@ -5,6 +5,8 @@ function Invoke-DataFromWebDriver {
         [switch]$InPrivate
     )
 
+    "{0} - Invoking data from WebDriver" -f $MyInvocation.MyCommand | Write-Verbose
+
     $AuthCookie = $null
 
     "Opening Edge to retrieve authentication cookie" | Write-Host
@@ -25,7 +27,7 @@ function Invoke-DataFromWebDriver {
         if (-not $LoginMessageShown) {
             Write-Host "`r`nBrowser opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
             if ($Script:Credential -and ![string]::IsNullOrWhiteSpace($Script:Credential.UserName)) {
-                " Execute automated login steps for user: {0}" -f $Script:Credential.UserName | Write-Host -ForegroundColor Yellow -NoNewline
+                " Execute automated login steps for user: {0}" -f $Script:Credential.UserName.Trim() | Write-Host -ForegroundColor Yellow -NoNewline
             }
             $LoginMessageShown = $true
         }
@@ -33,7 +35,7 @@ function Invoke-DataFromWebDriver {
         Write-Host "." -NoNewline -ForegroundColor Yellow
         Start-Sleep -Milliseconds 500
 
-        if ($Script:Credential -and ![string]::IsNullOrWhiteSpace($Script:Credential.UserName)) {
+        if ($Script:Credential -and ![string]::IsNullOrWhiteSpace($Script:Credential.UserName.Trim())) {
 
             if ($EdgeDriver.url -like "https://login.microsoftonline.com/*") {
                 try {
@@ -60,7 +62,7 @@ function Invoke-DataFromWebDriver {
                     ) {
                         Start-Sleep -Milliseconds 500
                         "Enter username" | Write-Verbose
-                        $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))[0].SendKeys($Script:Credential.UserName)
+                        $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))[0].SendKeys($Script:Credential.UserName.Trim())
                         $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                     }
 
@@ -80,7 +82,7 @@ function Invoke-DataFromWebDriver {
                             -and $IdAttributes -contains $SelectUserElementId
                     ) {
                         "Select logged-in account" | Write-Verbose
-                        if ($AccountElement.GetAttribute("data-test-id") -eq $Script:Credential.UserName) {
+                        if ($AccountElement.GetAttribute("data-test-id") -eq $Script:Credential.UserName.Trim()) {
                             $AccountElement.Click()
                         }
                     }
@@ -104,7 +106,7 @@ function Invoke-DataFromWebDriver {
 
                         "Select logged-in user " | Write-Verbose
                         $EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@data-test-id]")) | ForEach-Object {
-                            if ($_.GetAttribute("data-test-id") -eq $Script:Credential.UserName) {
+                            if ($_.GetAttribute("data-test-id") -eq $Script:Credential.UserName.Trim()) {
                                 $_.Click()
                             }
                         }
@@ -160,7 +162,7 @@ function Invoke-DataFromWebDriver {
 
         if ($OmadaWebBaseHost -ne $EdgeDriverHost -and $EdgeDriverAbsolutePath -ne "/home" ) {
             if ($null -eq $EdgeDriver -or $null -eq $EdgeDriver.WindowHandles) {
-                if ($Script:LoginRetryCount -ge 3) {
+                if ($Script:LoginRetryCount -ge $Script:MaxLoginRetries) {
                     Close-EdgeDriver
                     "`nLogin retry count exceeded! Please check your credentials as no cookie could be retrieved!" | Write-Error -ErrorAction "Stop" -Category AuthenticationError
                 }
@@ -182,7 +184,7 @@ function Invoke-DataFromWebDriver {
             $AuthCookie = $EdgeDriver.Manage().Cookies.AllCookies | Where-Object { $_.Name -eq 'oisauthtoken' }
         }
     }
-    until($null -ne $AuthCookie -or $Script:LoginRetryCount -gt 3)
+    until($null -ne $AuthCookie -or $Script:LoginRetryCount -ge $Script:MaxLoginRetries)
     "{0} (Line {1}): {2}" -f $MyInvocation.MyCommand, $MyInvocation.ScriptLineNumber, $$ | Write-Verbose
 
     #$CredentialsEntered = $false

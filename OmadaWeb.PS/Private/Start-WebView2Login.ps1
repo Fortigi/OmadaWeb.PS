@@ -9,6 +9,7 @@ function Start-WebView2Login {
     )
 
     try {
+        "{0} - Starting WebView2 login" -f $MyInvocation.MyCommand | Write-Verbose
 
         $Script:LoginRetryCount++
 
@@ -19,6 +20,7 @@ function Start-WebView2Login {
         if (-not (Test-Path $Script:WebView2UserProfilePath -PathType Container)) { New-Item -ItemType Directory -Force -Path $Script:WebView2UserProfilePath | Out-Null }
         $Script:WebView2.CreationProperties.UserDataFolder = $Script:WebView2UserProfilePath
         $Script:WebView2.CreationProperties.ProfileName = $EdgeProfile
+        $Script:Timer = New-Object System.Windows.Forms.Timer
 
         # Enable InPrivate mode if switch is specified
         if ($InPrivate) {
@@ -34,10 +36,7 @@ function Start-WebView2Login {
 
         $Script:WinForm_Load = {
             try {
-                if ($null -ne $Script:WebView2) {
-                    $Script:WebView2.Source = ([System.Uri]::New($Script:OmadaWebBaseUrl))
-                    $Script:WebView2.Visible = $true
-                }
+                $Script:WinForm.Text = "OmadaWeb.PS - Loading..."
             }
             catch {
                 [Console]::WriteLine("Error in WinForm_Load: $_")
@@ -47,7 +46,7 @@ function Start-WebView2Login {
         $Script:WebView_SourceChanged = {
             try {
                 if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.Source -and $null -ne $Script:WinForm) {
-                    $Script:WinForm.Text = $Script:WebView2.Source.AbsoluteUri
+                    $Script:WinForm.Text = "OmadaWeb.PS - {0}" -f $Script:WebView2.Source.AbsoluteUri
                 }
             }
             catch [System.Management.Automation.PipelineStoppedException] {
@@ -57,7 +56,7 @@ function Start-WebView2Login {
             catch {
                 # Use Console.WriteLine to prevent crashes in event handlers
                 [Console]::ForegroundColor = 'Red'
-                [Console]::WriteLine("Error in SourceChanged: $_")
+                [Console]::WriteLine("Get-Error in SourceChanged: $_")
                 [Console]::ResetColor()
             }
         }
@@ -95,16 +94,22 @@ function Start-WebView2Login {
         $Script:WinForm.AutoScaleMode = 'Font'
         $Script:WinForm.Dock = 'Fill'
         $Script:WinForm.AutoSize = $true
-        $Script:WinForm.Name = 'OmadaWeb.PS Login'
+        $Script:WinForm.Name = 'OmadaWeb.PS Browser Login'
         $Script:WinForm.ShowIcon = $false
-        $Script:WinForm.Text = 'OmadaWeb.PS Login'
-        $Script:WinForm.Width = 440
-        $Script:WinForm.Height = 598
+        $Script:WinForm.Text = 'OmadaWeb.PS'
+        $Script:WinForm.Width = 500
+        $Script:WinForm.Height = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height / 1.5
         $Script:WinForm.StartPosition = 'CenterScreen'
         $Script:WinForm.add_Load($Script:WinForm_Load)
+        $Script:WinForm.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+        $Script:WinForm.MaximizeBox = $false
+        $Script:WinForm.MinimizeBox = $false
         $Script:WinForm.Add_Shown({
                 param($Sender, $e)
                 try {
+                    "Start-WebView2Login - Form loaded. Execute Initialize-WebView2" -f $MyInvocation.MyCommand | Write-Verbose
+                    $Script:WinForm.Activate()
+                    $Script:WebView2.Focus()
                     Initialize-WebView2
                 }
                 catch {
@@ -151,7 +156,29 @@ function Start-WebView2Login {
             $Script:WebViewEnv = $Task.GetAwaiter().GetResult()
         }
         if ($null -eq $Script:WebView2.CoreWebView2) {
-            $null = $Script:WebView2.EnsureCoreWebView2Async($Script:WebViewEnv)
+            "{0} - Initializing WebView2 CoreWebView2..." -f $MyInvocation.MyCommand | Write-Verbose
+
+            $Script:WebView2.Visible = $false
+
+            # Start initialization
+            $InitTask = $Script:WebView2.EnsureCoreWebView2Async($Script:WebViewEnv)
+
+            # If ForceAuthentication, clear data after initialization
+            if ($Script:ForceAuthentication -and -not $Script:BrowserDataCleared) {
+                $InitTask.GetAwaiter().OnCompleted({
+                        try {
+                            "Start-WebView2Login - WebView2 initialized, clearing browsing data..." -f $MyInvocation.MyCommand | Write-Verbose
+                            $ClearTask = $Script:WebView2.CoreWebView2.Profile.ClearBrowsingDataAsync()
+                            $ClearTask.GetAwaiter().OnCompleted({
+                                    "Start-WebView2Login - Browsing data cleared" -f $MyInvocation.MyCommand | Write-Verbose
+                                    $Script:BrowserDataCleared = $true
+                                })
+                        }
+                        catch {
+                            [Console]::WriteLine("Error clearing data: $_")
+                        }
+                    })
+            }
         }
 
         # Disable Ctrl+C handling while form is open avoiding crashing the sessions when CTRL+C is pressed
@@ -162,12 +189,14 @@ function Start-WebView2Login {
 
         [Console]::TreatControlCAsInput = $OriginalTreatControlCAsInput
 
+        Reset-Timer
         $Script:WebView2.Dispose()
         $Script:WinForm.Dispose()
 
     }
     catch {
         try {
+            Reset-Timer
             $Script:WebView2.Dispose()
             $Script:WinForm.Dispose()
             if ($null -ne $OriginalTreatControlCAsInput) {

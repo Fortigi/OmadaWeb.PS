@@ -2,6 +2,8 @@ function Start-EdgeDriverLogin {
     [CmdletBinding()]
     PARAM()
 
+    "{0} - Starting Edge WebDriver login" -f $MyInvocation.MyCommand | Write-Verbose
+
     if ($null -eq $EdgeDriver) {
         "Browser authentication failed to start!" | Write-Error -ErrorAction "Stop"
     }

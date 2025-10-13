@@ -203,11 +203,11 @@ Use InPrivate mode for the authentication request.
         Accept wildcard characters: false
 ```
 
-### -SkipCookieCache <boolean>
+### -SkipCookieCache <switch>
 Do not cache the encrypted Omada authentication cookie. It wil also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationMethod Browser.
 
 ```yaml
-        Type: System.Boolean
+        Type: System.switch
         Required: false
         Position: Named
         Accept pipeline input: false
@@ -247,6 +247,21 @@ The tenant id or name for -AuthenticationType OAuth.
         Dynamic: true
         Accept wildcard characters: false
 ```
+
+### -DebugWebView2 <switch>
+Use this parameter to enable WebView2 browser debugging options like Developer Tools.
+
+```yaml
+        Type: System.switch
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
 
 ### Invoke-RestMethod Parameters / Invoke-WebRequest Parameters
 All other parameters, except the exclusion list below, are inherited from the PowerShell built-in functions [`Invoke-RestMethod`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-restmethod) for `Invoke-OmadaRestMethod` and [`Invoke-WebRequest`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest) for `Invoke-OmadaWebRequest`.

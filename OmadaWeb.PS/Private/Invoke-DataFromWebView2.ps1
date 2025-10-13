@@ -5,7 +5,7 @@ function Invoke-DataFromWebView2 {
         [switch]$InPrivate
     )
 
-    "{0} - Opening WebView2 to retrieve authentication cookie" -f $MyInvocation.MyCommand | Write-Host
+    "{0} - Invoking data from WebView2" -f $MyInvocation.MyCommand | Write-Host
 
     if (!(Install-WebView2)) {
         "WebView2 Runtime could not be installed! Cannot continue." | Write-Error -ErrorAction "Stop"
