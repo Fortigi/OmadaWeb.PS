@@ -4,6 +4,9 @@ function Start-EdgeDriver {
         [string]$EdgeProfile,
         [switch]$InPrivate
     )
+
+    "{0} - Starting Edge WebDriver" -f $MyInvocation.MyCommand | Write-Verbose
+
     $JsonLibraryType = Invoke-WebEdgeDriverFramework
     try {
         Add-Type -Path $($Script:WebDriverPath)

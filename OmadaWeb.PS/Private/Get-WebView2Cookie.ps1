@@ -2,7 +2,10 @@ function Get-WebView2Cookie {
     [CmdletBinding()]
     param()
     try {
-        "{0} - {1}" -f $MyInvocation.MyCommand, ($Script:WebView2.Source | ConvertTo-Json ) | Write-Verbose
+
+        if ( $Script:LastCheckedHost -ne $Script:WebView2.Source.Host) {
+            "{0} - {1}" -f $MyInvocation.MyCommand, ($Script:WebView2.Source | ConvertTo-Json ) | Write-Verbose
+        }
 
         if ($null -eq $Script:WebView2.CoreWebView2.CookieManager) {
             return
@@ -18,12 +21,13 @@ function Get-WebView2Cookie {
             try {
                 if ($Script:Task.IsFaulted) {
                     $Message = if ($Script:Task.Exception.InnerException) {
-                        $Script:Task.Exception.InnerException.Message
+                        [Console]::WriteLine($Script:Task.Exception.InnerException.Message)
                     }
                     else {
-                        $Script:Task.Exception.ToString()
+                        [Console]::WriteLine( $Script:Task.Exception.ToString())
                     }
                     [System.Windows.Forms.MessageBox]::Show($Message, 'Cookie retrieval failed')
+                    return
                 }
                 elseif ($Script:Task.IsCanceled) {
                 }
@@ -40,9 +44,11 @@ function Get-WebView2Cookie {
                     if ($Match -and $Match.Count -gt 0) {
                         $Match | ForEach-Object {
                             if (!$Exported -and $_.name -eq 'oisauthtoken') {
-                                "Get-WebView2Cookie - Found oisauthtoken" | Write-Verbose
+                                if ( $Script:LastCheckedHost -ne $Script:WebView2.Source.Host) {
+                                    "Get-WebView2Cookie - Found oisauthtoken" | Write-Verbose
+                                }
 
-                                if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.CoreWebView2 -and $null -ne $Script:WebView2.CoreWebView2.Settings) {
+                                if (!$Script:UserAgentParameterUsed -and $null -ne $Script:WebView2 -and $null -ne $Script:WebView2.CoreWebView2 -and $null -ne $Script:WebView2.CoreWebView2.Settings) {
                                     $Script:UserAgent = $Script:WebView2.CoreWebView2.Settings.UserAgent
                                 }
 
@@ -60,20 +66,23 @@ function Get-WebView2Cookie {
                             }
                         }
                         if ($Exported) {
-                            # if ($null -ne $Timer -and $Timer.Enabled) {
-                            #     $Timer.Stop()
-                            # }
                             # Close the WebView form
                             if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.FindForm()) {
                                 $Script:WebView2.FindForm().Close()
+                                $Script:ProgressCounter = 0
+                                $Script:LastFiredSecond = -1
+                                $Script:OmadaWatchdogStart = $null
+                                $Script:OmadaWatchdogRunning = $false
                             }
                         }
                     }
                     if ($Exported) {
-                        # if ($null -ne $Timer -and $Timer.Enabled) {
-                        #     $Timer.Stop()
-                        # }
                         return
+                    }
+                    else {
+                        if ( $Script:LastCheckedHost -ne $Script:WebView2.Source.Host) {
+                            "Get-WebView2Cookie - No oisauthtoken found yet" | Write-Verbose
+                        }
                     }
                 }
             }

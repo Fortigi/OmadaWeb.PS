@@ -1,13 +1,21 @@
 function Get-GitHubRelease {
     [CmdletBinding()]
     PARAM(
-        $Org = "JamesNK",
-        $Repo = "Newtonsoft.Json",
-        $TagFilter,
+        [Parameter(Mandatory = $true)]
+        [string]$Org,
+        [Parameter(Mandatory = $true)]
+        [string]$Repo,
+        [Parameter(Mandatory = $false)]
+        [string]$TagFilter,
+        [Parameter(Mandatory = $false)]
         [System.Text.RegularExpressions.Regex]$AssetFilter,
+        [Parameter(Mandatory = $false)]
         [switch]$IncludePreRelease,
+        [Parameter(Mandatory = $false)]
         [switch]$IncludeDraft
     )
+
+    "{0} - Retrieving latest release for: {1}/{2}" -f $MyInvocation.MyCommand, $Org, $Repo | Write-Verbose
 
     $ApiBaseUrl = "https://api.github.com"
     $ApiReleasePath = "/repos/{0}/{1}/releases" -f $Org, $Repo

@@ -8,6 +8,8 @@ function Invoke-DownloadFile {
         $OutputFile
     )
 
+    "{0} - Downloading file from URL: {1}" -f $MyInvocation.MyCommand, $DownloadUrl | Write-Verbose
+
     try {
         if ([String]::IsNullOrWhiteSpace($OutputFile)) {
             $OutputFile = [System.IO.Path]::GetTempFileName()

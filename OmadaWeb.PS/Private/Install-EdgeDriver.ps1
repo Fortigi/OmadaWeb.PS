@@ -5,6 +5,7 @@ function Install-EdgeDriver {
     $EdgeDriverFileName = "msedgedriver.exe"
 
     try {
+        "{0} - Check and install EdgeDriver" -f $MyInvocation.MyCommand | Write-Verbose
         $ComputerInfo = Get-CimInstance -ClassName Win32_ComputerSystem
         switch ($ComputerInfo.SystemType) {
             "x64-based PC" { $Arch = "win64" }

@@ -3,6 +3,8 @@ function Invoke-WebEdgeDriverFramework {
     [CmdletBinding()]
     PARAM()
 
+    "{0} - Invoking Web Edge Driver Framework" -f $MyInvocation.MyCommand | Write-Verbose
+
     $InstallOrUpdateEdgeDriver = $false
     $InstalledEdgeFileInfo = Get-Item $Script:InstalledEdgeFilePath
     if ($Null -ne $InstalledEdgeFileInfo) {

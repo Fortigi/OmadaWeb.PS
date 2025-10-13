@@ -13,7 +13,16 @@ function Invoke-OmadaRequest {
             $BoundParams = $PsCmdLet.MyInvocation.BoundParameters
 
             if ("UserAgent" -notin $BoundParams.Keys) {
-                $BoundParams.Add("UserAgent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+                $BoundParams.Add("UserAgent", $Script:UserAgent)
+                $Script:UserAgentParameterUsed = $false
+            }
+            else {
+                $Script:UserAgentParameterUsed = $true
+                $Script:UserAgent = $BoundParams.UserAgent
+            }
+
+            if ("DebugWebView2" -in $BoundParams.Keys) {
+                $Script:DebugWebView2 = $true
             }
 
             if ("Headers" -notin $BoundParams.Keys) {
@@ -32,12 +41,8 @@ function Invoke-OmadaRequest {
                 "Could not determine the base URL from '{0}', is the URL correct?" -f $BoundParams.Uri | Write-Error -ErrorAction "Stop"
             }
 
-            if ("UserAgent" -notin $BoundParams.Keys) {
-                $BoundParams.Add("UserAgent", $DefaultUserAgent)
-            }
-
             $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-            $Session.UserAgent = $BoundParams.UserAgent
+            $Session.UserAgent = $Script:UserAgent
 
             if ("AuthenticationType" -notin $BoundParams.Keys) {
                 $BoundParams.Add("AuthenticationType", "Browser")
@@ -121,6 +126,17 @@ function Invoke-OmadaRequest {
             "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json) | Write-Verbose
             try {
                 $CustomErrorTrigger = "Login failed - {0}" -f (New-Guid).Guid.ToString()
+                $FullyQualifiedModule = @{
+                    ModuleName    = "Microsoft.PowerShell.Utility"
+                    Guid          = [guid]"1da87e53-152b-403e-98dc-74d7b4d63d59"
+                    ModuleVersion = [Version]"7.0.0"
+                }
+                if ($PSVersionTable.PSEdition -eq "Desktop") {
+                    $FullyQualifiedModule.ModuleVersion = [Version]"3.1.0.0"
+                }
+
+                "{0} - Using Microsoft.PowerShell.Utility module: {1}" -f $MyInvocation.MyCommand, ($FullyQualifiedModule | ConvertTo-Json) | Write-Verbose
+
                 switch ($Script:FunctionName) {
                     "Invoke-RestMethod" {
 
@@ -137,7 +153,9 @@ function Invoke-OmadaRequest {
                         }
                         $Parameters = Set-RequestParameter
 
-                        $Return = (Invoke-RestMethod @Parameters)
+                        $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
+                        "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                        $Return = & ($CommandInfo) @Parameters
 
                         #To support -SkipHttpErrorCheck
                         if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -eq "Browser" -and $Return -is [System.Xml.XmlDocument]) {
@@ -152,7 +170,9 @@ function Invoke-OmadaRequest {
                     }
                     "Invoke-WebRequest" {
                         $Parameters = Set-RequestParameter
-                        $Return = (Invoke-WebRequest @Parameters)
+                        $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
+                        "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                        $Return = & ($CommandInfo) @Parameters
 
                         #To support -SkipHttpErrorCheck
                         if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -eq "Browser" -and $Return -is [Microsoft.PowerShell.Commands.WebResponseObject] -and $Return.StatusCode -eq 401) {
@@ -200,11 +220,10 @@ function Invoke-OmadaRequest {
                         $BrowserData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                     }
                     $Script:OmadaWebAuthCookie = $BrowserData[0]
-                    $BoundParams.UserAgent = $BrowserData[1]
 
                     try {
                         $Parameters = Set-RequestParameter -InvokeOmadaRequest
-                        return (Invoke-OmadaRequest @Parameters)
+                        return (Microsoft.PowerShell.Utility\Invoke-OmadaRequest @Parameters)
                     }
                     catch {
                         throw

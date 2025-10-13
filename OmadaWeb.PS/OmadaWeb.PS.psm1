@@ -20,14 +20,14 @@ else {
 
 $LocalAppDataPath = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
 $ModuleAppDataPath = (New-Item (Join-Path $LocalAppDataPath -ChildPath $ModuleName) -ItemType Directory -Force).FullName
-$BinPath = (New-Item (Join-Path $ModuleAppDataPath -ChildPath "Bin\$PowerShellType") -ItemType Directory -Force).FullName
+$Script:BinPath = (New-Item (Join-Path $ModuleAppDataPath -ChildPath "Bin\$PowerShellType") -ItemType Directory -Force).FullName
 $DefaultParams = @{
-    WebBinBasePath        = $BinPath
+    WebBinBasePath        = $Script:BinPath
     InstalledEdgeBasePath = "C:\Program Files (x86)\Microsoft\Edge\Application"
-    NewtonsoftJsonPath    = $BinPath
-    SystemTextJsonPath    = $BinPath
-    SystemRuntimePath     = $BinPath
-    WebView2Path          = $BinPath
+    NewtonsoftJsonPath    = $Script:BinPath
+    SystemTextJsonPath    = $Script:BinPath
+    SystemRuntimePath     = $Script:BinPath
+    WebView2Path          = $Script:BinPath
     OmadaWebAuthCookie    = $null
     UpdateDependencies    = $false
     LastSessionType       = "Normal"
@@ -54,6 +54,59 @@ try {
 catch {}
 
 "PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json) | Write-Verbose
+
+# Initialize script-level variables
+
+$Script:AccountSelectionAttempted = $false
+$Script:BrowserDataCleared = $false
+$Script:CookieCacheFilePath = $null
+$Script:DebugWebView2 = $false
+$Script:Credential = $null
+$Script:CurrentScenario = $null
+$Script:EdgeDriverPath = $null
+$Script:EdgeProfiles = $null
+$Script:ForceAuthentication = $false
+$Script:FunctionName = $null
+$Script:IdAttributes = $null
+$Script:InstalledEdgeFilePath = $null
+$Script:LastCheckedHost = $null
+$Script:LastLoggedSecond = -1
+[double]$Script:LastFiredSecond = -1
+$Script:LastSessionType = $null
+$Script:LoginCount = 0
+$Script:LoginFailed = $false
+$Script:LoginRetryCount = 0
+$Script:LoginState = $null
+$Script:LoginSubState = $null
+$Script:LoginTask = $null
+$Script:MaxLoginRetries = 3
+$Script:MfaRequestDisplayed = $false
+$Script:MicrosoftOnlineLogin = $false
+$Script:NameObjects = $null
+$Script:NewtonsoftJsonPath = $null
+$Script:OmadaWatchdogStart = $null
+$Script:OmadaWatchdogRunning = $false
+$Script:OmadaWatchdogTimeout = 600
+$Script:OmadaWebAuthCookie = $null
+$Script:OmadaWebBaseUrl = $null
+$Script:PreviousAttributes = $null
+$Script:PreviousScenario = $null
+$Script:ProgressCounter = 0
+$Script:SystemRuntimePath = $null
+$Script:SystemTextJsonPath = $null
+$Script:Timer = $null
+$Script:Task = $null
+$Script:UserAgent = "OmadaWeb.PS/{0}"
+$Script:UserAgentParameterUsed = $false
+$Script:WebDriverPath = $null
+$Script:WebView2CorePath = $null
+$Script:WebView2LoaderPath = $null
+$Script:WebView2Used = $false
+$Script:WebView2UserProfilePath = $null
+$Script:WebView2WinFormsPath = $null
+$Script:WebView2WpfPath = $null
+$Script:WebViewEnv = $null
+
 
 "{0} - Set paths" -f $MyInvocation.MyCommand | Write-Verbose
 #EdgeDriver Location
@@ -147,9 +200,6 @@ Export-ModuleMember -Function $Public.Basename -Alias *
 "Validate version" | Write-Verbose
 try {
     $InstalledModule = Get-InstalledModuleInfo -ModuleName $ModuleName
-
-    $Script:UserAgent = "OmadaWeb.PS/{0}"
-
     if (-not $InstalledModule.RepositorySource -or $InstalledModule.RepositorySource -notlike "*powershellgallery.com*") {
         "Module '{0}' was not sourced from the PowerShell Gallery. Skipping version check." -f $ModuleName | Write-Verbose
         $Script:UserAgent = $Script:UserAgent -f "Development"

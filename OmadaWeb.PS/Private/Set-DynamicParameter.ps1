@@ -1,6 +1,6 @@
 ﻿function Set-DynamicParameter {
     [CmdletBinding()]
-    PARAM(
+    param(
         $FunctionName
     )
     $Dictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
@@ -79,6 +79,7 @@
     New-DynamicParam -Name "EdgeProfile" -Type "string" -ValidateSet $Script:EdgeProfiles.Name -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use the specified Edge profile for the authentication request."
     New-DynamicParam -Name "InPrivate" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use InPrivate mode for the authentication request."
     New-DynamicParam -Name "UseWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use WebView2 instead of Selenium WebDriver for browser-based authentication."
+    New-DynamicParam -Name "DebugWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to enable WebView2 browser debugging options like Developer Tools"
 
     return $Dictionary
 }
