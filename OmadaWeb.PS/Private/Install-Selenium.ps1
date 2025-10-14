@@ -43,7 +43,7 @@ function Install-Selenium {
                 "Failed to update 'Webdriver.dll'. Retry restarting this PowerShell session or manually remove the contents of folder '{0}'. Reuse current version for now. Error:`r`n {1}" -f $WebDriverBasePath, $_.Exception | Write-Warning
             }
             else {
-                Throw
+                $PSCmdlet.ThrowTerminatingError($PSItem)
             }
         }
 
@@ -59,7 +59,7 @@ function Install-Selenium {
                 return $false
             }
             else {
-                Throw
+                $PSCmdlet.ThrowTerminatingError($PSItem)
             }
         }
 

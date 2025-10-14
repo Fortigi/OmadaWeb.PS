@@ -248,7 +248,7 @@ function Get-NuGetPackage {
             $ReturnObjects += $ReturnObject
         }
         catch {
-            $_
+            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
         return $ReturnObjects
     }

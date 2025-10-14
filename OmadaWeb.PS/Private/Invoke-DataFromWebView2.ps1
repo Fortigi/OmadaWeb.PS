@@ -18,41 +18,48 @@ function Invoke-DataFromWebView2 {
     Add-ReflectionAssembly -Object "System.Windows.Forms" -Type LoadWithPartialName
     do {
         try {
+            $Script:LoginRetryCount++
+
+            if ($Script:StopError) {
+                $PSCmdlet.ThrowTerminatingError($PSItem)
+            }
+
+            if ($Script:LoginRetryCount -gt 3) {
+                "`nLogin try count exceeded! Cannot continue!" | Write-Error -ErrorAction "Stop" -Category AuthenticationError
+            }
+
+            "`n{0} - Login try {1} of max {2}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount, $Script:MaxLoginRetries | Write-Verbose
 
             if ($null -eq $Script:OmadaWebAuthCookie -or ($Script:OmadaWebAuthCookie -is [PSCustomObject] -and ($Script:OmadaWebAuthCookie.PsObject.Properties | Measure-Object).Count -eq 0)) {
-                "{0} - Starting login attempt {1}" -f $MyInvocation.MyCommand, ($Script:LoginRetryCount + 1) | Write-Verbose
-                if ($Script:LoginRetryCount -eq 0) {
+                if ($Script:LoginRetryCount -le 1) {
                     try {
                         Start-WebView2Login -EdgeProfile $EdgeProfile -InPrivate:$InPrivate
                     }
                     catch {
-                        throw $_
+                        $PSCmdlet.ThrowTerminatingError($PSItem)
                     }
-                }
-                elseif ($Script:LoginRetryCount -gt 3) {
-                    "`nLogin retry count exceeded! Please check your credentials as no cookie could be retrieved!" | Write-Error -ErrorAction "Stop" -Category AuthenticationError
                 }
                 else {
-                    "WebView2 window seems to be closed before authentication was completed. Re-open WebView2 in 2 seconds!" | Write-Host -ForegroundColor Yellow
+                    "`nWebView2 was unable to complete the process to retrieve a cookie. Re-open WebView2 in 2 seconds!" | Write-Host -ForegroundColor Yellow
                     Start-Sleep -Seconds 2
-                    "`n{0} - Login retry count: {1}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount | Write-Verbose
+                    "`n{0} - Login try count: {1}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount | Write-Verbose
                     try {
                         Start-WebView2Login -EdgeProfile $EdgeProfile -InPrivate:$InPrivate
                     }
                     catch {
-                        throw $_
+                        $PSCmdlet.ThrowTerminatingError($PSItem)
                     }
                 }
             }
-            else{
+            else {
                 "{0} - Existing authentication cookie found" -f $MyInvocation.MyCommand | Write-Verbose
             }
         }
         catch {
-            throw $_
+            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
-    until(($null -ne $Script:OmadaWebAuthCookie -and ($Script:OmadaWebAuthCookie -is [PSCustomObject] -and ($Script:OmadaWebAuthCookie.PsObject.Properties | Measure-Object).Count -gt 0)) -or $Script:LoginRetryCount -gt 3)
+    until(($null -ne $Script:OmadaWebAuthCookie -and ($Script:OmadaWebAuthCookie -is [PSCustomObject] -and ($Script:OmadaWebAuthCookie.PsObject.Properties | Measure-Object).Count -gt 0)) -or $Script:LoginRetryCount -ge 3)
 
     if ($null -ne $Script:OmadaWebAuthCookie -and ($Script:OmadaWebAuthCookie -is [PSCustomObject] -and ($Script:OmadaWebAuthCookie.PsObject.Properties | Measure-Object).Count -gt 0)) {
         $Script:LoginRetryCount = 0

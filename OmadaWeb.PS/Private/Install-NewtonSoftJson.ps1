@@ -23,7 +23,7 @@ function Install-NewtonSoftJson {
             return $false
         }
         else {
-            Throw
+            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
 

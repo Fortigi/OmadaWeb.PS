@@ -28,6 +28,6 @@ function Add-ReflectionAssembly {
     }
     catch {
         if ($_.Exception.Message -like '*Assembly with same name is already loaded*') {}
-        else { throw $_.Exception.Message }
+        else { $PSCmdlet.ThrowTerminatingError($PSItem) }
     }
 }

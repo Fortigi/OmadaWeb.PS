@@ -21,9 +21,13 @@ else {
 $LocalAppDataPath = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
 $ModuleAppDataPath = (New-Item (Join-Path $LocalAppDataPath -ChildPath $ModuleName) -ItemType Directory -Force).FullName
 $Script:BinPath = (New-Item (Join-Path $ModuleAppDataPath -ChildPath "Bin\$PowerShellType") -ItemType Directory -Force).FullName
+$RuntimeFolder = "win-x64"
+if ($Env:PROCESSOR_ARCHITECTURE -eq "x86") {
+    $RuntimeFolder = "win-x86"
+}
 $DefaultParams = @{
     WebBinBasePath        = $Script:BinPath
-    InstalledEdgeBasePath = "C:\Program Files (x86)\Microsoft\Edge\Application"
+    InstalledEdgeBasePath = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application"
     NewtonsoftJsonPath    = $Script:BinPath
     SystemTextJsonPath    = $Script:BinPath
     SystemRuntimePath     = $Script:BinPath
@@ -48,6 +52,47 @@ $Parameters.GetEnumerator() | ForEach-Object {
     New-Variable -Name $_.Key -Value $_.Value -Force
 }
 
+"Trying to find the Edge Browser installation path" | Write-Verbose
+if (!(Test-Path $InstalledEdgeBasePath -PathType Container)) {
+    $InstalledEdgeBasePath = "$($env:ProgramFiles)\Microsoft\Edge\Application"
+    "Trying path: {0}" -f $InstalledEdgeBasePath | Write-Verbose
+    if (!(Test-Path $InstalledEdgeBasePath -PathType Container)) {
+        $UnInstallRegLocation = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+        )
+
+        $EdgeRegs = @()
+        foreach ($RegLocation in $UnInstallRegLocation) {
+            if (Test-Path $RegLocation -PathType Container) {
+                "Searching registry location: {0}" -f $RegLocation | Write-Verbose
+                $EdgeRegs += Get-ChildItem $RegLocation -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_.DisplayName -like "Microsoft Edge*" -and $_.DisplayName -notlike "*WebView2 Runtime*" -and $_.InstallLocation -and (Test-Path $_.InstallLocation -PathType Container) }
+            }
+            else {
+                "Registry location not found: {0}" -f $RegLocation | Write-Verbose
+            }
+        }
+        foreach ($EdgeReg in $EdgeRegs | Sort-Object InstallDate -Descending) {
+
+            if ($EdgeReg.DisplayName -eq "Microsoft Edge") {
+                $InstalledEdgeBasePath = $EdgeReg.InstallLocation
+                "Found Edge installation in registry: {0}" -f $InstalledEdgeBasePath | Write-Verbose
+                break
+            }
+            elseif ($EdgeReg.DisplayName -like "Microsoft Edge*") {
+                $InstalledEdgeBasePath = $EdgeReg.InstallLocation
+                "Found Edge installation in registry: {0}" -f $InstalledEdgeBasePath | Write-Verbose
+                break
+            }
+        }
+
+        if (!(Test-Path $InstalledEdgeBasePath -PathType Container)) {
+            "Could not find Microsoft Edge on the system!" -f $InstalledEdgeBasePath | Write-Verbose
+        }
+    }
+}
+
 try {
     $null = New-Item $WebBinBasePath -ItemType Directory -Force
 }
@@ -63,8 +108,6 @@ $Script:CookieCacheFilePath = $null
 $Script:DebugWebView2 = $false
 $Script:Credential = $null
 $Script:CurrentScenario = $null
-$Script:EdgeDriverPath = $null
-$Script:EdgeProfiles = $null
 $Script:ForceAuthentication = $false
 $Script:FunctionName = $null
 $Script:IdAttributes = $null
@@ -83,7 +126,6 @@ $Script:MaxLoginRetries = 3
 $Script:MfaRequestDisplayed = $false
 $Script:MicrosoftOnlineLogin = $false
 $Script:NameObjects = $null
-$Script:NewtonsoftJsonPath = $null
 $Script:OmadaWatchdogStart = $null
 $Script:OmadaWatchdogRunning = $false
 $Script:OmadaWatchdogTimeout = 600
@@ -92,18 +134,12 @@ $Script:OmadaWebBaseUrl = $null
 $Script:PreviousAttributes = $null
 $Script:PreviousScenario = $null
 $Script:ProgressCounter = 0
-$Script:SystemRuntimePath = $null
-$Script:SystemTextJsonPath = $null
+$Script:StopError = $false
 $Script:Timer = $null
 $Script:Task = $null
 $Script:UserAgent = "OmadaWeb.PS/{0}"
 $Script:UserAgentParameterUsed = $false
-$Script:WebDriverPath = $null
-$Script:WebView2CorePath = $null
-$Script:WebView2LoaderPath = $null
 $Script:WebView2Used = $false
-$Script:WebView2UserProfilePath = $null
-$Script:WebView2WinFormsPath = $null
 $Script:WebView2WpfPath = $null
 $Script:WebViewEnv = $null
 
@@ -159,6 +195,26 @@ $Script:InstalledEdgeFilePath = [System.IO.Path]::Combine($InstalledEdgeBasePath
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:InstalledEdgeFilePath | Write-Verbose
 if ($PSBoundParameters["InstalledEdgeBasePath"] -and -not (Test-Path $Script:InstalledEdgeFilePath -PathType Leaf)) {
     "Cannot find path '{0}'. Please make sure that it exists!" -f $Script:InstalledEdgeFilePath | Write-Error -ErrorAction "Stop"
+}
+
+#MsEdgeView2 Location (in case it cannot be found automatically)
+$MsEdgeWebView2ExecPath = Get-ChildItem -Path $InstalledEdgeBasePath -Filter "msedgewebview2.exe" -Recurse -ErrorAction SilentlyContinue | Sort-Object "DirectoryName" | Select-Object -First 1
+
+$MsEdgeFixedRunTimePath = $null
+if ($null -eq $MsEdgeWebView2ExecPath) {
+    $MsEdgeFixedRunTimePath = Get-ChildItem (Join-Path $ModuleAppDataPath -ChildPath ("Bin\WebView2RunTime\{0}" -f $RuntimeFolder)) -Filter "msedgewebview2.exe" -Recurse -ErrorAction SilentlyContinue | Sort-Object "DirectoryName" | Select-Object -First 1
+}
+if ($null -ne $MsEdgeWebView2ExecPath -and (Test-Path $MsEdgeWebView2ExecPath.FullName -PathType Leaf)) {
+    $Script:InstalledEdgeWebView2Path = $MsEdgeWebView2ExecPath.FullName
+    "{0} - Using built-in MsEdgeWebView2 from: '{1}'" -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
+}
+elseif ($null -ne $MsEdgeFixedRunTimePath -and (Test-Path $MsEdgeFixedRunTimePath.FullName -PathType Leaf)) {
+    $Script:InstalledEdgeWebView2Path = $MsEdgeFixedRunTimePath.FullName
+    "{0} - Using fixed MsEdgeWebView2 runtime: '{1}'" -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
+}
+else {
+    "MsEdgeWebView2.exe was not found in the expected folder: '{0}'. It is needed when using WebView2. The module will try to locate it automatically.`nIn case you get an error you can download the fixed version from 'https://developer.microsoft.com/en-us/Microsoft-edge/webview2/' (x86/x64) and follow these steps.`n1. Download the cab file`n2. Open a CMD commandline and run the following command (replace the variables <var> accordingly):`n   set TARGETDIR=%LOCALAPPDATA\OmadaWeb.PS\Bin\WebView2RunTime\<win-x86 or win-x64>;`n   mkdir %TARGETDIR%;'`n   expand `"<downloaded cab file path>`" -F:* `"%TARGETDIR%`";" -f $InstalledEdgeBasePath | Write-Warning
+    $Script:InstalledEdgeWebView2Path = $null
 }
 
 #OmadaWebAuthCookie
@@ -227,7 +283,5 @@ try {
 catch {}
 
 $Script:EdgeProfiles = Get-EdgeProfile
-$Script:LoginRetryCount = 0
-$Script:LoginCount = 0
 
 "Module {0} loaded successfully" -f $ModuleName | Write-Verbose

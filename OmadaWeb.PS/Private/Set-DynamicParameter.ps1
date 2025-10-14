@@ -66,12 +66,13 @@
         New-DynamicParam @ParameterObject
     }
 
-    New-DynamicParam -Name "AuthenticationType" -Type "string" -ValidateSet ("OAuth", "Integrated", "Basic", "Browser", "Windows") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value "Browser" -HelpMessage "The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
+    New-DynamicParam -Name "AuthenticationType" -Type "string" -ValidateSet ("OAuth", "Integrated", "Basic", "Browser", "Windows", "None") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value "Browser" -HelpMessage "The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
 - Basic
 - Browser
 - Integrated
 - OAuth
-- Windows"
+- Windows
+- None"
     New-DynamicParam -Name "EntraIdTenantId" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The tenant id or name for -AuthenticationType OAuth." -Alias "AzureAdTenantId"
     New-DynamicParam -Name "CookiePath" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Attempts to load a stored Omada authentication cookie from this path. This file will be updated re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached. IMPORTANT: Be aware that an unencrypted version of the session cookie is stored on the file system. This parameter only applies in combination with parameter -AuthenticationMethod Browser. Make sure it is stored at a secure location so it cannot be accessed by unauthorized users."
     New-DynamicParam -Name "SkipCookieCache" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Do not cache the encrypted Omada authentication cookie. It wil also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationMethod Browser."
