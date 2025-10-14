@@ -28,6 +28,14 @@ Task Analyze {
 }
 
 Task Test -depends Analyze {
+    $Tests = Get-ChildItem ..\Tests -Filter *.Tests.ps1 -Recurse
+    if ($Tests.Count -eq 0) {
+        'No tests found' | Write-Warning
+    }
+    foreach ($Test in $Tests) {
+        "{0} - Running tests from file: {1}" -f $MyInvocation.MyCommand, $Test.FullName | Write-Host -ForegroundColor Magenta
+        . $Test.FullName
+    }
 }
 
 Task Build -depends Test {
@@ -73,7 +81,7 @@ Task Build -depends Test {
     }
 
     function New-HeaderRow {
-        PARAM(
+        param(
             [string]$Text,
             [int]$Length = 100,
             [char]$BeginChar = "#",
@@ -148,7 +156,7 @@ Task Build -depends Test {
     (Get-Content -Path $ModulePsd1Path) -replace 'PSData = @{', $SerializedContent | Set-Content -Path $ModulePsd1Path -Encoding UTF8 -Force
 
     #    New-ModuleManifest @Modulepsd1
-    "Module psd1 output file: {0}" -f $($ModulePsd1Path) | Write-Host
+    "Module psd1 output file: {0}" -f $($ModulePsd1Path) | Write-Host -ForegroundColor Magenta
     (Get-Content $($ModulePsd1Path) -Raw) -replace "`r?`n", "`r`n" | Invoke-Formatter -Settings $FormattingSettings | Set-Content -Path $($ModulePsd1Path) -Encoding UTF8 -Force
 
     $Length = 150
@@ -183,20 +191,20 @@ Task Build -depends Test {
             $ModuleContent += ($Line | Where-Object { $_ -notmatch '^\s*#' }) + "`n"
         }
         elseif ($ExcludeRegion -and !$FunctionsAdded) {
-            "Adding functions" | Write-Host
+            "Adding functions" | Write-Host -ForegroundColor Magenta
             $PublicModules = @()
             $Public = @(Get-ChildItem -Path $ModuleSource\Public\*.ps1 -Recurse)
             $Private = @(Get-ChildItem -Path $ModuleSource\Private\*.ps1)
 
             $ModuleContent += "#region public functions`n"
-            Foreach ($import in $Public) {
+            foreach ($import in $Public) {
                 $Content = Get-Content $import.FullName -Encoding UTF8 | Where-Object { $_ -notmatch '^\s*#requires' -and $_ -notmatch '^\s*#' }
                 $ModuleContent += $Content.Trim() -join "`n"
                 $ModuleContent += "`n`n"
                 $PublicModules += $import.Basename
             }
             $ModuleContent += "#endregion`n`n#region private functions`n"
-            Foreach ($import in $Private) {
+            foreach ($import in $Private) {
                 $Content = Get-Content $import.FullName -Encoding UTF8 | Where-Object { $_ -notmatch '^\s*#requires' -and $_ -notmatch '^\s*#' }
                 $ModuleContent += $Content.Trim() -join "`n"
                 $ModuleContent += "`n`n"
@@ -206,7 +214,7 @@ Task Build -depends Test {
         }
     }
 
-    "Processing included lines after added functions" | Write-Host
+    "Processing included lines after added functions" | Write-Host -ForegroundColor Magenta
     # Export all the functions
     $ModuleContent += ($Line | Where-Object { $_ -notmatch '^\s*#' }) + "`n"
     $Content = "Export-ModuleMember -Function @(""{0}"") -Alias *`n`n" -f ($PublicModules -join '", "')
@@ -216,27 +224,54 @@ Task Build -depends Test {
     if (($ModuleContent | Select-String -SimpleMatch "Wait-Debugger" -AllMatches | Measure-Object).Count -gt 0) {
         "Use of 'Wait-Debugger' command found in script:{0}. This must be removed before building the module" -f $_.Name | Write-Error -ErrorAction Stop
     }
-    "Module psm1 output file: {0}" -f $OutputDirFile | Write-Host
+    "Module psm1 output file: {0}" -f $OutputDirFile | Write-Host -ForegroundColor Magenta
     $ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
 
-    "Copy nuspec file" | Write-Host
+    "Copy nuspec file" | Write-Host -ForegroundColor Magenta
     Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force
 
 }
 
 Task ImportModule -depends Build {
 
-    Test-ModuleManifest -Path "$OutputDir\$ModuleName.psd1"
+    try {
+        $ScriptBlock = {
+            param (
+                [string]$OutputDir,
+                [string]$ModuleName
+            )
 
-    Set-StrictMode -Version Latest
+            $ErrorActionPreference = "Stop"
+            $WarningPreference = "Continue"
+            $VerbosePreference = "Continue"
+            $InformationPreference = "Continue"
+            try {
+                Test-ModuleManifest -Path "$OutputDir\$ModuleName.psd1"
 
-    $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
-    if ($Test) {
-        "Module loaded successfully" | Write-Verbose
-        Remove-Module -Name $Test.Name -Force
+                Set-StrictMode -Version Latest
+
+                $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
+                if ($Test) {
+                    "Module loaded successfully" | Write-Verbose
+                    Remove-Module -Name $Test.Name -Force
+                }
+                else {
+                    "Module failed to load" | Write-Error -ErrorAction Stop
+                }
+                Set-StrictMode -Off
+            }
+            catch {
+                $PSCmdlet.ThrowTerminatingError($PSItem)
+            }
+        }
+
+        "Testing module on Windows PowerShell" | Write-Host -ForegroundColor Magenta
+        & (Get-Command powershell.exe).Source -NoProfile -NoLogo -Command $ScriptBlock -Args @($OutputDir, $ModuleName) -ExecutionPolicy Unrestricted
+        "Testing module on PowerShell Core" | Write-Host -ForegroundColor Magenta
+        & (Get-Command pwsh.exe).Source -NoProfile -NoLogo -Command $ScriptBlock -Args @($OutputDir, $ModuleName) -ExecutionPolicy Unrestricted
     }
-    else {
-        "Module failed to load" | Write-Error -ErrorAction Stop
+    catch {
+        Write-Host "Error importing module: $_" -ForegroundColor Red
+        $PSCmdlet.ThrowTerminatingError($PSItem)
     }
-    Set-StrictMode -Off
 }

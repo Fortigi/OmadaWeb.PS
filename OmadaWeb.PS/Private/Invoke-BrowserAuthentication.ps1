@@ -93,7 +93,7 @@
             "Unable to export the cookie file due insufficient permissions in folder {0}" -f $($BoundParams.CookiePath) | Write-Warning
         }
         catch {
-            throw
+            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
     elseif ($BoundParams.Keys -contains "SkipCookieCache") {
@@ -118,7 +118,7 @@
             "Unable to cache cookie due insufficient permissions to the temp folder" | Write-Warning
         }
         catch {
-            throw
+            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
 }

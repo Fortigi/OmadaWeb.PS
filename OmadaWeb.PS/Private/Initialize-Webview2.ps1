@@ -91,7 +91,7 @@ function Initialize-WebView2 {
                                             }
                                             if ($Script:OmadaWatchdogRunning -and [System.Int32]([DateTime]::Now - $Script:OmadaWatchdogStart).TotalSeconds -ge $Script:OmadaWatchdogTimeout) {
                                                 [Console]::ForegroundColor = 'Yellow'
-                                                $m = "`nWARNING: Omada response watchdog timeout exceeded after {0} seconds. {1}!" -f [System.Int32]([DateTime]::Now - $Script:OmadaWatchdogStart).TotalSeconds, $(if ($Script:LoginRetryCount -lt $Script:MaxLoginRetries) { "A re-authentication will be triggered" } else { "Login retry count exceeded, stopping" })
+                                                $m = "`nWARNING: Omada response watchdog timeout exceeded after {0} seconds. {1}!" -f [System.Int32]([DateTime]::Now - $Script:OmadaWatchdogStart).TotalSeconds, $(if ($Script:LoginRetryCount -lt $Script:MaxLoginRetries) { "A re-authentication will be triggered" } else { "Login try count exceeded, stopping" })
                                                 [Console]::WriteLine($m)
                                                 [Console]::ResetColor()
 
@@ -177,6 +177,6 @@ function Initialize-WebView2 {
     }
     catch {
         "Error in Initialize-WebView2: {0}" -f $_ | Write-Host  -ForegroundColor Red
-        throw
+        $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }

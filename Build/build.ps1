@@ -1,3 +1,5 @@
+#Requires -Version 7.0
+#Requires -PSEdition Core
 [cmdletbinding()]
 param(
     [string[]]$Task = 'default',
@@ -16,6 +18,6 @@ try {
     Invoke-psake -buildFile "$PSScriptRoot\psakeBuild.ps1" -taskList $Task -Verbose:$VerbosePreference -parameters @{"BuildVersion" = $BuildVersion }
 }
 catch {
-    Write-Error "Build failed with error: $_"
+    $PSCmdlet.ThrowTerminatingError($PSItem)
     exit 1
 }

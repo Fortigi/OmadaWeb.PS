@@ -10,9 +10,6 @@ function Start-WebView2Login {
 
     try {
         "{0} - Starting WebView2 login" -f $MyInvocation.MyCommand | Write-Verbose
-
-        $Script:LoginRetryCount++
-
         [System.Windows.Forms.Application]::EnableVisualStyles()
         $Script:WinForm = New-Object System.Windows.Forms.Form
         [Microsoft.Web.WebView2.WinForms.WebView2] $Script:WebView2 = New-Object Microsoft.Web.WebView2.WinForms.WebView2
@@ -150,10 +147,25 @@ function Start-WebView2Login {
 
         # Create the env once and reuse it for all WebView2 instances in this session
         if ($null -eq $Script:WebViewEnv) {
+            "{0} - Creating CoreWebView2Environment..." -f $MyInvocation.MyCommand | Write-Verbose
             $EnvOptions = [Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions]::new()
             $EnvOptions.AllowSingleSignOnUsingOSPrimaryAccount = $true
-            $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $Script:WebView2UserProfilePath, $EnvOptions)
-            $Script:WebViewEnv = $Task.GetAwaiter().GetResult()
+            try {
+                "{0} - Try to start CoreWebView2Environment using implicit configuration..." -f $MyInvocation.MyCommand | Write-Verbose
+                $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $Script:WebView2UserProfilePath, $EnvOptions)
+                $Script:WebViewEnv = $Task.GetAwaiter().GetResult()
+            }
+            catch {
+                try {
+                    "{0} - Failed to start CoreWebView2Environment using using implicit configuration, now try explicit Edge WebView path: '{1}'..." -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
+                    $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($Script:InstalledEdgeWebView2Path, $Script:WebView2UserProfilePath, $EnvOptions)
+                    $Script:WebViewEnv = $Task.GetAwaiter().GetResult()
+                }
+                catch {
+                    $Script:StopError = $true
+                    "{0} - Error creating CoreWebView2Environment. You can consider to install the Evergreen Standalone Installer from 'https://developer.microsoft.com/en-us/Microsoft-edge/webview2/' and try again: {1}" -f $MyInvocation.MyCommand, $_.Exception | Write-Error -ErrorAction Stop
+                }
+            }
         }
         if ($null -eq $Script:WebView2.CoreWebView2) {
             "{0} - Initializing WebView2 CoreWebView2..." -f $MyInvocation.MyCommand | Write-Verbose

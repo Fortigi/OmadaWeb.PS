@@ -1,6 +1,6 @@
 function Start-EdgeDriverLogin {
     [CmdletBinding()]
-    PARAM()
+    param()
 
     "{0} - Starting Edge WebDriver login" -f $MyInvocation.MyCommand | Write-Verbose
 
@@ -13,15 +13,12 @@ function Start-EdgeDriverLogin {
     #$EdgeDriver.Manage().Window.size = $WindowSize
 
     try {
+        "{0} - Navigate to: {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebBaseUrl | Write-Verbose
         $EdgeDriver.Navigate().GoToUrl($Script:OmadaWebBaseUrl) | Out-Null
+        "{0} - Switch Edge WebView window" -f $MyInvocation.MyCommand | Write-Verbose
         $EdgeDriver.SwitchTo().Window($EdgeDriver.CurrentWindowHandle) | Out-Null
     }
     catch {
-        if ($_.Exception.Message -like "*failed to check if window was closed: disconnected: not connected to DevTools*") {
-            "Edge window seems to be closed before authentication was completed. Re-open Edge driver!" | Write-Host -ForegroundColor Yellow
-        }
-        else {
-            $_
-        }
+        $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }

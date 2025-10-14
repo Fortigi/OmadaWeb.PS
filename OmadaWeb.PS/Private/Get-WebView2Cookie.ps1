@@ -100,6 +100,6 @@ function Get-WebView2Cookie {
     }
     catch {
         Write-Host "Error in Initialize-WebView2: $_" -ForegroundColor Red
-        throw
+        $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }

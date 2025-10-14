@@ -127,6 +127,7 @@ The built-in are the same for both Invoke-OmadaRestMethod and Invoke-OmadaWebReq
 
 ###    -AuthenticationType <string>
 The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
+- None
 - Basic
 - Browser
 - Integrated

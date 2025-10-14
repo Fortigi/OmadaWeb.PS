@@ -35,7 +35,7 @@ function Install-EdgeDriver {
             "Failed to update '{0}'. Try downloading the webdriver manually from '{1}' and place it here: '{2}'. Error:`r`n {3}" -f $EdgeDriverFileName, $EdgeWebdriverDownloadUrl, $WebDriverBasePath, $_.Exception | Write-Error -ErrorAction Stop
         }
         else {
-            Throw
+            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
 
@@ -47,7 +47,7 @@ function Install-EdgeDriver {
             "Failed to update '{0}'. Retry restarting this PowerShell session or manually remove the contents of folder '{1}'. Error:`r`n {2}" -f $EdgeDriverFileName, $WebDriverBasePath, $_.Exception | Write-Error -ErrorAction Stop
         }
         else {
-            Throw
+            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
 

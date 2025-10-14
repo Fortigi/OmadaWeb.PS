@@ -10,6 +10,7 @@ function Invoke-OmadaRequest {
 
             "{0} called for {1} by {2}" -f $MyInvocation.MyCommand, $Script:FunctionName, (Get-PSCallStack)[1].Command | Write-Verbose
 
+            $Script:StopError = $false
             $BoundParams = $PsCmdLet.MyInvocation.BoundParameters
 
             if ("UserAgent" -notin $BoundParams.Keys) {
@@ -106,6 +107,9 @@ function Invoke-OmadaRequest {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
                     Invoke-BasicAuthentication
                 }
+                "None" {
+                    "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
+                }
                 default {
                     "{0} - {1} not supported!" -f $MyInvocation.MyCommand, $_ | Write-Error -ErrorAction "Stop"
                 }
@@ -153,7 +157,13 @@ function Invoke-OmadaRequest {
                         }
                         $Parameters = Set-RequestParameter
 
-                        $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
+                        try {
+                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
+                        }
+                        catch {
+                            Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
+                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
+                        }
                         "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                         $Return = & ($CommandInfo) @Parameters
 
@@ -170,7 +180,13 @@ function Invoke-OmadaRequest {
                     }
                     "Invoke-WebRequest" {
                         $Parameters = Set-RequestParameter
-                        $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
+                        try {
+                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
+                        }
+                        catch {
+                            Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
+                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
+                        }
                         "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                         $Return = & ($CommandInfo) @Parameters
 
@@ -223,19 +239,19 @@ function Invoke-OmadaRequest {
 
                     try {
                         $Parameters = Set-RequestParameter -InvokeOmadaRequest
-                        return (Microsoft.PowerShell.Utility\Invoke-OmadaRequest @Parameters)
+                        return (Invoke-OmadaRequest @Parameters)
                     }
                     catch {
-                        throw
+                        $PSCmdlet.ThrowTerminatingError($PSItem)
                     }
                 }
                 else {
-                    throw
+                    $PSCmdlet.ThrowTerminatingError($PSItem)
                 }
             }
         }
         catch {
-            throw
+            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
 }

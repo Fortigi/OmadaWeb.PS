@@ -25,6 +25,6 @@ function Invoke-DownloadFile {
         return $OutputFile
     }
     catch {
-        Throw
+        $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }
