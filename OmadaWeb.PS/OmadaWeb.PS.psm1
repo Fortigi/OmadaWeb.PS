@@ -7,6 +7,20 @@ param(
 $ModuleName = "OmadaWeb.PS"
 "Loading {0} Module" -f $ModuleName | Write-Verbose
 
+$FullyQualifiedModule = @{
+    ModuleName    = "Microsoft.PowerShell.Utility"
+    Guid          = [guid]"1da87e53-152b-403e-98dc-74d7b4d63d59"
+    ModuleVersion = [Version]"7.0.0"
+}
+if ($PSVersionTable.PSEdition -eq "Desktop") {
+    $FullyQualifiedModule.ModuleVersion = [Version]"3.1.0.0"
+}
+Import-Module -FullyQualifiedName $FullyQualifiedModule -Force -ErrorAction "Stop"
+
+$FullyQualifiedModule.ModuleName = "Microsoft.PowerShell.Management"
+$FullyQualifiedModule.Guid = [guid]"eefcb906-b326-4e99-9f54-8b4bb6ef3c6d"
+Import-Module -FullyQualifiedName $FullyQualifiedModule -Force -ErrorAction "Stop"
+
 $PowerShellType = "Core"
 if ($PSVersionTable.PSVersion.Major -le 5) {
     "When browser authentication type with Selenium is used, it is restricted to version (v4.23) due to compatibility issues in Windows PowerShell Desktop 5. Consider using PowerShell 7 LTS instead, you can get it here: https://aka.ms/powershell-release?tag=stable" | Write-Warning
