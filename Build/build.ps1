@@ -1,13 +1,12 @@
 #Requires -Version 7.0
 #Requires -PSEdition Core
-[cmdletbinding()]
+[CmdletBinding()]
 param(
     [string[]]$Task = 'default',
     [string[]]$BuildVersion = ""
 )
 $Error.Clear()
 $ErrorActionPreference = "Stop"
-$VerbosePreference = "Continue"
 Set-StrictMode -Version Latest
 try {
     if (!(Get-Module -Name Pester -ListAvailable)) { Install-Module -Name Pester -Scope CurrentUser -Force }

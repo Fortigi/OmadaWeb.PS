@@ -18,7 +18,7 @@ jobs:
     name: "BuildTask"
     inputs:
       filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-      arguments: ' -Task default -BuildVersion "1000.0"'
+      arguments: ' -Task default -BuildVersion "1000.0" -Verbose'
       pwsh: true
       failOnStderr: true
     condition: succeeded()
