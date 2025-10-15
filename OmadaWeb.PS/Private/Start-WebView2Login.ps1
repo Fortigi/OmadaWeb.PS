@@ -216,6 +216,7 @@ function Start-WebView2Login {
             }
         }
         catch {}
-        Write-Host "Error in Start-WebView2Login: $_" -ForegroundColor Red
+        Write-Host "Error in Start-WebView2Login" -ForegroundColor Red
+        $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }
