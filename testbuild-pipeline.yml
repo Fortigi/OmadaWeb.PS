@@ -21,4 +21,5 @@ jobs:
       arguments: ' -Task default -BuildVersion "1000.0"'
       pwsh: true
       failOnStderr: true
+      runScriptInSeparateScope: true
     condition: succeeded()
