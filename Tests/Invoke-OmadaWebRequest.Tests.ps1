@@ -1,7 +1,5 @@
-param(
-    [string]$ModulePath = (Join-Path $(Split-Path $PSScriptRoot) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
-)
 BeforeAll {
+    $ModulePath = Join-Path $(Split-Path $PSScriptRoot) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1'
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
     Import-Module $ModulePath -Force -ErrorAction Stop -Prefix Test
 
@@ -43,6 +41,16 @@ Describe 'Invoke-TestOmadaWebRequest' {
 
         It 'Should return result from Invoke-(Test)OmadaRequest using Integrated Authentication' {
             $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication
+            $result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaRequest using Browser Authentication using WebDriver/Selenium' {
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -ForceAuthentication
+            $result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaRequest using Browser Authentication using WebView2' {
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -ForceAuthentication
             $result | Should -Be "OK"
         }
     }

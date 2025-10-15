@@ -65,7 +65,7 @@ PARAM(
     }}
 '@ -f $Url | Out-File $TempScript -Force -Encoding UTF8
 
-            $Arguments = "-NoLogo -NoProfile -File `"$TempScript`""
+            $Arguments = "-NoLogo -NoProfile -ExecutionPolicy Unrestricted -File `"$TempScript`""
             $Global:WebServerPid = (Start-Process (Get-Command pwsh.exe).Source -ArgumentList $Arguments -PassThru).Id
 
             1..30 | ForEach-Object {

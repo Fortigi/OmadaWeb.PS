@@ -48,6 +48,16 @@ Describe 'Invoke-TestOmadaRestMethod' {
             $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication
             $result | Should -Be "OK"
         }
+
+        It 'Should return result from Invoke-(Test)OmadaRequest using Browser Authentication using WebDriver/Selenium' {
+            $result = Invoke-TestOmadaRestMethod -Uri $Uri -ForceAuthentication
+            $result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaRequest using Browser Authentication using WebView2' {
+            $result = Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -ForceAuthentication
+            $result | Should -Be "OK"
+        }
     }
 
     Context 'Process Block - Error Handling' {
