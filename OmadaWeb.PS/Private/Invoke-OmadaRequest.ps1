@@ -228,12 +228,12 @@ function Invoke-OmadaRequest {
                     }
                     if ($UseWebView2) {
                         "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-                        Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        Get-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                         $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
                         $Script:WebView2Used = $true
                     }
                     else {
-                        $BrowserData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        $BrowserData = Get-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                     }
                     $Script:OmadaWebAuthCookie = $BrowserData[0]
 

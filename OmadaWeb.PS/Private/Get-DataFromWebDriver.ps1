@@ -1,4 +1,4 @@
-function Invoke-DataFromWebDriver {
+function Get-DataFromWebDriver {
     [CmdletBinding()]
     param(
         [string]$EdgeProfile,
@@ -204,7 +204,7 @@ function Invoke-DataFromWebDriver {
                 Close-EdgeDriver
             }
             catch {}
-            Invoke-DataFromWebDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
+            Get-DataFromWebDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
         }
         else {
             $PSCmdlet.ThrowTerminatingError($PSItem)

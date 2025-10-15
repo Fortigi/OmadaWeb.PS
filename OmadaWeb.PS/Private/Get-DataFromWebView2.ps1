@@ -1,4 +1,4 @@
-function Invoke-DataFromWebView2 {
+function Get-DataFromWebView2 {
     [CmdletBinding()]
     param(
         [string]$EdgeProfile = "Default",
