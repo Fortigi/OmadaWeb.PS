@@ -22,7 +22,8 @@ function Get-DataFromWebView2 {
                 $Script:LoginRetryCount++
 
                 if ($Script:StopError) {
-                    $PSCmdlet.ThrowTerminatingError($PSItem)
+                    $Script:LoginRetryCount = 0
+                    break
                 }
 
                 if ($Script:LoginRetryCount -gt 3) {

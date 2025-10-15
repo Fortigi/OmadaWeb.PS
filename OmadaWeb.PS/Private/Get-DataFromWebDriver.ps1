@@ -189,7 +189,14 @@ function Get-DataFromWebDriver {
         }
     }
     catch {
-        if ($_.Exception.Message -like '*Exception calling "ExecuteScript" with "*" argument(s): "no such window: target window already closed*"' -or $_.Exception.Message -like '*Exception calling "Window" with "*" argument(s): "no such window*' -or $_.Exception.Message -like "*EdgeDriver window is closed*") {
+        "invalid session id: session deleted as the browser has closed the connection" -match "as the browser has closed the connection"
+
+        if (
+            $_.Exception.Message -like '*Exception calling "ExecuteScript" with "*" argument(s): "no such window: target window already closed*"' -or
+            $_.Exception.Message -like '*Exception calling "Window" with "*" argument(s): "no such window*' -or
+            $_.Exception.Message -like "*EdgeDriver window is closed*" -or
+            $_.Exception.Message -like 'Exception calling "Window" with "*" argument(s): *invalid session id*'
+        ) {
             if ($Script:LoginRetryCount -ge $Script:MaxLoginRetries) {
                 Close-EdgeDriver
                 "`nLogin try count ({0}) exceeded! Cannot continue!" -f $Script:MaxLoginRetries | Write-Error -ErrorAction "Stop" -Category AuthenticationError
