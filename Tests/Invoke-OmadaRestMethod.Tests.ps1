@@ -1,4 +1,4 @@
-PARAM(
+param(
     [string]$ModulePath = (Join-Path $(Split-Path $PSScriptRoot) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
 BeforeAll {
@@ -10,6 +10,24 @@ BeforeAll {
     . (Join-Path $PSScriptRoot 'Start-WebServer.ps1') -Action Start -Port $RandomPort -Force | Out-Null
     Start-Sleep -Seconds 2
     $Uri = "http://localhost:{0}/" -f $RandomPort
+
+    InModuleScope 'OmadaWeb.PS' {
+        if ($env:TF_BUILD -eq 'True' -or $env:TF_BUILD -eq $true) {
+            #Skip WebView2 login in CI/CD pipelines
+            Mock -ModuleName OmadaWeb.PS Start-WebView2Login { $Script:OmadaWebAuthCookie = [pscustomobject]@{
+                    name     = "oisauthtoken"
+                    value    = "test-cookie-value"
+                    domain   = "localhost"
+                    path     = "/"
+                    expires  = $null
+                    httpOnly = $true
+                    secure   = $false
+                    sameSite = "Lax"
+                };
+                $Script:UserAgent = "test-user-agent"
+            } -Verifiable
+        }
+    }
 }
 
 Describe 'Invoke-TestOmadaRestMethod' {
