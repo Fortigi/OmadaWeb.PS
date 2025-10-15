@@ -7,6 +7,7 @@ param(
 )
 $Error.Clear()
 $ErrorActionPreference = "Stop"
+$VerbosePreference = "Continue"
 Set-StrictMode -Version Latest
 try {
     if (!(Get-Module -Name Pester -ListAvailable)) { Install-Module -Name Pester -Scope CurrentUser -Force }

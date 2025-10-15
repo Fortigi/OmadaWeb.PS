@@ -25,32 +25,32 @@ Describe 'Invoke-TestOmadaWebRequest' {
 
     Context 'Process Block - Success' {
         It 'Should return result from Invoke-(Test)OmadaRequest' {
-            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType None -SkipHttpErrorCheck
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType None -SkipHttpErrorCheck -Verbose
             $result.StatusCode | Should -Be 200
         }
 
         It 'Should return result from Invoke-(Test)OmadaRequest using Basic Authentication' {
-            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Basic -Credential (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force))) -AllowUnencryptedAuthentication
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Basic -Credential (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force))) -AllowUnencryptedAuthentication -Verbose
             $result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRequest using Windows Authentication' {
-            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Windows -Credential (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force))) -AllowUnencryptedAuthentication
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Windows -Credential (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force))) -AllowUnencryptedAuthentication -Verbose
             $result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRequest using Integrated Authentication' {
-            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication -Verbose
             $result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRequest using Browser Authentication using WebDriver/Selenium' {
-            $result = Invoke-TestOmadaWebRequest -Uri $Uri -ForceAuthentication
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -ForceAuthentication -Verbose
             $result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRequest using Browser Authentication using WebView2' {
-            $result = Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -ForceAuthentication
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -ForceAuthentication -Verbose
             $result | Should -Be "OK"
         }
     }
@@ -60,7 +60,7 @@ Describe 'Invoke-TestOmadaWebRequest' {
             InModuleScope 'OmadaWeb.PS' {
                 Mock Invoke-OmadaRequest { throw "Test Error" }
             }
-            { Invoke-TestOmadaWebRequest -Uri "http://localhost" -ErrorAction Stop } | Should -Throw
+            { Invoke-TestOmadaWebRequest -Uri "http://localhost" -ErrorAction Stop  -Verbose} | Should -Throw
         }
     }
 }
