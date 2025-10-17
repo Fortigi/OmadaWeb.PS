@@ -58,7 +58,7 @@ try{{
 
     # --- Cookie config ---
     $Name       = "oisauthtoken"
-    $Value      = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("sample-token-123"))
+    $Value      = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("test-cookie-value"))
     $Domain     = $null            # Host-only cookie (recommended for localhost/IP). Set to "localhost" if you really want Domain.
     $Path       = "/"
     $Expires    = $null #[DateTime]::UtcNow.AddHours(1)  # RFC1123 format required
