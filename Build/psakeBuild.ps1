@@ -280,3 +280,30 @@ Task Test -depends ImportModule {
         . $Test.FullName -ModulePath (Join-Path -Path $OutputDir -ChildPath ("{0}.psm1" -f $ModuleName))
     }
 }
+
+# Task Test  {
+
+#     $ScriptBlock = {
+#         param(
+#             [string]$OutputDir,
+#             [string]$ModuleName,
+#             [string]$BasePath
+#         )
+#         Set-Location -Path $BasePath
+#         $Tests = Get-ChildItem ..\Tests -Filter *.Tests.ps1 -Recurse
+#         if ($Tests.Count -eq 0) {
+#             'No tests found' | Write-Warning
+#         }
+#         foreach ($Test in $Tests) {
+#             "{0} - Running tests from file: {1}" -f $MyInvocation.MyCommand, $Test.FullName | Write-Host -ForegroundColor Magenta
+#             . $Test.FullName -ModulePath (Join-Path -Path $OutputDir -ChildPath ("{0}.psm1" -f $ModuleName))
+#         }
+#     }
+#     Wait-Debugger
+#     $BasePath = $PSScriptRoot
+#     "Run function tests on Windows PowerShell" | Write-Host -ForegroundColor Magenta
+#     & (Get-Command powershell.exe).Source -NoLogo -Command $ScriptBlock -Args @($OutputDir, $ModuleName, $BasePath) -ExecutionPolicy Unrestricted
+#     "Run function tests on PowerShell Core" | Write-Host -ForegroundColor Magenta
+#     & (Get-Command pwsh.exe).Source -NoLogo -Command $ScriptBlock -Args @($OutputDir, $ModuleName, $BasePath) -ExecutionPolicy Unrestricted
+
+# }

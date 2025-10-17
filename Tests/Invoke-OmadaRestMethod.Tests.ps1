@@ -59,12 +59,14 @@ Describe 'Invoke-TestOmadaRestMethod' {
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Basic Authentication' {
-            $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force))) -AllowUnencryptedAuthentication
+            $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
+            $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential $Credential -AllowUnencryptedAuthentication
             $result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Windows Authentication' {
-            $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Windows -Credential (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force))) -AllowUnencryptedAuthentication
+            $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
+            $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Windows -Credential $Credential -AllowUnencryptedAuthentication
             $result | Should -Be "OK"
         }
 
@@ -170,6 +172,23 @@ Describe 'Invoke-TestOmadaRestMethod' {
                 Mock Invoke-OmadaRestMethod { throw "Test Error" }
             }
             { Invoke-TestOmadaRestMethod -Uri "http://localhost" -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Should throw terminating error when -WebSession is used' {
+            { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -WebSession null } | Should -Throw
+        }
+        It 'Should throw terminating error when -Authentication is used' {
+            $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
+            { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -Authentication Basic -Credential $Credential } | Should -Throw
+        }
+        It 'Should throw terminating error when -SessionVariable is used' {
+            { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -SessionVariable session } | Should -Throw
+        }
+        It 'Should throw terminating error when -UseDefaultCredentials is used' {
+            { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -UseDefaultCredentials } | Should -Throw
+        }
+        It 'Should throw terminating error when -UseBasicParsing is used' {
+            { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -UseBasicParsing } | Should -Throw
         }
     }
 }
