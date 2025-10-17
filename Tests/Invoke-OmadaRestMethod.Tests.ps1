@@ -1,6 +1,7 @@
 param(
     [string]$ModulePath = (Join-Path $(Split-Path $PSScriptRoot) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
+
 BeforeAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
     Import-Module $ModulePath -Force -ErrorAction Stop -Prefix Test
@@ -23,7 +24,7 @@ BeforeAll {
                     httpOnly = $true
                     secure   = $false
                     sameSite = "Lax"
-                };
+                }
                 $Script:UserAgent = "test-user-agent"
             } -Verifiable
         }
@@ -47,41 +48,126 @@ Describe 'Invoke-TestOmadaRestMethod' {
     }
 
     Context 'Process Block - Success' {
-        It 'Should return result from Invoke-(Test)OmadaRequest' {
+        It 'Should return result from Invoke-(Test)OmadaRestMethod' {
             $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType None
             $result | Should -Be "OK"
         }
 
-        It 'Should return result from Invoke-(Test)OmadaRequest using Basic Authentication' {
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using None Authentication' {
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType None -Verbose
+            $Result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Basic Authentication' {
             $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force))) -AllowUnencryptedAuthentication
             $result | Should -Be "OK"
         }
 
-        It 'Should return result from Invoke-(Test)OmadaRequest using Windows Authentication' {
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Windows Authentication' {
             $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Windows -Credential (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force))) -AllowUnencryptedAuthentication
             $result | Should -Be "OK"
         }
 
-        It 'Should return result from Invoke-(Test)OmadaRequest using Integrated Authentication' {
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Integrated Authentication' {
             $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication
             $result | Should -Be "OK"
         }
 
-        It 'Should return result from Invoke-(Test)OmadaRequest using Browser Authentication using WebDriver/Selenium' {
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebDriver/Selenium' {
             $result = Invoke-TestOmadaRestMethod -Uri $Uri -ForceAuthentication
             $result | Should -Be "OK"
         }
 
-        It 'Should return result from Invoke-(Test)OmadaRequest using Browser Authentication using WebView2' {
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebDriver/Selenium -InPrivate' {
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -ForceAuthentication -InPrivate -Verbose
+            $Result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebView2' {
             $result = Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -ForceAuthentication
             $result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebView2 -InPrivate' {
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -ForceAuthentication -InPrivate -Verbose
+            $Result | Should -Be "OK"
+        }
+
+        It 'Should read cookie previous from exported cookie file' {
+            $CookieObject = [PSCustomObject]@{
+                OmadaWebAuthCookie = [pscustomobject]@{
+                    name     = "oisauthtoken"
+                    value    = "test-cookie-value"
+                    domain   = "localhost"
+                    path     = "/"
+                    expires  = $null
+                    httpOnly = $true
+                    secure   = $false
+                    sameSite = "Lax"
+                }
+            }
+            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            $CookieObject | Export-Clixml -Path $CookiePath -Force
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType None -CookiePath $Env:Temp -Verbose
+            Get-Item $CookiePath | Remove-Item -Force
+            $Result | Should -Be "OK"
+        }
+
+        It 'Should create cookie file when using CookiePath parameter using WebDriver/Selenium' {
+            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            try { Get-Item $CookiePath | Remove-Item -Force } catch { }
+            Test-Path $CookiePath -PathType Leaf | Should -Be $false
+            Invoke-TestOmadaRestMethod -Uri $Uri -CookiePath $Env:Temp -Verbose -ForceAuthentication | Out-Null
+            Test-Path $CookiePath -PathType Leaf | Should -Be $true
+        }
+
+        It 'Should create cookie file when using CookiePath parameter using WebDriver/Selenium -InPrivate' {
+            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            try { Get-Item $CookiePath | Remove-Item -Force } catch { }
+            Test-Path $CookiePath -PathType Leaf | Should -Be $false
+            Invoke-TestOmadaRestMethod -Uri $Uri -CookiePath $Env:Temp -Verbose -ForceAuthentication -InPrivate | Out-Null
+            Test-Path $CookiePath -PathType Leaf | Should -Be $true
+        }
+
+        It 'Should create cookie file when using CookiePath parameter using WebView2' {
+            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            try { Get-Item $CookiePath | Remove-Item -Force } catch { }
+            Test-Path $CookiePath -PathType Leaf | Should -Be $false
+            Invoke-TestOmadaRestMethod -Uri $Uri -CookiePath $Env:Temp -UseWebView2 -Verbose -ForceAuthentication | Out-Null
+            Test-Path $CookiePath -PathType Leaf | Should -Be $true
+        }
+
+        It 'Should create cookie file when using CookiePath parameter using WebView2 -InPrivate' {
+            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            try { Get-Item $CookiePath | Remove-Item -Force } catch { }
+            Test-Path $CookiePath -PathType Leaf | Should -Be $false
+            Invoke-TestOmadaRestMethod -Uri $Uri -CookiePath $Env:Temp -UseWebView2 -Verbose -ForceAuthentication -InPrivate | Out-Null
+            Test-Path $CookiePath -PathType Leaf | Should -Be $true
+        }
+
+        It 'Should create cached cookie file when using CookiePath parameter using WebView2' {
+            $CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($(( [System.Uri]::New($Uri)).Authority))))).Guid -replace "-", "")
+            try { Get-Item $CookieCacheFilePath | Remove-Item -Force } catch { }
+            Test-Path $CookieCacheFilePath -PathType Leaf | Should -Be $false
+            Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -Verbose -ForceAuthentication | Out-Null
+            Test-Path $CookieCacheFilePath -PathType Leaf | Should -Be $true
+            try { Get-Item $CookieCacheFilePath | Remove-Item -Force } catch { }
+        }
+
+        It 'Should not create cached cookie file when using CookiePath parameter using WebView2' {
+            $CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($(( [System.Uri]::New($Uri)).Authority))))).Guid -replace "-", "")
+            try { Get-Item $CookieCacheFilePath | Remove-Item -Force } catch { }
+            Test-Path $CookieCacheFilePath -PathType Leaf | Should -Be $false
+            Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -Verbose -ForceAuthentication -SkipCookieCache | Out-Null
+            Test-Path $CookieCacheFilePath -PathType Leaf | Should -Be $false
+            try { Get-Item $CookieCacheFilePath | Remove-Item -Force } catch { }
         }
     }
 
     Context 'Process Block - Error Handling' {
-        It 'Should throw terminating error when Invoke-OmadaRequest fails' {
+        It 'Should throw terminating error when Invoke-OmadaRestMethod fails' {
             InModuleScope 'OmadaWeb.PS' {
-                Mock Invoke-OmadaRequest { throw "Test Error" }
+                Mock Invoke-OmadaRestMethod { throw "Test Error" }
             }
             { Invoke-TestOmadaRestMethod -Uri "http://localhost" -ErrorAction Stop } | Should -Throw
         }
