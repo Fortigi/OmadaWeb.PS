@@ -98,7 +98,7 @@
     }
     elseif ($BoundParams.Keys -contains "SkipCookieCache") {
         "{0} - Skipping cookie caching" -f $MyInvocation.MyCommand | Write-Verbose
-        if (Test-Path $Script:CookieCacheFilePath -PathType Leaf) {
+        if (![string]::IsNullOrWhiteSpace($Script:CookieCacheFilePath) -and (Test-Path $Script:CookieCacheFilePath -PathType Leaf)) {
             "{0} - Existing cookie cache file found, removing it" -f $MyInvocation.MyCommand | Write-Verbose
             $Script:CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
         }

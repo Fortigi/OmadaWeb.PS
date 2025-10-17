@@ -209,7 +209,7 @@ function Invoke-OmadaRequest {
 
                     "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
                     $Script:OmadaWebAuthCookie = $null
-                    if (Test-Path $Script:CookieCacheFilePath -PathType Leaf) {
+                    if (![string]::IsNullOrWhiteSpace($Script:CookieCacheFilePath) -and (Test-Path $Script:CookieCacheFilePath -PathType Leaf)) {
                         $Script:CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
                     }
                     if ($Script:LoginCount -le 1) {
