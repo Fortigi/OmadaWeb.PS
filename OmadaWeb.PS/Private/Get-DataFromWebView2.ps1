@@ -6,7 +6,7 @@ function Get-DataFromWebView2 {
     )
 
     try {
-        "{0} - Invoking data from WebView2" -f $MyInvocation.MyCommand | Write-Host
+        "{0} - Invoking data from WebView2" -f $MyInvocation.MyCommand | Write-Verbose
 
         if (!(Install-WebView2)) {
             "WebView2 Runtime could not be installed! Cannot continue." | Write-Error -ErrorAction "Stop"
