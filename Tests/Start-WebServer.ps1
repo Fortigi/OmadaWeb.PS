@@ -45,11 +45,11 @@ try {
     }
 
     $Url = "http://127.0.0.1:{0}/" -f $Port
+    $TempScript = Join-Path $env:TEMP ("WebServer-{0}.ps1" -f $Port)
     switch ($Action) {
         "Start" {
 
             if (KillWebServerProcess -Force:$Force) {
-                $TempScript = Join-Path $env:TEMP "WebServer-$Port.ps1"
                 @'
 PARAM(
     [string]$Url = "{0}"
@@ -138,6 +138,8 @@ catch{{
         "Stop" {
             "Try to kill existing web server processes" | Write-Verbose
             KillWebServerProcess -Force:$true | Out-Null
+            try { Get-Item $TempScript -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue }
+            catch {}
         }
         default {
             "Invalid action" | Write-Verbose
