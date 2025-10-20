@@ -14,11 +14,11 @@ jobs:
     condition: succeeded()
 
   - task: PowerShell@2
-    displayName: 'Build Module'
+    displayName: 'Test Build Module'
     name: "BuildTask"
     inputs:
       filePath: '$(System.DefaultWorkingDirectory)/Build/build.ps1'
-      arguments: ' -Task Build -BuildVersion "0.0"'
+      arguments: ' -Task default -BuildVersion "1000.0" -Verbose'
       pwsh: true
       failOnStderr: true
     condition: succeeded()

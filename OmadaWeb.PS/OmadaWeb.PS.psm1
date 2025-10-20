@@ -227,7 +227,7 @@ elseif ($null -ne $MsEdgeFixedRunTimePath -and (Test-Path $MsEdgeFixedRunTimePat
     "{0} - Using fixed MsEdgeWebView2 runtime: '{1}'" -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
 }
 else {
-    "MsEdgeWebView2.exe was not found in the expected folder: '{0}'. It is needed when using WebView2. The module will try to locate it automatically.`nIn case you get an error you can download the fixed version from 'https://developer.microsoft.com/en-us/Microsoft-edge/webview2/' (x86/x64) and follow these steps.`n1. Download the cab file`n2. Open a CMD commandline and run the following command (replace the variables <var> accordingly):`n   set TARGETDIR=%LOCALAPPDATA\OmadaWeb.PS\Bin\WebView2RunTime\<win-x86 or win-x64>;`n   mkdir %TARGETDIR%;'`n   expand `"<downloaded cab file path>`" -F:* `"%TARGETDIR%`";" -f $InstalledEdgeBasePath | Write-Warning
+    "MsEdgeWebView2.exe was not found in the expected folder: '{0}'. It is needed when using WebView2. The module will try to locate it automatically.`nIn case you get an error you can download the fixed version from 'https://developer.microsoft.com/en-us/Microsoft-edge/webview2/' (x86/x64) and follow these steps.`n1. Download the cab file`n2. Open a CMD commandline and run the following command (replace the variables <var> accordingly):`n   set TARGETDIR=%LOCALAPPDATA\OmadaWeb.PS\Bin\WebView2RunTime\<win-x86 or win-x64>;`n   mkdir %TARGETDIR%;`n   expand `"<downloaded cab file path>`" -F:* `"%TARGETDIR%`";" -f $InstalledEdgeBasePath | Write-Warning
     $Script:InstalledEdgeWebView2Path = $null
 }
 
