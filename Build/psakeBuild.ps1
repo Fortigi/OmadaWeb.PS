@@ -10,7 +10,7 @@ Properties {
 }
 
 
-Task default -depends Analyze, Test, Build, ImportModule
+Task default -depends Analyze, Build, ImportModule, Test
 Task DeployOnly -depends Build, Deploy
 
 Task Analyze {
@@ -27,18 +27,7 @@ Task Analyze {
     }
 }
 
-Task Test -depends Analyze {
-    $Tests = Get-ChildItem ..\Tests -Filter *.Tests.ps1 -Recurse
-    if ($Tests.Count -eq 0) {
-        'No tests found' | Write-Warning
-    }
-    foreach ($Test in $Tests) {
-        "{0} - Running tests from file: {1}" -f $MyInvocation.MyCommand, $Test.FullName | Write-Host -ForegroundColor Magenta
-        . $Test.FullName
-    }
-}
-
-Task Build -depends Test {
+Task Build -depends Analyze {
 
     $FormattingSettings = @{
         IncludeRules = @("PSPlaceOpenBrace", "PSUseConsistentIndentation", "PsAvoidUsingCmdletAliases", "PSUseConsistentWhitespace", "PSAlignAssignmentStatement", "PSPlaceCloseBrace")
@@ -100,6 +89,15 @@ Task Build -depends Test {
         return $HeaderRow
 
     }
+
+    #Read Functions
+    $Public = @(Get-ChildItem -Path $ModuleSource\Public\*.ps1 -Recurse)
+    $Private = @(Get-ChildItem -Path $ModuleSource\Private\*.ps1)
+    $PublicModules = @()
+    foreach ($import in $Public) {
+        $PublicModules += ($import.BaseName)
+    }
+
     $ModulePsd1 = Import-PowerShellDataFile (Join-Path $ModuleSource -ChildPath ("{0}.psd1" -f $ModuleName))
     $ModulePsd1.FunctionsToExport = $PublicModules
 
@@ -192,16 +190,11 @@ Task Build -depends Test {
         }
         elseif ($ExcludeRegion -and !$FunctionsAdded) {
             "Adding functions" | Write-Host -ForegroundColor Magenta
-            $PublicModules = @()
-            $Public = @(Get-ChildItem -Path $ModuleSource\Public\*.ps1 -Recurse)
-            $Private = @(Get-ChildItem -Path $ModuleSource\Private\*.ps1)
-
             $ModuleContent += "#region public functions`n"
             foreach ($import in $Public) {
                 $Content = Get-Content $import.FullName -Encoding UTF8 | Where-Object { $_ -notmatch '^\s*#requires' -and $_ -notmatch '^\s*#' }
                 $ModuleContent += $Content.Trim() -join "`n"
                 $ModuleContent += "`n`n"
-                $PublicModules += $import.Basename
             }
             $ModuleContent += "#endregion`n`n#region private functions`n"
             foreach ($import in $Private) {
@@ -253,7 +246,7 @@ Task ImportModule -depends Build {
                 $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
                 if ($Test) {
                     "Module loaded successfully" | Write-Verbose
-                    Remove-Module -Name $Test.Name -Force
+                    Remove-Module -name $Test.Name -Force
                 }
                 else {
                     "Module failed to load" | Write-Error -ErrorAction Stop
@@ -275,3 +268,42 @@ Task ImportModule -depends Build {
         $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }
+
+
+Task Test -depends ImportModule {
+    $Tests = Get-ChildItem ..\Tests -Filter *.Tests.ps1 -Recurse
+    if ($Tests.Count -eq 0) {
+        'No tests found' | Write-Warning
+    }
+    foreach ($Test in $Tests) {
+        "{0} - Running tests from file: {1}" -f $MyInvocation.MyCommand, $Test.FullName | Write-Host -ForegroundColor Magenta
+        . $Test.FullName -ModulePath (Join-Path -Path $OutputDir -ChildPath ("{0}.psm1" -f $ModuleName))
+    }
+}
+
+# Task Test  {
+
+#     $ScriptBlock = {
+#         param(
+#             [string]$OutputDir,
+#             [string]$ModuleName,
+#             [string]$BasePath
+#         )
+#         Set-Location -Path $BasePath
+#         $Tests = Get-ChildItem ..\Tests -Filter *.Tests.ps1 -Recurse
+#         if ($Tests.Count -eq 0) {
+#             'No tests found' | Write-Warning
+#         }
+#         foreach ($Test in $Tests) {
+#             "{0} - Running tests from file: {1}" -f $MyInvocation.MyCommand, $Test.FullName | Write-Host -ForegroundColor Magenta
+#             . $Test.FullName -ModulePath (Join-Path -Path $OutputDir -ChildPath ("{0}.psm1" -f $ModuleName))
+#         }
+#     }
+#     Wait-Debugger
+#     $BasePath = $PSScriptRoot
+#     "Run function tests on Windows PowerShell" | Write-Host -ForegroundColor Magenta
+#     & (Get-Command powershell.exe).Source -NoLogo -Command $ScriptBlock -Args @($OutputDir, $ModuleName, $BasePath) -ExecutionPolicy Unrestricted
+#     "Run function tests on PowerShell Core" | Write-Host -ForegroundColor Magenta
+#     & (Get-Command pwsh.exe).Source -NoLogo -Command $ScriptBlock -Args @($OutputDir, $ModuleName, $BasePath) -ExecutionPolicy Unrestricted
+
+# }

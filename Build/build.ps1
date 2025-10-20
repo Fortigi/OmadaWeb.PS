@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 #Requires -PSEdition Core
-[cmdletbinding()]
+[CmdletBinding()]
 param(
     [string[]]$Task = 'default',
     [string[]]$BuildVersion = ""

@@ -54,13 +54,13 @@
 
         if ($UseWebView2) {
             "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-            Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+            Get-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
             $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
             $Script:WebView2Used = $true
         }
         else {
             "{0} - Using Selenium WebDriver for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-            $BrowserData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+            $BrowserData = Get-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
         }
 
         "{0} - Setting OmadaWebAuthCookie and user agent" -f $MyInvocation.MyCommand | Write-Verbose
@@ -98,7 +98,7 @@
     }
     elseif ($BoundParams.Keys -contains "SkipCookieCache") {
         "{0} - Skipping cookie caching" -f $MyInvocation.MyCommand | Write-Verbose
-        if (Test-Path $Script:CookieCacheFilePath -PathType Leaf) {
+        if (![string]::IsNullOrWhiteSpace($Script:CookieCacheFilePath) -and (Test-Path $Script:CookieCacheFilePath -PathType Leaf)) {
             "{0} - Existing cookie cache file found, removing it" -f $MyInvocation.MyCommand | Write-Verbose
             $Script:CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
         }

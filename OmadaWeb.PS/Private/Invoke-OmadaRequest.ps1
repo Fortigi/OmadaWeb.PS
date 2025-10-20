@@ -209,7 +209,7 @@ function Invoke-OmadaRequest {
 
                     "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
                     $Script:OmadaWebAuthCookie = $null
-                    if (Test-Path $Script:CookieCacheFilePath -PathType Leaf) {
+                    if (![string]::IsNullOrWhiteSpace($Script:CookieCacheFilePath) -and (Test-Path $Script:CookieCacheFilePath -PathType Leaf)) {
                         $Script:CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
                     }
                     if ($Script:LoginCount -le 1) {
@@ -228,12 +228,12 @@ function Invoke-OmadaRequest {
                     }
                     if ($UseWebView2) {
                         "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-                        Invoke-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        Get-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                         $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
                         $Script:WebView2Used = $true
                     }
                     else {
-                        $BrowserData = Invoke-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        $BrowserData = Get-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                     }
                     $Script:OmadaWebAuthCookie = $BrowserData[0]
 

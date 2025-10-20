@@ -10,6 +10,7 @@ function Start-WebView2Login {
 
     try {
         "{0} - Starting WebView2 login" -f $MyInvocation.MyCommand | Write-Verbose
+        $OriginalTreatControlCAsInput = [Console]::TreatControlCAsInput
         [System.Windows.Forms.Application]::EnableVisualStyles()
         $Script:WinForm = New-Object System.Windows.Forms.Form
         [Microsoft.Web.WebView2.WinForms.WebView2] $Script:WebView2 = New-Object Microsoft.Web.WebView2.WinForms.WebView2
@@ -179,43 +180,55 @@ function Start-WebView2Login {
             if ($Script:ForceAuthentication -and -not $Script:BrowserDataCleared) {
                 $InitTask.GetAwaiter().OnCompleted({
                         try {
-                            "Start-WebView2Login - WebView2 initialized, clearing browsing data..." -f $MyInvocation.MyCommand | Write-Verbose
+                            "Start-WebView2Login - WebView2 initialized, clearing browsing data..." | Write-Verbose
                             $ClearTask = $Script:WebView2.CoreWebView2.Profile.ClearBrowsingDataAsync()
                             $ClearTask.GetAwaiter().OnCompleted({
-                                    "Start-WebView2Login - Browsing data cleared" -f $MyInvocation.MyCommand | Write-Verbose
+                                    "Start-WebView2Login - Browsing data cleared" | Write-Verbose
                                     $Script:BrowserDataCleared = $true
                                 })
                         }
                         catch {
-                            [Console]::WriteLine("Error clearing data: $_")
+                            $Msg = "Error clearing data: $_. This is non-terminating error."
+                            [Console]::WriteLine($Msg)
                         }
                     })
             }
         }
 
         # Disable Ctrl+C handling while form is open avoiding crashing the sessions when CTRL+C is pressed
-        $OriginalTreatControlCAsInput = [Console]::TreatControlCAsInput
+        "{0} - Disable Ctrl+C handling while form is open avoiding crashing the sessions when CTRL+C is pressed" -f $MyInvocation.MyCommand | Write-Verbose
         [Console]::TreatControlCAsInput = $true
 
+        "{0} - Show WinForm Dialog" -f $MyInvocation.MyCommand | Write-Verbose
         $Script:WinForm.ShowDialog() | Out-Null
 
+        "{0} - Re-enable Ctrl+C." -f $MyInvocation.MyCommand | Write-Verbose
         [Console]::TreatControlCAsInput = $OriginalTreatControlCAsInput
 
+        "{0} - Reset-Timer" -f $MyInvocation.MyCommand | Write-Verbose
         Reset-Timer
+        "{0} - Dispose WebView2" -f $MyInvocation.MyCommand | Write-Verbose
         $Script:WebView2.Dispose()
+        "{0} - Dispose WinForm" -f $MyInvocation.MyCommand | Write-Verbose
         $Script:WinForm.Dispose()
 
     }
     catch {
+        "{0} - Error occurred" -f $MyInvocation.MyCommand | Write-Verbose
         try {
+            "{0} - Reset-Timer" -f $MyInvocation.MyCommand | Write-Verbose
             Reset-Timer
+            "{0} - Dispose WebView2" -f $MyInvocation.MyCommand | Write-Verbose
             $Script:WebView2.Dispose()
+            "{0} - Dispose WinForm" -f $MyInvocation.MyCommand | Write-Verbose
             $Script:WinForm.Dispose()
             if ($null -ne $OriginalTreatControlCAsInput) {
+                "{0} - Re-enable Ctrl+C." -f $MyInvocation.MyCommand | Write-Verbose
                 [Console]::TreatControlCAsInput = $OriginalTreatControlCAsInput
             }
         }
         catch {}
-        Write-Host "Error in Start-WebView2Login: $_" -ForegroundColor Red
+        Write-Host "Error in Start-WebView2Login" -ForegroundColor Red
+        $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }
