@@ -66,14 +66,18 @@
         New-DynamicParam @ParameterObject
     }
 
-    New-DynamicParam -Name "AuthenticationType" -Type "string" -ValidateSet ("OAuth", "Integrated", "Basic", "Browser", "Windows", "None") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value "Browser" -HelpMessage "The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
+    New-DynamicParam -Name "AuthenticationType" -Type "string" -ValidateSet ("OAuth", "Integrated", "Basic", "Browser","WebView2", "Windows", "None") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value "Browser" -HelpMessage "The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
 - Basic
 - Browser
 - Integrated
 - OAuth
+- WebView2
 - Windows
 - None"
     New-DynamicParam -Name "EntraIdTenantId" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The tenant id or name for -AuthenticationType OAuth." -Alias "AzureAdTenantId"
+    New-DynamicParam -Name "EntraApplicationIdUri" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Enter the application ID URI when the base url does not equal the configured application ID URI in Entra ID. This parameter is used for -AuthenticationType OAuth."
+    New-DynamicParam -Name "OAuthScope" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "OAuth2 scope to be used. Defaults to the form used for Entra ID. This parameter is used for -AuthenticationType OAuth."
+    New-DynamicParam -Name "OAuthUri" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Provide a custom OAuth2 URI. Defaults to the form used for Entra ID based on the provided EntraIdTenantId. This parameter is used for -AuthenticationType OAuth."
     New-DynamicParam -Name "CookiePath" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Attempts to load a stored Omada authentication cookie from this path. This file will be updated re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached. IMPORTANT: Be aware that an unencrypted version of the session cookie is stored on the file system. This parameter only applies in combination with parameter -AuthenticationMethod Browser. Make sure it is stored at a secure location so it cannot be accessed by unauthorized users."
     New-DynamicParam -Name "SkipCookieCache" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Do not cache the encrypted Omada authentication cookie. It wil also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationMethod Browser."
     New-DynamicParam -Name "ForceAuthentication" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Force authentication to Omada even when the cookie is still valid."

@@ -54,13 +54,13 @@ Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data"
 > [!NOTE]
 > While WebDriver with Selenium is currently still the default browser engine, it is planned to be replaced by WebView2 as default in future releases.
 
-#### WebView2
-For environments where Selenium is restricted, you can use [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin. When the binaries are not present they will be downloaded automatically. WebView2 uses a copy of the default Edge user profile, the profile working directory is located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
+### Authentication Types
+
 
 
 ```powershell
 # Use WebView2 for a request
-Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -UseWebView2
+Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -AuthenticationType "WebView2"
 ```
 
 > [!IMPORTANT]
@@ -77,7 +77,7 @@ Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Bas
 ### Invoke-OmadaRestMethod AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest
@@ -89,7 +89,7 @@ Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Bas
 ### Invoke-OmadaWebRequest AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ## EXAMPLES
@@ -108,18 +108,23 @@ Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/ident
 
 ### Example 3: Retrieve an Identity object to the OData endpoint using Browser based authentication by using the Microsoft WebView2 engine.
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser" -UseWebView2
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "WebView2"
 ```
 
-### Example 3: Retrieve Identity object using EntraId OAuth authentication
+### Example 4: Retrieve Identity object using EntraId OAuth authentication
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EmtraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -Credential $Credential
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -Credential $ClientCredential
 ```
 
-### Example 4: Retrieve Identity object using Browser authentication on EntraID with a credential specified
+### Example 5: Retrieve Identity object using Browser authentication on EntraID with a credential specified
 When adding a credential parameter the sign-in process will try to automatically select the correct user when already signed-in or and enters the provided credentials automatically. When PhoneLink is active, you have clipboard sharing configured, number based MFA is used, the required value is copied to the clipboard so you only need to paste it in the authenticator app.
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser" -Credential $Credential
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser" -Credential $UserCredential
+```
+
+### Example 6: Retrieve Identity object using Okta OAuth authentication
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
 ```
 
 ## PARAMETERS
@@ -127,12 +132,16 @@ The built-in are the same for both Invoke-OmadaRestMethod and Invoke-OmadaWebReq
 
 ###    -AuthenticationType <string>
 The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
-- None
-- Basic
-- Browser
-- Integrated
-- OAuth
-- Windows
+- `None`: No explicit authentication is used.
+- `Basic`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: basic` header in the format of `base64(user:password)`.
+- `Browser`: Uses Selenium for authentication with Omada. It automatically installs and updates to the desired webdriver version based on the currently installed Microsoft Edge browser.
+- `Integrated`: Uses Windows Integrated Authentication
+- `OAuth`: Requires <b>Credential</b>. OAuth2 authentication with Entra ID by default, other IDPs are possible using additional OAuth parameters.
+- `WebView2`:
+For environments where Selenium is restricted, you can use [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin. When the binaries are not present they will be downloaded automatically. WebView2 uses a copy of the default Edge user profile, the profile working directory is located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
+- `Windows`: Sends an RFC 6750 `Authorization: Bearer` header with the supplied token.
+
+Supplying <b>AuthenticationType</b> overrides any Authorization headers supplied to Headers or included in WebSession.
 
 ```yaml
         Type: System.String
@@ -178,6 +187,8 @@ Force authentication to Omada even when the cookie is still valid.
 
 ### -UseWebView2 <switch>
 Use WebView2 instead of Selenium WebDriver for browser-based authentication.
+> [!IMPORTANT]
+> This parameter is deprecated, use -AuthenticationType "WebView2" instead.
 
 ```yaml
         Type: System.Management.Automation.SwitchParameter
@@ -245,6 +256,20 @@ The tenant id or name for -AuthenticationType OAuth.
         Accept pipeline input: false
         Parameter set name: (All)
         Aliases: AzureAdTenantId
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -EntraApplicationIdUri <string>
+Enter the application ID URI when the base url does not equal the configured application ID URI in Entra ID. This parameter is used for -AuthenticationType OAuth.
+
+```yaml
+        Type: System.String
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: EntraApplicationIdUri
         Dynamic: true
         Accept wildcard characters: false
 ```

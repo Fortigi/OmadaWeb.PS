@@ -16,7 +16,7 @@
         }
     }
     else {
-        $ExcludedParameters = @("SkipCookieCache", "CookiePath", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile", "UseWebView2")
+        $ExcludedParameters = @("SkipCookieCache", "CookiePath", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile", "UseWebView2", "EntraApplicationIdUri","OAuthUri","OAuthScope")
     }
 
     $Parameters = @{}

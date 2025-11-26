@@ -95,9 +95,13 @@ function Invoke-OmadaRequest {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
                     Invoke-BrowserAuthentication
                 }
+                "WebView2" {
+                    "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
+                    Invoke-BrowserAuthentication
+                }
                 "OAuth" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-EntraIdOAuth
+                    Invoke-OAuth2Authentication
                 }
                 "Integrated" {
                     "{0} - {1} Authentication " -f $MyInvocation.MyCommand, $_ | Write-Verbose

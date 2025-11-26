@@ -82,13 +82,51 @@ Describe 'Invoke-TestOmadaWebRequest' {
             $Result | Should -Be "OK"
         }
 
-        It 'Should return result from Invoke-(Test)OmadaWebRequest using Browser Authentication using WebView2' {
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -ForceAuthentication -Verbose
+
+        Context 'Process Block - WebView2 Authentication' {
+            BeforeAll {
+                $Result = Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -ForceAuthentication -WarningVariable WarningOutput
+            }
+            It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using -UseWebView2' {
+                $Result | Should -Be "OK"
+            }
+            It 'Should return warning that -UseWebView2 is deprecated' {
+                $WarningOutput | Should -BeLike "*UseWebView2 is deprecated*"
+            }
+        }
+
+        Context 'Process Block - WebView2 Authentication -InPrivate' {
+            BeforeAll {
+                $Result = Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -ForceAuthentication -InPrivate -WarningVariable WarningOutput -Verbose
+            }
+            It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using -UseWebView2 -InPrivate' {
+                $Result | Should -Be "OK"
+
+            }
+            It 'Should return warning that -UseWebView2 is deprecated' {
+                $WarningOutput | Should -BeLike "*UseWebView2 is deprecated*"
+            }
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaWebRequest using Browser Authentication using AuthenticationType WebView2' {
+            $result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType WebView2 -ForceAuthentication
+            $result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaWebRequest using Browser Authentication using AuthenticationType WebView2 -InPrivate' {
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType WebView2 -ForceAuthentication -InPrivate -Verbose
             $Result | Should -Be "OK"
         }
 
-        It 'Should return result from Invoke-(Test)OmadaWebRequest using Browser Authentication using WebView2 -InPrivate' {
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -ForceAuthentication -InPrivate -Verbose
+        It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri' {
+            $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential  -OAuthUri $Uri -AllowUnencryptedAuthentication -Verbose
+            $Result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri and OAuthScope' {
+            $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri $Uri -OAuthScope $Uri  -AllowUnencryptedAuthentication -WarningVariable Test -Verbose
             $Result | Should -Be "OK"
         }
 

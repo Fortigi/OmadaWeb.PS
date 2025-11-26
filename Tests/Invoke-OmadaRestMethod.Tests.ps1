@@ -49,8 +49,8 @@ Describe 'Invoke-TestOmadaRestMethod' {
 
     Context 'Process Block - Success' {
         It 'Should return result from Invoke-(Test)OmadaRestMethod' {
-            $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType None
-            $result | Should -Be "OK"
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType None
+            $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using None Authentication' {
@@ -60,24 +60,24 @@ Describe 'Invoke-TestOmadaRestMethod' {
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Basic Authentication' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential $Credential -AllowUnencryptedAuthentication
-            $result | Should -Be "OK"
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential $Credential -AllowUnencryptedAuthentication
+            $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Windows Authentication' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Windows -Credential $Credential -AllowUnencryptedAuthentication
-            $result | Should -Be "OK"
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Windows -Credential $Credential -AllowUnencryptedAuthentication
+            $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Integrated Authentication' {
-            $result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication
-            $result | Should -Be "OK"
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication
+            $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebDriver/Selenium' {
-            $result = Invoke-TestOmadaRestMethod -Uri $Uri -ForceAuthentication
-            $result | Should -Be "OK"
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -ForceAuthentication
+            $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebDriver/Selenium -InPrivate' {
@@ -85,13 +85,52 @@ Describe 'Invoke-TestOmadaRestMethod' {
             $Result | Should -Be "OK"
         }
 
-        It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebView2' {
-            $result = Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -ForceAuthentication
-            $result | Should -Be "OK"
+        Context 'Process Block - WebView2 Authentication' {
+            BeforeAll {
+                $Result = Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -ForceAuthentication -WarningVariable WarningOutput
+            }
+            It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using -UseWebView2' {
+                $Result | Should -Be "OK"
+            }
+            It 'Should return warning that -UseWebView2 is deprecated' {
+                $WarningOutput | Should -BeLike "*UseWebView2 is deprecated*"
+            }
         }
 
-        It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebView2 -InPrivate' {
-            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -ForceAuthentication -InPrivate -Verbose
+        Context 'Process Block - WebView2 Authentication -InPrivate' {
+            BeforeAll {
+                $Result = Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -ForceAuthentication -InPrivate -WarningVariable WarningOutput -Verbose
+            }
+            It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using -UseWebView2 -InPrivate' {
+                $Result | Should -Be "OK"
+
+            }
+            It 'Should return warning that -UseWebView2 is deprecated' {
+                $WarningOutput | Should -BeLike "*UseWebView2 is deprecated*"
+            }
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using AuthenticationType WebView2' {
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType WebView2 -ForceAuthentication
+            $Result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using AuthenticationType WebView2 -InPrivate' {
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType WebView2 -ForceAuthentication -InPrivate -Verbose
+            $Result | Should -Be "OK"
+        }
+
+
+
+        It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri' {
+            $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential  -OAuthUri $Uri -AllowUnencryptedAuthentication -Verbose
+            $Result | Should -Be "OK"
+        }
+
+        It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri and OAuthScope' {
+            $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri $Uri -OAuthScope $Uri  -AllowUnencryptedAuthentication -WarningVariable Test -Verbose
             $Result | Should -Be "OK"
         }
 
@@ -177,9 +216,9 @@ Describe 'Invoke-TestOmadaRestMethod' {
         It 'Should throw terminating error when -WebSession is used' {
             { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -WebSession null } | Should -Throw
         }
-        It 'Should throw terminating error when -Authentication is used' {
+        It 'Should throw terminating error when -Authentication Basic is used' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -Authentication Basic -Credential $Credential } | Should -Throw
+            { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -Authentication Basic  $Credential } | Should -Throw
         }
         It 'Should throw terminating error when -SessionVariable is used' {
             { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -SessionVariable session } | Should -Throw
@@ -190,6 +229,7 @@ Describe 'Invoke-TestOmadaRestMethod' {
         It 'Should throw terminating error when -UseBasicParsing is used' {
             { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -UseBasicParsing } | Should -Throw
         }
+
     }
 }
 
