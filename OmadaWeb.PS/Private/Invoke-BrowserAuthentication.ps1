@@ -43,8 +43,11 @@
 
         # Check if WebView2 should be used instead of Selenium
         $UseWebView2 = $false
-        if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
+        if (($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) -or $BoundParams.AuthenticationType -eq "WebView2") {
             "{0} - UseWebView2 parameter used" -f $MyInvocation.MyCommand | Write-Verbose
+            if ($BoundParams.ContainsKey('UseWebView2')) {
+                "Parameter UseWebView2 is deprecated, please use AuthenticationType WebView2' instead." | Write-Warning
+            }
             $UseWebView2 = $true
         }
         elseif ($Script:WebView2Used) {
