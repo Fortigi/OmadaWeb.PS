@@ -42,20 +42,20 @@
         "{0} - OmadaWebAuthCookie not exists or is for different domain. Need to authenticate!" -f $MyInvocation.MyCommand | Write-Verbose
 
         # Check if WebView2 should be used instead of Selenium
-        $UseWebView2 = $false
+        $WebView2Authentication = $false
         if (($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) -or $BoundParams.AuthenticationType -eq "WebView2") {
             "{0} - UseWebView2 parameter used" -f $MyInvocation.MyCommand | Write-Verbose
             if ($BoundParams.ContainsKey('UseWebView2')) {
                 "Parameter UseWebView2 is deprecated, please use AuthenticationType WebView2' instead." | Write-Warning
             }
-            $UseWebView2 = $true
+            $WebView2Authentication = $true
         }
         elseif ($Script:WebView2Used) {
             "{0} - Continue to use WebView2" -f $MyInvocation.MyCommand | Write-Verbose
-            $UseWebView2 = $true
+            $WebView2Authentication = $true
         }
 
-        if ($UseWebView2) {
+        if ($WebView2Authentication) {
             "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
             Get-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
             $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
