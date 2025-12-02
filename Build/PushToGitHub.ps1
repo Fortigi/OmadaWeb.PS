@@ -100,7 +100,8 @@ try {
         gh release delete $latestTag --yes
     }
     $releaseNotes = if (![string]::IsNullOrWhiteSpace($ReleaseDescription)) { $ReleaseDescription } else { "Release $latestTag" }
-    gh release create $latestTag --title "Release $latestTag" --notes $releaseNotes
+    #Create a pre-release so that release notes can be added later
+    gh release create $latestTag --title "Release $latestTag" --notes $releaseNotes --prerelease
 }
 catch {
     Write-Error "Git or release operations failed: $_"

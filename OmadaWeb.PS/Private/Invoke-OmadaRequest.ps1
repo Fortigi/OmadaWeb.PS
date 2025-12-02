@@ -170,9 +170,8 @@ function Invoke-OmadaRequest {
                         }
                         "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                         $Return = & ($CommandInfo) @Parameters
-
                         #To support -SkipHttpErrorCheck
-                        if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -eq "Browser" -and $Return -is [System.Xml.XmlDocument]) {
+                        if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and $Return -is [System.Xml.XmlDocument]) {
                             $NamespaceManager = New-Object System.Xml.XmlNamespaceManager($Return.NameTable)
                             $NamespaceManager.AddNamespace("xhtml", "http://www.w3.org/1999/xhtml")
                             if ($Return.SelectSingleNode('//xhtml:html/xhtml:head/xhtml:title', $NamespaceManager).'#text' -like "401 *") {
@@ -195,7 +194,7 @@ function Invoke-OmadaRequest {
                         $Return = & ($CommandInfo) @Parameters
 
                         #To support -SkipHttpErrorCheck
-                        if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -eq "Browser" -and $Return -is [Microsoft.PowerShell.Commands.WebResponseObject] -and $Return.StatusCode -eq 401) {
+                        if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and $Return -is [Microsoft.PowerShell.Commands.WebResponseObject] -and $Return.StatusCode -eq 401) {
                             throw $CustomErrorTrigger
                         }
                         $Script:LoginCount++
@@ -208,8 +207,7 @@ function Invoke-OmadaRequest {
             }
 
             catch {
-
-                if (($BoundParams.AuthenticationType) -eq "Browser" -and ($_.Exception.Response.StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
+                if (($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and ($_.Exception.Response.StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
 
                     "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
                     $Script:OmadaWebAuthCookie = $null
@@ -222,15 +220,15 @@ function Invoke-OmadaRequest {
                     else {
                         "Re-authentication failed!" | Write-Host
                     }
-                    $UseWebView2 = $false
-                    if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
-                        $UseWebView2 = $true
+                    $WebView2Authentication = $false
+                    if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2 -or $BoundParams.AuthenticationType -eq "WebView2") {
+                        $WebView2Authentication = $true
                     }
                     elseif ($Script:WebView2Used) {
                         "{0} - Continue to use WebView2" -f $MyInvocation.MyCommand | Write-Verbose
-                        $UseWebView2 = $true
+                        $WebView2Authentication = $true
                     }
-                    if ($UseWebView2) {
+                    if ($WebView2Authentication) {
                         "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
                         Get-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                         $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
