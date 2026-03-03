@@ -8,6 +8,8 @@ function Install-WebView2 {
     try {
         "{0}" -f $MyInvocation.MyCommand | Write-Verbose
 
+        $UpdateNeeded = Test-WebView2RuntimeVersion -IncludeWpf:$IncludeWpf.IsPresent
+
         if (
             (
                 -not (Test-Path $Script:WebView2WinFormsPath -PathType Leaf) -or
@@ -17,14 +19,14 @@ function Install-WebView2 {
                     $IncludeWpf.IsPresent -and
                     -not (Test-Path $Script:WebView2WpfPath -PathType Leaf)
                 )
-            ) -or
-            $Force) {
+            ) -or $Force -or $UpdateNeeded
+        ) {
             "'Microsoft.Web.WebView2' needs to be downloaded. Downloading from NuGet" | Write-Host
 
             #TODO: Troubleshoot why Get-NuGetPackage does not work here as expected
             #$NuGetResults = Get-NuGetPackage -PackageName "Microsoft.Web.WebView2"
 
-            $PackageUrl = "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.3537.50"
+            $PackageUrl = "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/{0}" -f $Script:WebView2LatestVersion
 
             $DirectoryName = "net462"
             $NuGetDirectoryPath = ".\lib\net462"
