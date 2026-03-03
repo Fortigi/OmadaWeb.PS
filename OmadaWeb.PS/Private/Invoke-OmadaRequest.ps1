@@ -46,7 +46,7 @@ function Invoke-OmadaRequest {
             $Session.UserAgent = $Script:UserAgent
 
             if ("AuthenticationType" -notin $BoundParams.Keys) {
-                $BoundParams.Add("AuthenticationType", "Browser")
+                $BoundParams.Add("AuthenticationType", "WebView2")
             }
 
             if ($null -eq $Script:OmadaWebAuthCookie) {

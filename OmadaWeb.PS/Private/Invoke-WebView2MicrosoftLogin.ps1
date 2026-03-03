@@ -1,4 +1,5 @@
 function Invoke-WebView2MicrosoftLogin {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'KeepMeSignedInId', Justification = 'Added for later use in the function')]
     [CmdletBinding()]
     param()
 
@@ -27,6 +28,7 @@ function Invoke-WebView2MicrosoftLogin {
         $MfaRetryId1 = "idA_SAASTO_Resend"
         $MfaRetryId2 = "idA_SAASDS_Resend"
         $ButtonBackId = "idBtn_Back"
+        $KeepMeSignedInId = "KmsiCheckboxField"
 
         # JavaScript to get all element details on the page
         $getAllIdsScript = @"
@@ -43,7 +45,8 @@ function Invoke-WebView2MicrosoftLogin {
         'i0281',
         'idA_PWD_ForgotPassword',
         'passwordError',
-        'idRemoteNGC_DisplaySign'
+        'idRemoteNGC_DisplaySign',
+        'KmsiCheckboxField'
     ];
 
     var foundElements = [];
