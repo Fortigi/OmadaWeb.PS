@@ -50,6 +50,7 @@ $DefaultParams = @{
     UpdateDependencies    = $false
     LastSessionType       = "Normal"
     WebView2Used          = $false
+    CheckForUpdates       = $true
 }
 
 $DefaultParams.GetEnumerator() | ForEach-Object {
@@ -153,10 +154,16 @@ $Script:Timer = $null
 $Script:Task = $null
 $Script:UserAgent = "OmadaWeb.PS/{0}"
 $Script:UserAgentParameterUsed = $false
-$Script:WebView2Used = $false
-$Script:WebView2WpfPath = $null
 $Script:WebViewEnv = $null
+$Script:WebView2Used = $false
+$Script:WebView2UpdateChecked = $false
+$Script:WebView2WpfPath = $null
+$Script:WebView2LatestVersion = $null
 
+if ($PsBoundParameters.ContainsKey("CheckForUpdates") -and $PsBoundParameters["CheckForUpdates"] -eq $false) {
+    "Skipping update check based on provided parameter" | Write-Verbose
+    $Script:WebView2UpdateChecked = $true
+}
 
 "{0} - Set paths" -f $MyInvocation.MyCommand | Write-Verbose
 #EdgeDriver Location

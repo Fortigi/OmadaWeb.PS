@@ -73,12 +73,12 @@ Describe 'Invoke-TestOmadaWebRequest' {
         }
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using Browser Authentication using WebDriver/Selenium' {
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -ForceAuthentication -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Browser -ForceAuthentication -Verbose
             $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using Browser Authentication using WebDriver/Selenium -InPrivate' {
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -ForceAuthentication -InPrivate -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Browser -ForceAuthentication -InPrivate -Verbose
             $Result | Should -Be "OK"
         }
 
@@ -150,7 +150,7 @@ Describe 'Invoke-TestOmadaWebRequest' {
             $Result | Should -Be "OK"
         }
 
-        It 'Should create cookie file when using CookiePath parameter using WebDriver/Selenium' {
+        It 'Should create cookie file when using CookiePath parameter using WebView2' {
             $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
             try { Get-Item $CookiePath | Remove-Item -Force } catch { }
             Test-Path $CookiePath -PathType Leaf | Should -Be $false
@@ -158,7 +158,7 @@ Describe 'Invoke-TestOmadaWebRequest' {
             Test-Path $CookiePath -PathType Leaf | Should -Be $true
         }
 
-        It 'Should create cookie file when using CookiePath parameter using WebDriver/Selenium -InPrivate' {
+        It 'Should create cookie file when using CookiePath parameter using WebView2 -InPrivate' {
             $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
             try { Get-Item $CookiePath | Remove-Item -Force } catch { }
             Test-Path $CookiePath -PathType Leaf | Should -Be $false

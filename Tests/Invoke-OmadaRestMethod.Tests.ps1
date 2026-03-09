@@ -76,12 +76,12 @@ Describe 'Invoke-TestOmadaRestMethod' {
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebDriver/Selenium' {
-            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -ForceAuthentication
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Browser -ForceAuthentication
             $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Browser Authentication using WebDriver/Selenium -InPrivate' {
-            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -ForceAuthentication -InPrivate -Verbose
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Browser -ForceAuthentication -InPrivate -Verbose
             $Result | Should -Be "OK"
         }
 
@@ -120,8 +120,6 @@ Describe 'Invoke-TestOmadaRestMethod' {
             $Result | Should -Be "OK"
         }
 
-
-
         It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
             $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential  -OAuthUri $Uri -AllowUnencryptedAuthentication -Verbose
@@ -154,7 +152,7 @@ Describe 'Invoke-TestOmadaRestMethod' {
             $Result | Should -Be "OK"
         }
 
-        It 'Should create cookie file when using CookiePath parameter using WebDriver/Selenium' {
+        It 'Should create cookie file when using CookiePath parameter using WebView2' {
             $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
             try { Get-Item $CookiePath | Remove-Item -Force } catch { }
             Test-Path $CookiePath -PathType Leaf | Should -Be $false
@@ -162,7 +160,7 @@ Describe 'Invoke-TestOmadaRestMethod' {
             Test-Path $CookiePath -PathType Leaf | Should -Be $true
         }
 
-        It 'Should create cookie file when using CookiePath parameter using WebDriver/Selenium -InPrivate' {
+        It 'Should create cookie file when using CookiePath parameter using WebView2 -InPrivate' {
             $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
             try { Get-Item $CookiePath | Remove-Item -Force } catch { }
             Test-Path $CookiePath -PathType Leaf | Should -Be $false

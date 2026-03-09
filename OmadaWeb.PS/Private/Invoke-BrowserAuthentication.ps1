@@ -45,7 +45,7 @@
         $WebView2Authentication = $false
         if (($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) -or $BoundParams.AuthenticationType -eq "WebView2") {
             "{0} - UseWebView2 parameter used" -f $MyInvocation.MyCommand | Write-Verbose
-            if ($BoundParams.ContainsKey('UseWebView2')) {
+            if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
                 "Parameter UseWebView2 is deprecated, please use AuthenticationType WebView2' instead." | Write-Warning
             }
             $WebView2Authentication = $true
