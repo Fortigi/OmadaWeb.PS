@@ -116,7 +116,7 @@ catch {}
 "PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json) | Write-Verbose
 
 # Initialize script-level variables
-
+$Global:OmadaWebPSCurrentBaseUrl = $null
 $Script:AccountSelectionAttempted = $false
 $Script:BrowserDataCleared = $false
 $Script:CookieCacheFilePath = $null

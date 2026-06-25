@@ -37,6 +37,8 @@ function Invoke-OmadaRequest {
                     $Script:OmadaWebBaseUrl = "{0}://{1}:{2}" -f $Uri.Scheme, $Uri.Host, $Uri.Port
                 }
                 "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebBaseUrl | Write-Verbose
+                $Global:OmadaWebPSCurrentBaseUrl = $Script:OmadaWebBaseUrl
+                "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebPSCurrentBaseUrl | Write-Verbose
             }
             else {
                 "Could not determine the base URL from '{0}', is the URL correct?" -f $BoundParams.Uri | Write-Error -ErrorAction "Stop"
