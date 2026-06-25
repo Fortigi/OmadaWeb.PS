@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'OmadaWeb.PS/**'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -49,6 +50,12 @@ jobs:
     name: Package and Release
     runs-on: windows-latest
     needs: build
+    # Requires the "release" GitHub Environment with required reviewers configured
+    # (Settings > Environments) for the approval gate to take effect. Until that
+    # is set up, this job-level condition is the actual gate: it only runs when
+    # someone manually triggers this workflow (Run workflow), never on a plain
+    # push to main, so publishing always needs a deliberate human action.
+    if: github.event_name == 'workflow_dispatch'
     environment: release
 
     env:
