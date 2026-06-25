@@ -11,19 +11,19 @@ function Get-EdgeProfile {
             $_.Name -match "^Default$|^Profile \d+$"
         }
 
-        $ProfileInfo = foreach ($Profile in $Profiles) {
-            $PreferencesFile = Join-Path -Path $Profile.FullName -ChildPath "Preferences"
+        $ProfileInfo = foreach ($EdgeProfile in $Profiles) {
+            $PreferencesFile = Join-Path -Path $EdgeProfile.FullName -ChildPath "Preferences"
             if (Test-Path $PreferencesFile) {
 
                 $Preferences = Get-Content -Path $PreferencesFile -Raw | ConvertFrom-Json
                 [PSCustomObject]@{
-                    Folder = $Profile.Name
+                    Folder = $EdgeProfile.Name
                     Name   = $Preferences.profile.name
                 }
             }
             else {
                 [PSCustomObject]@{
-                    Folder = $Profile.Name
+                    Folder = $EdgeProfile.Name
                     Name   = "Default"
                 }
             }
