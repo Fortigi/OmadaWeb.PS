@@ -1,0 +1,64 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check branch is up to date with main
+        shell: pwsh
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor origin/main HEAD
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "This branch is behind 'main'. Please merge or rebase 'main' into your branch and push again."
+            exit 1
+          }
+          Write-Host "Branch is up to date with main."
+
+      - name: Determine changed files
+        shell: pwsh
+        run: |
+          $files = git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }}
+          $joined = ($files -join ';')
+          "PR_CHANGED_FILES=$joined" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install modules
+        shell: pwsh
+        run: ./Build/InstallModules.ps1
+
+      - name: Analyze, test and build
+        shell: pwsh
+        run: ./Build/build.ps1 -Task TestBuildOnly -BuildVersion '0.0.0'
+
+      - name: Check for test results
+        id: test-results
+        if: always()
+        shell: pwsh
+        run: |
+          $exists = Test-Path 'buildoutput/TestResults.xml'
+          "exists=$exists" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always() && steps.test-results.outputs.exists == 'True'
+        with:
+          name: Pester Tests
+          path: buildoutput/TestResults.xml
+          reporter: java-junit

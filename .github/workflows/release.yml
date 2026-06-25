@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'OmadaWeb.PS/**'
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+
+    outputs:
+      build_version: ${{ steps.versioning.outputs.build_version }}
+      year: ${{ steps.versioning.outputs.year }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install modules
+        shell: pwsh
+        run: ./Build/InstallModules.ps1
+
+      - name: Generate version number
+        id: versioning
+        shell: pwsh
+        run: |
+          $date     = Get-Date
+          $version  = '{0:d4}.{1:d2}.{2:d2}.{3}' -f $date.Year, $date.Month, $date.Day, ${{ github.run_number }}
+          "build_version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "year=$($date.Year)"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Version: $version"
+
+      - name: Build module
+        shell: pwsh
+        run: |
+          ./Build/build.ps1 -Task Build -BuildVersion '${{ steps.versioning.outputs.build_version }}'
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: BuildOutput
+          path: buildoutput/
+
+  release:
+    name: Package and Release
+    runs-on: windows-latest
+    needs: build
+    environment: release
+
+    env:
+      BUILD_VERSION: ${{ needs.build.outputs.build_version }}
+      YEAR: ${{ needs.build.outputs.year }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build output
+        uses: actions/download-artifact@v4
+        with:
+          name: BuildOutput
+          path: buildoutput/
+
+      - name: Pack NuGet package
+        shell: pwsh
+        run: |
+          nuget pack OmadaWeb.PS.nuspec `
+            -Version '${{ env.BUILD_VERSION }}' `
+            -Properties "VERSION=${{ env.BUILD_VERSION }};YEAR=${{ env.YEAR }}" `
+            -OutputDirectory staging/
+
+      - name: Publish to PSGallery
+        shell: pwsh
+        run: |
+          ./Build/PushToPsGallery.ps1 `
+            -SystemDefaultWorkingDirectory '${{ github.workspace }}' `
+            -PsGalleryKey '${{ secrets.PSGALLERY_API_KEY }}' `
+            -BuildPath 'OmadaWeb.PS'
+
+      - name: Create Git tag
+        shell: pwsh
+        run: |
+          git config user.email "devops@fortigi.nl"
+          git config user.name "GitHub Actions"
+          git tag -a "v${{ env.BUILD_VERSION }}" -m "Release version ${{ env.BUILD_VERSION }}"
+          git push origin "refs/tags/v${{ env.BUILD_VERSION }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.BUILD_VERSION }}
+          name: Release v${{ env.BUILD_VERSION }}
+          files: staging/*.nupkg
+          generate_release_notes: true

@@ -1,0 +1,126 @@
+name: Nightly Build
+
+on:
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    name: Check for new commits
+    runs-on: ubuntu-latest
+
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if main has new commits since last nightly tag
+        id: check
+        shell: bash
+        run: |
+          LAST_NIGHTLY_TAG=$(git tag -l 'v*-nightly' --sort=-creatordate | head -n 1)
+          if [ -z "$LAST_NIGHTLY_TAG" ]; then
+            echo "No previous nightly tag found, will build."
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            LAST_NIGHTLY_COMMIT=$(git rev-list -n 1 "$LAST_NIGHTLY_TAG")
+            HEAD_COMMIT=$(git rev-parse HEAD)
+            if [ "$LAST_NIGHTLY_COMMIT" = "$HEAD_COMMIT" ]; then
+              echo "No new commits since last nightly tag ($LAST_NIGHTLY_TAG), skipping build."
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "New commits found since last nightly tag ($LAST_NIGHTLY_TAG), will build."
+              echo "should_build=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+  build:
+    name: Build
+    runs-on: windows-latest
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+
+    outputs:
+      build_version: ${{ steps.versioning.outputs.build_version }}
+      year: ${{ steps.versioning.outputs.year }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install modules
+        shell: pwsh
+        run: ./Build/InstallModules.ps1
+
+      - name: Generate version number
+        id: versioning
+        shell: pwsh
+        run: |
+          $date     = Get-Date
+          $version  = '{0:d4}.{1:d2}.{2:d2}.{3}' -f $date.Year, $date.Month, $date.Day, ${{ github.run_number }}
+          "build_version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "year=$($date.Year)"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Version: $version"
+
+      - name: Build module
+        shell: pwsh
+        run: |
+          ./Build/build.ps1 -Task Build -BuildVersion '${{ steps.versioning.outputs.build_version }}'
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: BuildOutput
+          path: buildoutput/
+
+  nightly-release:
+    name: Package and Nightly Release
+    runs-on: windows-latest
+    needs: [check, build]
+    if: needs.check.outputs.should_build == 'true'
+
+    env:
+      BUILD_VERSION: ${{ needs.build.outputs.build_version }}
+      YEAR: ${{ needs.build.outputs.year }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build output
+        uses: actions/download-artifact@v4
+        with:
+          name: BuildOutput
+          path: buildoutput/
+
+      - name: Pack NuGet package
+        shell: pwsh
+        run: |
+          nuget pack OmadaWeb.PS.nuspec `
+            -Version '${{ env.BUILD_VERSION }}-nightly' `
+            -Properties "VERSION=${{ env.BUILD_VERSION }};YEAR=${{ env.YEAR }}" `
+            -OutputDirectory staging/
+
+      - name: Create Git tag
+        shell: pwsh
+        run: |
+          git config user.email "devops@fortigi.nl"
+          git config user.name "GitHub Actions"
+          git tag -a "v${{ env.BUILD_VERSION }}-nightly" -m "Nightly build version ${{ env.BUILD_VERSION }}"
+          git push origin "refs/tags/v${{ env.BUILD_VERSION }}-nightly"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.BUILD_VERSION }}-nightly
+          name: Nightly Build v${{ env.BUILD_VERSION }}
+          prerelease: true
+          files: staging/*.nupkg
+          generate_release_notes: true

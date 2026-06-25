@@ -16,7 +16,7 @@ catch {
 
 try {
     "Publish-Module to PSGallery" | Write-Host
-    $SourcePath = "{0}/_Artifact/{1}" -f $SystemDefaultWorkingDirectory,$BuildPath.TrimStart('/')
+    $SourcePath = "{0}/buildoutput/{1}" -f $SystemDefaultWorkingDirectory,$BuildPath.TrimStart('/')
     Publish-Module -Path $SourcePath -NuGetApiKey "$PsGalleryKey" -Verbose
 }
 catch {

@@ -13,7 +13,7 @@ BeforeAll {
     $Uri = "http://localhost:{0}/" -f $RandomPort
 
     InModuleScope 'OmadaWeb.PS' {
-        if ($env:TF_BUILD -eq 'True' -or $env:TF_BUILD -eq $true) {
+        if ($env:TF_BUILD -eq 'True' -or $env:TF_BUILD -eq $true -or $env:GITHUB_ACTIONS -eq 'true') {
             #Skip WebView2 login in CI/CD pipelines
             Mock -ModuleName OmadaWeb.PS Start-WebView2Login { $Script:OmadaWebAuthCookie = [pscustomobject]@{
                     name     = "oisauthtoken"
