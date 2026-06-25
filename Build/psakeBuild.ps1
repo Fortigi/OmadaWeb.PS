@@ -12,6 +12,7 @@ Properties {
 
 Task default -depends Analyze, Build, ImportModule, Test
 Task DeployOnly -depends Build, Deploy
+Task TestBuildOnly -depends Analyze, Build, ImportModule, Test
 
 Task Analyze {
 
@@ -274,10 +275,22 @@ Task Test -depends ImportModule {
     $Tests = Get-ChildItem ..\Tests -Filter *.Tests.ps1 -Recurse
     if ($Tests.Count -eq 0) {
         'No tests found' | Write-Warning
+        return
     }
-    foreach ($Test in $Tests) {
-        "{0} - Running tests from file: {1}" -f $MyInvocation.MyCommand, $Test.FullName | Write-Host -ForegroundColor Magenta
-        . $Test.FullName -ModulePath (Join-Path -Path $OutputDir -ChildPath ("{0}.psm1" -f $ModuleName))
+
+    $ModulePsm1Path = Join-Path -Path $OutputDir -ChildPath ("{0}.psm1" -f $ModuleName)
+    $Container = New-PesterContainer -Path $Tests.FullName -Data @{ ModulePath = $ModulePsm1Path }
+
+    $PesterConfiguration = New-PesterConfiguration
+    $PesterConfiguration.Run.Container = $Container
+    $PesterConfiguration.Run.PassThru = $true
+    $PesterConfiguration.TestResult.Enabled = $true
+    $PesterConfiguration.TestResult.OutputFormat = 'JUnitXml'
+    $PesterConfiguration.TestResult.OutputPath = (Join-Path -Path $ParentPath -ChildPath 'buildoutput\TestResults.xml')
+
+    $Result = Invoke-Pester -Configuration $PesterConfiguration
+    if ($Result.FailedCount -gt 0) {
+        Write-Error -Message ("{0} Pester test(s) failed." -f $Result.FailedCount) -ErrorAction Stop
     }
 }
 
