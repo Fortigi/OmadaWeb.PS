@@ -19,8 +19,6 @@ jobs:
       fail-fast: false
       matrix:
         shell: [pwsh, powershell]
-    env:
-      JOB_SHELL: ${{ matrix.shell }}
 
     steps:
       - name: Checkout
@@ -29,7 +27,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check branch is up to date with main
-        shell: ${{ env.JOB_SHELL }}
+        shell: ${{ matrix.shell }}
         run: |
           git fetch origin main
           git merge-base --is-ancestor origin/main HEAD
@@ -40,30 +38,30 @@ jobs:
           Write-Host "Branch is up to date with main."
 
       - name: Determine changed files
-        shell: ${{ env.JOB_SHELL }}
+        shell: ${{ matrix.shell }}
         run: |
           $files = git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }}
           $joined = ($files -join ';')
           "PR_CHANGED_FILES=$joined" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install modules
-        shell: ${{ env.JOB_SHELL }}
+        shell: ${{ matrix.shell }}
         run: ./Build/InstallModules.ps1
 
       - name: Warm up Selenium/Edge WebDriver
-        shell: ${{ env.JOB_SHELL }}
+        shell: ${{ matrix.shell }}
         run: |
           Import-Module ./OmadaWeb.PS/OmadaWeb.PS.psm1 -Force
           InModuleScope OmadaWeb.PS { Invoke-WebEdgeDriverFramework | Out-Null }
 
       - name: Analyze, test and build
-        shell: ${{ env.JOB_SHELL }}
+        shell: ${{ matrix.shell }}
         run: ./Build/build.ps1 -Task TestBuildOnly -BuildVersion '0.0.0'
 
       - name: Check for test results
         id: test-results
         if: always()
-        shell: ${{ env.JOB_SHELL }}
+        shell: ${{ matrix.shell }}
         run: |
           $exists = Test-Path 'buildoutput/TestResults.xml'
           "exists=$exists" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
