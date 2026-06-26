@@ -1,5 +1,5 @@
 param(
-    [string]$ModulePath = (Join-Path $(Split-Path $PSScriptRoot) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
+    [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
 
 BeforeAll {
@@ -31,7 +31,7 @@ BeforeAll {
     }
 }
 
-Describe 'Invoke-TestOmadaWebRequest' {
+Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
     Context 'Function Definition' {
 
         It 'Should have CmdletBinding attribute' {

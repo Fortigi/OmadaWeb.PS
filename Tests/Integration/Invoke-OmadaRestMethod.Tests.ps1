@@ -1,5 +1,5 @@
 param(
-    [string]$ModulePath = (Join-Path $(Split-Path $PSScriptRoot) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
+    [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
 
 BeforeAll {
@@ -31,7 +31,7 @@ BeforeAll {
     }
 }
 
-Describe 'Invoke-TestOmadaRestMethod' {
+Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
     Context 'Function Definition' {
         It 'Should have Invoke-(Test)OmadaODataMethod alias' {
             (Get-Alias Invoke-TestOmadaODataMethod).ReferencedCommand.Name | Should -Eq 'Invoke-TestOmadaRestMethod'
