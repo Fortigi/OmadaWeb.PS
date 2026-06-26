@@ -206,9 +206,9 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
     Context 'Process Block - Error Handling' {
         It 'Should throw terminating error when Invoke-OmadaRestMethod fails' {
             InModuleScope 'OmadaWeb.PS' {
-                Mock Invoke-OmadaRestMethod { throw "Test Error" }
+                Mock Invoke-OmadaRequest { throw "Test Error" }
+                { Invoke-OmadaRestMethod -Uri "http://localhost" -ErrorAction Stop } | Should -Throw
             }
-            { Invoke-TestOmadaRestMethod -Uri "http://localhost" -ErrorAction Stop } | Should -Throw
         }
 
         It 'Should throw terminating error when -WebSession is used' {

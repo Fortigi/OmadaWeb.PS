@@ -110,9 +110,13 @@ catch{{
 
                 "Script contents:`n{0}" -f (Get-Content $TempScript) | Write-Verbose
 
+                $StdOutLog = Join-Path $env:TEMP ("WebServer-{0}.out.log" -f $Port)
+                $StdErrLog = Join-Path $env:TEMP ("WebServer-{0}.err.log" -f $Port)
+                try { Remove-Item $StdOutLog, $StdErrLog -Force -ErrorAction SilentlyContinue } catch {}
+
                 $Arguments = "-NoLogo -NoProfile -ExecutionPolicy Unrestricted -File `"$TempScript`""
                 "Starting web server process: {0} {1}" -f (Get-Command pwsh.exe).Source, $Arguments | Write-Verbose
-                $Global:WebServerPid = (Start-Process (Get-Command pwsh.exe).Source -ArgumentList $Arguments -PassThru -NoNewWindow:$NoNewWindow.IsPresent).Id
+                $Global:WebServerPid = (Start-Process (Get-Command pwsh.exe).Source -ArgumentList $Arguments -PassThru -NoNewWindow:$NoNewWindow.IsPresent -RedirectStandardOutput $StdOutLog -RedirectStandardError $StdErrLog).Id
                 "Process started with PID: {0}" -f $Global:WebServerPid | Write-Verbose
 
                 1..30 | ForEach-Object {
@@ -128,7 +132,9 @@ catch{{
                     }
                 }
                 if ($Result.StatusCode -ne 200) {
-                    throw "Failed to start web server job"
+                    $StdOutContent = Get-Content $StdOutLog -Raw -ErrorAction SilentlyContinue
+                    $StdErrContent = Get-Content $StdErrLog -Raw -ErrorAction SilentlyContinue
+                    throw ("Failed to start web server job. Process stdout:`n{0}`nProcess stderr:`n{1}" -f $StdOutContent, $StdErrContent)
                 }
                 else {
                     "Web server job started: '{0}' (PID: {1})" -f $Url, $Global:WebServerPid | Write-Host

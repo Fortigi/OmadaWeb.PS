@@ -205,8 +205,8 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         It 'Should throw terminating error when Invoke-OmadaRequest fails' {
             InModuleScope 'OmadaWeb.PS' {
                 Mock Invoke-OmadaRequest { throw "Test Error" }
+                { Invoke-OmadaWebRequest -Uri "http://localhost" -ErrorAction Stop  -Verbose } | Should -Throw
             }
-            { Invoke-TestOmadaWebRequest -Uri "http://localhost" -ErrorAction Stop  -Verbose } | Should -Throw
         }
 
         It 'Should throw terminating error when -WebSession is used' {

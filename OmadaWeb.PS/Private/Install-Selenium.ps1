@@ -20,14 +20,7 @@ function Install-Selenium {
     $Repo = "selenium"
     $AssetFilter = ".*dotnet.(?!strongnamed).*\.0\.zip"
 
-    if ($PSVersionTable.PSVersion.Major -le 5) {
-        "Using version 4.23 of Selenium because newer versions are currently not compatible with PowerShell 5.1" | Write-Warning
-
-        $TempZipPath = Get-GitHubRelease -Org $Org -Repo $Repo -TagFilter "*4.23*" -AssetFilter $AssetFilter
-    }
-    else {
-        $TempZipPath = Get-GitHubRelease -Org $Org -Repo $Repo -AssetFilter $AssetFilter
-    }
+    $TempZipPath = Get-GitHubRelease -Org $Org -Repo $Repo -AssetFilter $AssetFilter
 
     $Package = Get-ChildItem $($TempZipPath.FullName) -Filter "*WebDriver*.nupkg"
     $NuPkgZip = Get-Item $($Package.FullName) | Rename-Item -NewName ("{0}.zip" -f $Package.FullName) -PassThru
@@ -36,7 +29,7 @@ function Install-Selenium {
     if ((((Get-ChildItem (Join-Path $($NuPkgPath.FullName) -ChildPath "lib") -Filter "net4*")) | Measure-Object).Count -gt 0) {
         "Use net4* DLL" | Write-Verbose
         try {
-            Get-ChildItem ((Get-ChildItem (Join-Path $($NuPkgPath.FullName) -ChildPath "lib") -Filter "net4*" | Select-Object -Last 1)).FullName -Filter $DllFileName | Copy-Item -Destination (Split-Path $Script:WebDriverPath) -Force
+            Get-ChildItem ((Get-ChildItem (Join-Path $($NuPkgPath.FullName) -ChildPath "lib") -Filter "net4*" | Select-Object -Last 1)).FullName -Filter "*$DllFileName" | Select-Object -First 1 | Copy-Item -Destination $Script:WebDriverPath -Force
         }
         catch {
             if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {
@@ -51,7 +44,7 @@ function Install-Selenium {
     else {
         "net4* DLL missing, using net2* DLL" | Write-Verbose
         try {
-            Get-ChildItem ((Get-ChildItem (Join-Path $($NuPkgPath.FullName) -ChildPath "lib") -Filter "netstandard2.0" | Select-Object -Last 1)).FullName -Filter "WebDriver.dll" | Copy-Item -Destination (Split-Path $Script:WebDriverPath) -Force
+            Get-ChildItem ((Get-ChildItem (Join-Path $($NuPkgPath.FullName) -ChildPath "lib") -Filter "netstandard2.0" | Select-Object -Last 1)).FullName -Filter "*$DllFileName" | Select-Object -First 1 | Copy-Item -Destination $Script:WebDriverPath -Force
         }
         catch {
             if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {
