@@ -21,8 +21,8 @@ Describe 'Invoke-WindowsAuthentication' -Tag 'Unit' {
     }
 
     It 'Should prompt for credentials when none are provided' {
-        InModuleScope 'OmadaWeb.PS' {
-            $Credential = New-Object System.Management.Automation.PSCredential('prompted-user', (ConvertTo-SecureString 'prompted-pass' -AsPlainText -Force))
+        $Credential = New-Object System.Management.Automation.PSCredential('prompted-user', (ConvertTo-SecureString 'prompted-pass' -AsPlainText -Force))
+        InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Credential } {
             Mock Get-Credential { $Credential }
 
             $BoundParams = @{ Headers = @{} }

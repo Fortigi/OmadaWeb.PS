@@ -33,6 +33,9 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
     Context '-InvokeOmadaRequest mode' {
         It 'Should only exclude parameters that Invoke-OmadaRequest does not declare' {
             InModuleScope 'OmadaWeb.PS' {
+                # Invoke-OmadaRequest exposes Uri/Method as dynamic parameters wrapping the native cmdlet
+                # named by $Script:FunctionName; without it set, Get-Command can't resolve them.
+                $Script:FunctionName = 'Invoke-RestMethod'
                 $BoundParams = @{
                     Uri        = 'https://example.omada.cloud'
                     Method     = 'GET'

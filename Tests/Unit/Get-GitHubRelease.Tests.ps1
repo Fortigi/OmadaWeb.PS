@@ -20,8 +20,13 @@ BeforeAll {
 
 Describe 'Get-GitHubRelease' -Tag 'Unit' {
     BeforeEach {
-        InModuleScope 'OmadaWeb.PS' {
-            Mock Invoke-DownloadFile { 'C:\Temp\downloaded.zip' }
+        # Expand-DownloadFile validates -FilePath against the filesystem (ValidateScript), even when mocked,
+        # so Invoke-DownloadFile must return a path to a file that actually exists.
+        $DownloadedFile = Join-Path $TestDrive 'downloaded.zip'
+        New-Item -Path $DownloadedFile -ItemType File -Force | Out-Null
+
+        InModuleScope 'OmadaWeb.PS' -Parameters @{ DownloadedFile = $DownloadedFile } {
+            Mock Invoke-DownloadFile { $DownloadedFile }
             Mock Expand-DownloadFile { 'C:\Temp\expanded' }
         }
     }
