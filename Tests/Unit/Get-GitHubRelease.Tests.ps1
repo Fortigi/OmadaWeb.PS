@@ -26,7 +26,10 @@ Describe 'Get-GitHubRelease' -Tag 'Unit' {
         New-Item -Path $DownloadedFile -ItemType File -Force | Out-Null
 
         InModuleScope 'OmadaWeb.PS' -Parameters @{ DownloadedFile = $DownloadedFile } {
-            Mock Invoke-DownloadFile { $DownloadedFile }
+            # Mock script blocks don't reliably close over InModuleScope -Parameters
+            # variables; assign into module script scope first, then read that back.
+            $Script:DownloadedFilePath = $DownloadedFile
+            Mock Invoke-DownloadFile { $Script:DownloadedFilePath }
             Mock Expand-DownloadFile { 'C:\Temp\expanded' }
         }
     }
