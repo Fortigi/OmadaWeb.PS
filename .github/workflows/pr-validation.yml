@@ -51,9 +51,8 @@ jobs:
       - name: Warm up Selenium/Edge WebDriver
         shell: ${{ matrix.shell }}
         run: |
-          Import-Module ./OmadaWeb.PS/OmadaWeb.PS.psm1 -Force
-          InModuleScope OmadaWeb.PS { Invoke-WebEdgeDriverFramework | Out-Null }
-
+          $module = Import-Module ./OmadaWeb.PS/OmadaWeb.PS.psm1 -Force -PassThru
+          & $module { Invoke-WebEdgeDriverFramework | Out-Null }
       - name: Analyze, test and build
         shell: ${{ matrix.shell }}
         run: ./Build/build.ps1 -Task TestBuildOnly -BuildVersion '0.0.0'
