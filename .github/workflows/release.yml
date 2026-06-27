@@ -8,6 +8,10 @@ on:
       - 'OmadaWeb.PS/**'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  checks: write
+
 jobs:
   build:
     name: Build
@@ -25,6 +29,12 @@ jobs:
         shell: pwsh
         run: ./Build/InstallModules.ps1
 
+      - name: Warm up Selenium/Edge WebDriver
+        shell: pwsh
+        run: |
+          $module = Import-Module ./OmadaWeb.PS/OmadaWeb.PS.psm1 -Force -PassThru
+          & $module { Invoke-WebEdgeDriverFramework | Out-Null }
+
       - name: Generate version number
         id: versioning
         shell: pwsh
@@ -35,10 +45,26 @@ jobs:
           "year=$($date.Year)"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Version: $version"
 
-      - name: Build module
+      - name: Analyze, test and build
         shell: pwsh
         run: |
-          ./Build/build.ps1 -Task Build -BuildVersion '${{ steps.versioning.outputs.build_version }}'
+          ./Build/build.ps1 -Task TestBuildOnly -BuildVersion '${{ steps.versioning.outputs.build_version }}'
+
+      - name: Check for test results
+        id: test-results
+        if: always()
+        shell: pwsh
+        run: |
+          $exists = Test-Path 'buildoutput/TestResults.xml'
+          "exists=$exists" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always() && steps.test-results.outputs.exists == 'True'
+        with:
+          name: Pester Tests (Release)
+          path: buildoutput/TestResults.xml
+          reporter: java-junit
 
       - name: Upload build output
         uses: actions/upload-artifact@v4
