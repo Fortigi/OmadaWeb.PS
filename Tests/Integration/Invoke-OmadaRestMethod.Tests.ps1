@@ -1,5 +1,5 @@
 param(
-    [string]$ModulePath = (Join-Path $(Split-Path $PSScriptRoot) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
+    [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
 
 BeforeAll {
@@ -31,7 +31,7 @@ BeforeAll {
     }
 }
 
-Describe 'Invoke-TestOmadaRestMethod' {
+Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
     Context 'Function Definition' {
         It 'Should have Invoke-(Test)OmadaODataMethod alias' {
             (Get-Alias Invoke-TestOmadaODataMethod).ReferencedCommand.Name | Should -Eq 'Invoke-TestOmadaRestMethod'
@@ -206,9 +206,9 @@ Describe 'Invoke-TestOmadaRestMethod' {
     Context 'Process Block - Error Handling' {
         It 'Should throw terminating error when Invoke-OmadaRestMethod fails' {
             InModuleScope 'OmadaWeb.PS' {
-                Mock Invoke-OmadaRestMethod { throw "Test Error" }
+                Mock Invoke-OmadaRequest { throw "Test Error" }
+                { Invoke-OmadaRestMethod -Uri "http://localhost" -ErrorAction Stop } | Should -Throw
             }
-            { Invoke-TestOmadaRestMethod -Uri "http://localhost" -ErrorAction Stop } | Should -Throw
         }
 
         It 'Should throw terminating error when -WebSession is used' {

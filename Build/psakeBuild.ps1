@@ -287,6 +287,8 @@ Task Test -depends ImportModule {
     $PesterConfiguration.TestResult.Enabled = $true
     $PesterConfiguration.TestResult.OutputFormat = 'JUnitXml'
     $PesterConfiguration.TestResult.OutputPath = (Join-Path -Path $ParentPath -ChildPath 'buildoutput\TestResults.xml')
+    # E2E tests need a real Edge/WebView2 install and are slow; they are opt-in and run on a separate scheduled pipeline instead of every build.
+    $PesterConfiguration.Filter.ExcludeTag = 'E2E'
 
     $Result = Invoke-Pester -Configuration $PesterConfiguration
     if ($Result.FailedCount -gt 0) {

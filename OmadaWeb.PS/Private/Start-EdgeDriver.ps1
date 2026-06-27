@@ -21,27 +21,33 @@ function Start-EdgeDriver {
             }
             "System.Text.Json" {
                 if ($PSVersionTable.PSVersion.Major -le 5) {
+                    # System.Text.Json on .NET Framework needs its full transitive dependency
+                    # chain (System.Buffers, System.Memory, System.Numerics.Vectors, etc.) loaded
+                    # alongside it. Assemblies loaded via Add-Type -Path don't reliably resolve
+                    # sibling dependencies by directory alone, so load every DLL placed in the
+                    # WebDriver bin folder, retrying until no further progress is made to tolerate
+                    # any load-order dependency between them.
+                    $DllFiles = Get-ChildItem (Split-Path $Script:WebDriverPath) -Filter "*.dll" |
+                        Where-Object { $_.FullName -ne $Script:WebDriverPath }
 
-                    #$DllFiles = Get-ChildItem ".\Bin" -Filter "*.dll" | Where-Object { $_.Name -notin @('System.Text.Json.dll', 'Webdriver.dll') }
-                    #do {
-                    #    try {
-                    #        $DllFiles | ForEach-Object {
-                    #            [System.Reflection.Assembly]::LoadFrom($_.FullName)
-                    #            Add-Type -Path $_.FullName
-                    #            $Failed = $false
-                    #        }
-                    #    }
-                    #    catch {
-                    #        $_.Exception.Message
-                    #        $Failed = $true
-                    #    }
-                    #}until($Failed -eq $false)
+                    do {
+                        $Progress = $false
+                        $Remaining = @()
+                        foreach ($DllFile in $DllFiles) {
+                            try {
+                                Add-Type -Path $DllFile.FullName
+                                $Progress = $true
+                            }
+                            catch {
+                                $Remaining += $DllFile
+                            }
+                        }
+                        $DllFiles = $Remaining
+                    } until (!$Progress -or $DllFiles.Count -eq 0)
 
-                    #[void] [System.Reflection.Assembly]::LoadFrom($Script:SystemRuntimePath)
-                    #[void] [System.Reflection.Assembly]::LoadFrom($Script:SystemTextJsonPath)
-
-                    Add-Type -Path $($Script:SystemRuntimePath)
-                    Add-Type -Path $($Script:SystemTextJsonPath)
+                    if ($DllFiles.Count -gt 0) {
+                        "Failed to load the following dependency assemblies: {0}" -f ($DllFiles.Name -join ", ") | Write-Warning
+                    }
                 }
             }
         }

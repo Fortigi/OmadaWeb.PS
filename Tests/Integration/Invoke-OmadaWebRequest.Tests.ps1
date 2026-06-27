@@ -1,5 +1,5 @@
 param(
-    [string]$ModulePath = (Join-Path $(Split-Path $PSScriptRoot) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
+    [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
 
 BeforeAll {
@@ -31,7 +31,7 @@ BeforeAll {
     }
 }
 
-Describe 'Invoke-TestOmadaWebRequest' {
+Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
     Context 'Function Definition' {
 
         It 'Should have CmdletBinding attribute' {
@@ -205,8 +205,8 @@ Describe 'Invoke-TestOmadaWebRequest' {
         It 'Should throw terminating error when Invoke-OmadaRequest fails' {
             InModuleScope 'OmadaWeb.PS' {
                 Mock Invoke-OmadaRequest { throw "Test Error" }
+                { Invoke-OmadaWebRequest -Uri "http://localhost" -ErrorAction Stop  -Verbose } | Should -Throw
             }
-            { Invoke-TestOmadaWebRequest -Uri "http://localhost" -ErrorAction Stop  -Verbose } | Should -Throw
         }
 
         It 'Should throw terminating error when -WebSession is used' {
