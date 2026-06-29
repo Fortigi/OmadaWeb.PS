@@ -18,7 +18,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shell: [pwsh, powershell]
+        shell:
+          - pwsh
+          - powershell
 
     steps:
       - name: Checkout
