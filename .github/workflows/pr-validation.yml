@@ -25,9 +25,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          shell: ${{ matrix.shell }}
 
       - name: Check branch is up to date with main
-        shell: ${{ matrix.shell }}
         run: |
           git fetch origin main
           git merge-base --is-ancestor origin/main HEAD
@@ -38,29 +38,24 @@ jobs:
           Write-Host "Branch is up to date with main."
 
       - name: Determine changed files
-        shell: ${{ matrix.shell }}
         run: |
           $files = git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }}
           $joined = ($files -join ';')
           "PR_CHANGED_FILES=$joined" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install modules
-        shell: ${{ matrix.shell }}
         run: ./Build/InstallModules.ps1
 
       - name: Warm up Selenium/Edge WebDriver
-        shell: ${{ matrix.shell }}
         run: |
           $module = Import-Module ./OmadaWeb.PS/OmadaWeb.PS.psm1 -Force -PassThru
           & $module { Invoke-WebEdgeDriverFramework | Out-Null }
       - name: Analyze, test and build
-        shell: ${{ matrix.shell }}
         run: ./Build/build.ps1 -Task TestBuildOnly -BuildVersion '0.0.0'
 
       - name: Check for test results
         id: test-results
         if: always()
-        shell: ${{ matrix.shell }}
         run: |
           $exists = Test-Path 'buildoutput/TestResults.xml'
           "exists=$exists" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
