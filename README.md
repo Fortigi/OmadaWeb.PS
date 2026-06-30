@@ -284,6 +284,10 @@ The following native parameters are excluded because they are handled within the
 
 Please see Microsoft documentation for all other available options.
 
+## CONTRIBUTING
+
+Contributions are welcome! If you have ideas for improvements or bug fixes, feel free to open a pull request on [GitHub](https://github.com/Fortigi/OmadaWeb.PS).
+
 ## RELATED LINKS
 
 [`Invoke-RestMethod`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-restmethod)

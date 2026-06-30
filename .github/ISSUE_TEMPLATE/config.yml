@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Omada Documentation
+    url: https://documentation.omadaidentity.com/
+    about: General Omada Identity Cloud documentation (not specific to this module).
+  - name: OmadaSqlTroubleshooter module
+    url: https://github.com/Fortigi/OmadaSqlTroubleshooter
+    about: Issues with the SQL Troubleshooter app itself (not authentication) may belong here.
+  - name: PowerShell Gallery package
+    url: https://www.powershellgallery.com/packages/OmadaWeb.PS
+    about: Download page and version history.

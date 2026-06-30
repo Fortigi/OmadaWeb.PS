@@ -1,0 +1,136 @@
+name: Bug report
+description: Report a problem with OmadaWeb.PS
+title: "[Bug]: "
+labels: ["bug", "triage"]
+type: "Bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much detail as possible — this speeds up triage significantly.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+      placeholder: What happened? What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: Steps to reproduce
+      description: Step-by-step instructions to reproduce the behavior, including the cmdlet call with parameters used (mask any secrets/tenant-specific values).
+      placeholder: |
+        1. `Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "WebView2"`
+        2. ...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Error output / exception
+      description: Paste the full error record (`$Error[0] | Format-List * -Force`) or exception output. This will be automatically formatted as code.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: module-version
+    attributes:
+      label: OmadaWeb.PS version
+      description: Output of `Get-Module OmadaWeb.PS -ListAvailable | Select Version`
+      placeholder: e.g. 2026.03.26.2
+    validations:
+      required: true
+
+  - type: input
+    id: powershell-version
+    attributes:
+      label: PowerShell version
+      description: Output of `$PSVersionTable.PSVersion`
+      placeholder: e.g. 5.1.19041 or 7.4.6
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: Windows version
+      description: Output of `[System.Environment]::OSVersion.Version` or `winver`
+      placeholder: e.g. Windows 11 23H2 (build 22631)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: auth-type
+    attributes:
+      label: AuthenticationType
+      description: Which -AuthenticationType were you using when the issue occurred?
+      options:
+        - Browser (Selenium, default)
+        - WebView2
+        - OAuth
+        - Integrated
+        - Windows
+        - Basic
+        - None
+        - Not applicable / unsure
+    validations:
+      required: true
+
+  - type: input
+    id: edge-version
+    attributes:
+      label: Microsoft Edge version
+      description: Relevant for Browser (Selenium) and WebView2 auth types. Output of `(Get-Item "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe").VersionInfo.ProductVersion` or check edge://version.
+      placeholder: e.g. 130.0.2849.68
+    validations:
+      required: false
+
+  - type: input
+    id: cmdlet-used
+    attributes:
+      label: Cmdlet
+      description: Which cmdlet were you using?
+      placeholder: e.g. Invoke-OmadaRestMethod, Invoke-OmadaWebRequest
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: |
+        Anything else that might be relevant, e.g.:
+        - Identity Provider in use (Entra ID, Okta, other) and whether MFA / number matching is involved
+        - Whether -CookiePath or cached cookies are involved, and whether -ForceAuthentication or -SkipCookieCache changes the outcome
+        - Whether the issue is specific to a particular -EdgeProfile
+        - Omada Identity Cloud / on-prem version, if known
+        - Any proxy, conditional access, or network restrictions in play
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues to confirm this hasn't already been reported
+          required: true
+        - label: I have removed/masked any secrets, tokens, cookies, or tenant-identifying values from the details above
+          required: true
+        - label: I have tried with -ForceAuthentication and/or a clean cookie cache to rule out a stale session
+          required: false

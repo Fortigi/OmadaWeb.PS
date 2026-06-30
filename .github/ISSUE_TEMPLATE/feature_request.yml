@@ -1,0 +1,72 @@
+name: Feature request
+description: Suggest a new feature or enhancement for OmadaWeb.PS
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+type: "Feature"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an idea! Please describe the problem and proposed solution as clearly as possible.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: Is your feature request related to a problem? Describe what you're trying to do and what currently blocks or hinders it.
+      placeholder: e.g. "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or change you'd like to see.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the module does this relate to?
+      multiple: true
+      options:
+        - Invoke-OmadaRestMethod
+        - Invoke-OmadaWebRequest
+        - Authentication - Browser (Selenium)
+        - Authentication - WebView2
+        - Authentication - OAuth / Entra ID
+        - Authentication - Integrated / Windows / Basic
+        - Cookie caching / session handling
+        - MFA / sign-in automation
+        - Identity provider support (non-Entra IDPs)
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative solutions, workarounds, or features you've considered.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add any other context, e.g. relevant IDP-specific behavior, references to Invoke-RestMethod/Invoke-WebRequest parameters this should align with, or links to related Omada documentation.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and this feature hasn't already been requested
+          required: true
