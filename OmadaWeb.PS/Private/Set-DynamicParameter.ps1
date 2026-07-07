@@ -47,7 +47,7 @@
                     }
                 }
                 else {
-                    ($ParameterObjects | Where-Object {$_.Name -eq $Parameter.Name}).ParameterSetName += $($ParameterSet.Name)
+                    ($ParameterObjects | Where-Object { $_.Name -eq $Parameter.Name }).ParameterSetName += $($ParameterSet.Name)
                 }
             }
         }
@@ -66,7 +66,7 @@
         New-DynamicParam @ParameterObject
     }
 
-    New-DynamicParam -Name "AuthenticationType" -Type "string" -ValidateSet ("OAuth", "Integrated", "Basic", "Browser","WebView2", "Windows", "None") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value "WebView2" -HelpMessage "The type of authentication to use for the request. Default is `WebView2`. The acceptable values for this parameter are:
+    New-DynamicParam -Name "AuthenticationType" -Type "string" -ValidateSet ("OAuth", "Integrated", "Basic", "Browser", "WebView2", "Windows", "None") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value "WebView2" -HelpMessage "The type of authentication to use for the request. Default is `WebView2`. The acceptable values for this parameter are:
 - Basic
 - Browser
 - Integrated
@@ -85,6 +85,10 @@
     New-DynamicParam -Name "InPrivate" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use InPrivate mode for the authentication request."
     New-DynamicParam -Name "UseWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use WebView2 instead of Selenium WebDriver for browser-based authentication. This parameter is deprecated and will be removed in a future release!"
     New-DynamicParam -Name "DebugWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to enable WebView2 browser debugging options like Developer Tools"
+
+    if ($FunctionName -eq "Invoke-RestMethod") {
+        New-DynamicParam -Name "AllPages" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to retrieve all pages of data from the API. This parameter is only applicable to Omada API endpoints that support pagination."
+    }
 
     return $Dictionary
 }

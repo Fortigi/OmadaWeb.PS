@@ -133,6 +133,11 @@ function Invoke-OmadaRequest {
                 $BoundParams.Add("UseBasicParsing", $true)
             }
 
+            $AllPages = $false
+            if ("AllPages" -in $BoundParams.Keys) {
+                $AllPages = $true
+            }
+
             "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json) | Write-Verbose
             try {
                 $CustomErrorTrigger = "Login failed - {0}" -f (New-Guid).Guid.ToString()
@@ -171,7 +176,18 @@ function Invoke-OmadaRequest {
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
                         }
                         "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+
                         $Return = & ($CommandInfo) @Parameters
+
+                        if ($AllPages -and ($Return | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -eq '@odata.nextLink' } | Measure-Object).Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
+                            while (-not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
+                                $Parameters.Uri = $Return.'@odata.nextLink'
+                                $NextPage = & ($CommandInfo) @Parameters
+                                $Return.Value += $NextPage.value
+                            }
+                            $Return.PSObject.Properties.Remove('@odata.nextLink')
+                        }
+
                         #To support -SkipHttpErrorCheck
                         if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and $Return -is [System.Xml.XmlDocument]) {
                             $NamespaceManager = New-Object System.Xml.XmlNamespaceManager($Return.NameTable)
