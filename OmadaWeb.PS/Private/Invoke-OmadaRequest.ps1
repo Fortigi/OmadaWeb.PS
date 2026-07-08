@@ -187,8 +187,16 @@ function Invoke-OmadaRequest {
                                     $ValueList.AddRange(@($Return.value))
                                 }
                                 $NextLink = $Return.'@odata.nextLink'
+                                $SeenLinks = [System.Collections.Generic.HashSet[string]]::new()
+                                $PageCount = 0
                                 while (-not [string]::IsNullOrWhiteSpace($NextLink)) {
                                     $Parameters.Uri = $NextLink
+                                    if (-not $SeenLinks.Add([string]$NextPage.'@odata.nextLink')) {
+                                        throw ("Paging loop detected (repeated @odata.nextLink): {0}" -f $NextPage.'@odata.nextLink')
+                                    }
+                                    if (++$PageCount -gt 1000) {
+                                        throw "Paging aborted: exceeded maximum page limit (1000)."
+                                    }
                                     "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                                     $NextPage = & ($CommandInfo) @Parameters
                                     if ($null -ne $NextPage -and $NextPage.PSObject.Properties['value']) {
