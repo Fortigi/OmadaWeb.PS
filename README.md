@@ -59,7 +59,7 @@ Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -Authenti
 ### Invoke-OmadaRestMethod
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>]  [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2 | None}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>]  [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod AuthenticationType: OAuth
@@ -71,7 +71,7 @@ Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <st
 ### Invoke-OmadaWebRequest
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2 | None}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest AuthenticationType: OAuth
