@@ -181,7 +181,7 @@ function Invoke-OmadaRequest {
 
                         if ($Paged -and ($Return | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -eq '@odata.nextLink' } | Measure-Object).Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
                             $ValueList = [System.Collections.Generic.List[object]]::new()
-                            $ValueList.Add($Return.value)
+                            $ValueList.AddRange($Return.value)
                             $NextPage = $Return
                             while (-not [string]::IsNullOrWhiteSpace($NextPage.'@odata.nextLink')) {
                                 $Parameters.Uri = $NextPage.'@odata.nextLink'
