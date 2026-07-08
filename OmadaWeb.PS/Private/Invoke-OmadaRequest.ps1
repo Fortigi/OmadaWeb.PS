@@ -133,9 +133,9 @@ function Invoke-OmadaRequest {
                 $BoundParams.Add("UseBasicParsing", $true)
             }
 
-            $AllPages = $false
-            if ("AllPages" -in $BoundParams.Keys) {
-                $AllPages = $true
+            $Paged = $false
+            if ("Paged" -in $BoundParams.Keys) {
+                $Paged = $true
             }
 
             "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json) | Write-Verbose
@@ -179,12 +179,19 @@ function Invoke-OmadaRequest {
 
                         $Return = & ($CommandInfo) @Parameters
 
-                        if ($AllPages -and ($Return | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -eq '@odata.nextLink' } | Measure-Object).Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
-                            while (-not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
-                                $Parameters.Uri = $Return.'@odata.nextLink'
+                        if ($Paged -and ($Return | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -eq '@odata.nextLink' } | Measure-Object).Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
+                            $ValueList = [System.Collections.Generic.List[object]]::new()
+                            $ValueList.Add($Return.value)
+                            $NextPage = $Return
+                            while (-not [string]::IsNullOrWhiteSpace($NextPage.'@odata.nextLink')) {
+                                $Parameters.Uri = $NextPage.'@odata.nextLink'
+                                "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                                 $NextPage = & ($CommandInfo) @Parameters
-                                $Return.Value += $NextPage.value
+                                $ValueList.AddRange($NextPage.value)
                             }
+                            $NextPage = $null
+                            $Return.value = $ValueList.ToArray()
+                            $ValueList = $null
                             $Return.PSObject.Properties.Remove('@odata.nextLink')
                         }
 

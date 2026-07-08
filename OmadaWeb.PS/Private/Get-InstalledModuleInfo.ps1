@@ -3,7 +3,7 @@
     PARAM(
         [string]$ModuleName
     )
-
+wait-debugger
     "{0} - Getting installed module info for: {1}" -f $MyInvocation.MyCommand, $ModuleName | Write-Verbose
     $Module = Get-Module -ListAvailable -Name $ModuleName | Sort-Object Version -Descending | Select-Object -First 1
     if ($Module) {

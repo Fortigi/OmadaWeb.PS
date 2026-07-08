@@ -59,19 +59,19 @@ Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -Authenti
 ### Invoke-OmadaRestMethod
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>]  [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-DebugWebView2 <switch>] [-Paged <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest AuthenticationType: OAuth
@@ -113,6 +113,11 @@ Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/ident
 ### Example 6: Retrieve Identity object using Okta OAuth authentication
 ```powershell
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
+```
+
+### Example 7: Retrieve all Identitiy objects for paged odata feeds
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity" -Paged
 ```
 
 ## PARAMETERS
@@ -264,6 +269,20 @@ Enter the application ID URI when the base url does not equal the configured app
 
 ### -DebugWebView2 <switch>
 Use this parameter to enable WebView2 browser debugging options like Developer Tools.
+
+```yaml
+        Type: System.switch
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -Paged <switch>
+Use this parameter to retrieve all pages for odata api endpoints that use paging. This parameter does not apply for Invoke-OmadaWebRequest.
 
 ```yaml
         Type: System.switch
