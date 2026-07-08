@@ -126,13 +126,13 @@ The built-in are the same for both Invoke-OmadaRestMethod and Invoke-OmadaWebReq
 ###    -AuthenticationType <string>
 The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
 - `None`: No explicit authentication is used.
-- `Basic`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: basic` header in the format of `base64(user:password)`.
+- `Basic`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: Basic` header in the format of `base64(user:password)`.
 - `Browser`: Uses Selenium for authentication with Omada. It automatically installs and updates to the desired webdriver version based on the currently installed Microsoft Edge browser.
 - `Integrated`: Uses Windows Integrated Authentication
 - `OAuth`: Requires <b>Credential</b>. OAuth2 authentication with Entra ID by default, other IDPs are possible using additional OAuth parameters.
 - `WebView2`:
 For environments where Selenium is restricted, you can use [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin. When the binaries are not present they will be downloaded automatically. WebView2 uses a copy of the default Edge user profile, the profile working directory is located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
-- `Windows`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: basic` header in the format of `base64(user:password)`.
+- `Windows`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: Basic` header in the format of `base64(user:password)`.
 
 Supplying <b>AuthenticationType</b> overrides any Authorization headers supplied to Headers or included in WebSession.
 
