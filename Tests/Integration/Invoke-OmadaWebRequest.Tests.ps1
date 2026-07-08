@@ -12,6 +12,10 @@ BeforeAll {
     Start-Sleep -Seconds 2
     $Uri = "http://localhost:{0}/" -f $RandomPort
 
+    # -AllowUnencryptedAuthentication (Invoke-WebRequest/Invoke-RestMethod) needs PS6+, -SkipHttpErrorCheck needs PS7.4+; Windows PowerShell 5.1 has neither.
+    $Script:AllowUnencryptedAuthParams = if ($PSVersionTable.PSVersion.Major -ge 6) { @{ AllowUnencryptedAuthentication = $true } } else { @{} }
+    $Script:SkipHttpErrorCheckParams = if ($PSVersionTable.PSVersion -ge [version]'7.4') { @{ SkipHttpErrorCheck = $true } } else { @{} }
+
     InModuleScope 'OmadaWeb.PS' {
         if ($env:TF_BUILD -eq 'True' -or $env:TF_BUILD -eq $true -or $env:GITHUB_ACTIONS -eq 'true') {
             #Skip WebView2 login in CI/CD pipelines
@@ -46,7 +50,7 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
 
     Context 'Process Block - Success' {
         It 'Should return result from Invoke-(Test)OmadaWebRequest' {
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType None -SkipHttpErrorCheck -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType None @SkipHttpErrorCheckParams -Verbose
             $Result.StatusCode | Should -Be 200
         }
 
@@ -57,18 +61,18 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using Basic Authentication' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Basic -Credential $Credential -AllowUnencryptedAuthentication -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Basic -Credential $Credential @AllowUnencryptedAuthParams -Verbose
             $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using Windows Authentication' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Windows -Credential $Credential -AllowUnencryptedAuthentication -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Windows -Credential $Credential @AllowUnencryptedAuthParams -Verbose
             $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using Integrated Authentication' {
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType Integrated @AllowUnencryptedAuthParams -Verbose
             $Result | Should -Be "OK"
         }
 
@@ -120,13 +124,13 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential  -OAuthUri $Uri -AllowUnencryptedAuthentication -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential  -OAuthUri $Uri @AllowUnencryptedAuthParams -Verbose
             $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri and OAuthScope' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri $Uri -OAuthScope $Uri  -AllowUnencryptedAuthentication -WarningVariable Test -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri $Uri -OAuthScope $Uri  @AllowUnencryptedAuthParams -WarningVariable Test -Verbose
             $Result | Should -Be "OK"
         }
 
