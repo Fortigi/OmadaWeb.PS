@@ -282,7 +282,7 @@ Use this parameter to enable WebView2 browser debugging options like Developer T
 ```
 
 ### -Paged <switch>
-Use this parameter to retrieve all pages for OData api endpoints that use paging. This parameter does not apply for Invoke-OmadaWebRequest.
+Use this parameter to retrieve all pages for OData api endpoints that use paging. This parameter does not apply for Invoke-OmadaWebRequest. Only supported for HTTP GET requests (the default); combining `-Paged` with `-Method PUT`, `POST`, or `PATCH` throws a terminating error.
 
 ```yaml
         Type: System.switch

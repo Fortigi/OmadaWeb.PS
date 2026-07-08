@@ -105,6 +105,33 @@ Describe 'Invoke-TestOmadaRestMethod -Paged' -Tag 'Integration' {
             $Result.value | Should -Be @('item1', 'item2', 'item3', 'item4', 'item5')
             ($Result.PSObject.Properties.Name -contains '@odata.nextLink') | Should -Be $false
         }
+
+        It 'Should follow @odata.nextLink when -Method GET is explicitly supplied' {
+            $Result = Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/page1" -AuthenticationType None -Method GET -Paged
+
+            $Result.value | Should -Be @('item1', 'item2', 'item3', 'item4', 'item5')
+            ($Result.PSObject.Properties.Name -contains '@odata.nextLink') | Should -Be $false
+        }
+    }
+
+    Context 'Paging restricted to HTTP GET' {
+        It 'Should throw a terminating error when -Paged is combined with -Method POST' {
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/page1" -AuthenticationType None -Method POST -Body @{ foo = 'bar' } -Paged -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Should throw a terminating error when -Paged is combined with -Method PUT' {
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/page1" -AuthenticationType None -Method PUT -Body @{ foo = 'bar' } -Paged -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Should throw a terminating error when -Paged is combined with -Method PATCH' {
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/page1" -AuthenticationType None -Method PATCH -Body @{ foo = 'bar' } -Paged -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Should not throw and should not page when -Paged is combined with -Method POST but -Paged is not actually enabled' {
+            $Result = Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/page1" -AuthenticationType None -Method POST -Body @{ foo = 'bar' } -Paged:$false
+
+            $Result.value | Should -Be @('item1', 'item2')
+        }
     }
 }
 

@@ -135,6 +135,9 @@ function Invoke-OmadaRequest {
 
             $Paged = $false
             if ("Paged" -in $BoundParams.Keys -and [bool]$BoundParams.Paged) {
+                if ("Method" -in $BoundParams.Keys -and $BoundParams.Method -ne "GET") {
+                    "{0} - -Paged only supports HTTP GET requests, got -Method '{1}'" -f $MyInvocation.MyCommand, $BoundParams.Method | Write-Error -ErrorAction "Stop"
+                }
                 $Paged = $true
             }
 

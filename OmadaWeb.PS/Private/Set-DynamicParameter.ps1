@@ -95,7 +95,7 @@ IMPORTANT: This parameter is deprecated and obsolete. The default is Authenticat
     New-DynamicParam -Name "DebugWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to enable WebView2 browser debugging options like Developer Tools"
 
     if ($FunctionName -eq "Invoke-RestMethod") {
-        New-DynamicParam -Name "Paged" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to retrieve all pages of data from the API. This parameter is only applicable to Omada API endpoints that support pagination."
+        New-DynamicParam -Name "Paged" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to retrieve all pages of data from the API. This parameter is only applicable to Omada API endpoints that support pagination. Only supported for HTTP GET requests (the default); combining -Paged with -Method PUT, POST, or PATCH throws a terminating error."
     }
 
     return $Dictionary
