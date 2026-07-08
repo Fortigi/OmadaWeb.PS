@@ -175,7 +175,7 @@ function Invoke-OmadaRequest {
                             Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
                         }
-                        "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                        "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
 
                         $Return = & ($CommandInfo) @Parameters
 
@@ -197,7 +197,7 @@ function Invoke-OmadaRequest {
                                     if (++$PageCount -gt 1000) {
                                         throw "Paging aborted: exceeded maximum page limit (1000)."
                                     }
-                                    "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                                    "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                                     $NextPage = & ($CommandInfo) @Parameters
                                     if ($null -ne $NextPage -and $NextPage.PSObject.Properties['value']) {
                                         $ValueList.AddRange(@($NextPage.value))
@@ -232,7 +232,7 @@ function Invoke-OmadaRequest {
                             Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
                         }
-                        "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                        "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                         $Return = & ($CommandInfo) @Parameters
 
                         #To support -SkipHttpErrorCheck
