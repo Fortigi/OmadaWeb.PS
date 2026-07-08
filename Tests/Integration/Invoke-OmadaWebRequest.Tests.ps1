@@ -216,7 +216,9 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         It 'Should throw terminating error when -WebSession is used' {
             { Invoke-TestOmadaWebRequest -Uri $Uri -ErrorAction Stop  -Verbose -WebSession null } | Should -Throw
         }
-        It 'Should throw terminating error when -Authentication is used' {
+        It 'Should throw terminating error when -Authentication is used' -Skip:($PSVersionTable.PSVersion.Major -lt 6) {
+            # -Authentication doesn't exist on Windows PowerShell 5.1's Invoke-WebRequest, so there is no native
+            # parameter here to guard against on that edition - it prefix-matches -AuthenticationType instead.
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
             { Invoke-TestOmadaWebRequest -Uri $Uri -ErrorAction Stop  -Verbose -Authentication Basic -Credential $Credential } | Should -Throw
 
