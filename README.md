@@ -209,7 +209,7 @@ Use InPrivate mode for the authentication request.
 ```
 
 ### -SkipCookieCache <switch>
-Do not cache the encrypted Omada authentication cookie. It wil also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationType Browser.
+Do not cache the encrypted Omada authentication cookie. It will also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationType Browser.
 
 ```yaml
         Type: System.switch
@@ -223,7 +223,7 @@ Do not cache the encrypted Omada authentication cookie. It wil also not be cache
 ```
 
 ### -CookiePath <string>
-Attempts to load a stored Omada authentication cookie from this path. This file will be updated re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached. This parameter only applies in combination with parameter -AuthenticationType Browser.
+Attempts to load a stored Omada authentication cookie from this path. This file will be updated when re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached. This parameter only applies in combination with parameter -AuthenticationType Browser.
 
 > [!IMPORTANT]
 > Be aware that an unencrypted version of the session cookie is stored on the file system. Make sure it is stored at a secure location so it cannot be accessed by unauthorized users.

@@ -51,7 +51,9 @@ BeforeAll {
     1..30 | ForEach-Object {
         if (-not $Ready) {
             try {
-                $null = Invoke-WebRequest "$Script:BaseUrl/page1" -UseBasicParsing -TimeoutSec 1
+                $iwParams = @{ Uri = "$Script:BaseUrl/page1"; TimeoutSec = 1 }
+                if ($PSVersionTable.PSVersion.Major -lt 6) { $iwParams.UseBasicParsing = $true }
+                $null = Invoke-WebRequest @iwParams
                 $Ready = $true
             }
             catch [System.Net.Http.HttpRequestException] {

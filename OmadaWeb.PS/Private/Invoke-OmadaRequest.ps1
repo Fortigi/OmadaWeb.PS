@@ -191,8 +191,8 @@ function Invoke-OmadaRequest {
                                 $PageCount = 0
                                 while (-not [string]::IsNullOrWhiteSpace($NextLink)) {
                                     $Parameters.Uri = $NextLink
-                                    if (-not $SeenLinks.Add([string]$NextPage.'@odata.nextLink')) {
-                                        throw ("Paging loop detected (repeated @odata.nextLink): {0}" -f $NextPage.'@odata.nextLink')
+                                    if (-not $SeenLinks.Add([string]$NextLink)) {
+                                        throw ("Paging loop detected (repeated @odata.nextLink): {0}" -f $NextLink)
                                     }
                                     if (++$PageCount -gt 1000) {
                                         throw "Paging aborted: exceeded maximum page limit (1000)."
