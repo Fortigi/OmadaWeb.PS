@@ -17,9 +17,9 @@
         "Install PSScriptAnalyzer" | Write-Host
         Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
     }
-    if (-not (Get-Command -Name Start-ThreadJob -ErrorAction SilentlyContinue)) {
+    if (-not ($Modules | Where-Object { $_.Name -eq 'ThreadJob' }) -and -not (Get-Command -Name Start-ThreadJob -ErrorAction SilentlyContinue)) {
         "Install ThreadJob" | Write-Host
-        Install-Module -Name ThreadJob -Scope CurrentUser -Force
+        Install-Module -Name ThreadJob -Scope CurrentUser -Force -AllowClobber
     }
     "Register NuGet PackageSource" | Write-Host
     Register-PackageSource -Name NuGet -Location "https://api.NuGet.org/v3/index.json" -ProviderName NuGet -Force
