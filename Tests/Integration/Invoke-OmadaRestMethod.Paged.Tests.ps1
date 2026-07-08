@@ -56,7 +56,7 @@ BeforeAll {
                 $null = Invoke-WebRequest @iwParams
                 $Ready = $true
             }
-            catch [System.Net.Http.HttpRequestException] {
+            catch [System.Net.WebException], [System.Net.Http.HttpRequestException] {
                 Start-Sleep -Milliseconds 200
             }
             catch {
