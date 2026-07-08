@@ -115,7 +115,7 @@ Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/ident
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
 ```
 
-### Example 7: Retrieve all Identity objects for paged odata feeds
+### Example 7: Retrieve all Identity objects for paged OData feeds
 ```powershell
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity" -Paged
 ```
@@ -282,7 +282,7 @@ Use this parameter to enable WebView2 browser debugging options like Developer T
 ```
 
 ### -Paged <switch>
-Use this parameter to retrieve all pages for odata api endpoints that use paging. This parameter does not apply for Invoke-OmadaWebRequest.
+Use this parameter to retrieve all pages for OData api endpoints that use paging. This parameter does not apply for Invoke-OmadaWebRequest.
 
 ```yaml
         Type: System.switch
