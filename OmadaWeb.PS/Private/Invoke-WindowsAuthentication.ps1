@@ -7,6 +7,6 @@
         $BoundParams.Add("Credential", (Get-Credential -Message "Please enter your authentication credentials"))
     }
     if ($PSVersionTable.PSVersion.Major -ge 6) {
-        $BoundParams.Add("Authentication", "Negotiate")
+        $BoundParams["Authentication"] = "Negotiate"
     }
 }
