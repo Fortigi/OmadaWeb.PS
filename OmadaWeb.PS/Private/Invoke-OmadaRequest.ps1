@@ -134,7 +134,7 @@ function Invoke-OmadaRequest {
             }
 
             $Paged = $false
-            if ("Paged" -in $BoundParams.Keys) {
+            if ("Paged" -in $BoundParams.Keys -and [bool]$BoundParams.Paged) {
                 $Paged = $true
             }
 
@@ -180,6 +180,7 @@ function Invoke-OmadaRequest {
                         $Return = & ($CommandInfo) @Parameters
 
                         if ($Paged -and ($Return | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -eq '@odata.nextLink' } | Measure-Object).Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
+                            "{0} - Retrieve paged data" -f $MyInvocation.MyCommand | Write-Verbose
                             $ValueList = [System.Collections.Generic.List[object]]::new()
                             $ValueList.AddRange($Return.value)
                             $NextPage = $Return
