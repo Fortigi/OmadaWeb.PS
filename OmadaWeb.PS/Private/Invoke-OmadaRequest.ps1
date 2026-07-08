@@ -179,21 +179,29 @@ function Invoke-OmadaRequest {
 
                         $Return = & ($CommandInfo) @Parameters
 
-                        if ($Paged -and ($Return | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -eq '@odata.nextLink' } | Measure-Object).Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
-                            "{0} - Retrieve paged data" -f $MyInvocation.MyCommand | Write-Verbose
-                            $ValueList = [System.Collections.Generic.List[object]]::new()
-                            $ValueList.AddRange($Return.value)
-                            $NextPage = $Return
-                            while (-not [string]::IsNullOrWhiteSpace($NextPage.'@odata.nextLink')) {
-                                $Parameters.Uri = $NextPage.'@odata.nextLink'
-                                "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
-                                $NextPage = & ($CommandInfo) @Parameters
-                                $ValueList.AddRange($NextPage.value)
+                        if ($Paged -and $null -ne $Return -and $Return.PSObject.Properties['@odata.nextLink'] -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
+                            $OriginalUri = $Parameters.Uri
+                            try {
+                                $ValueList = [System.Collections.Generic.List[object]]::new()
+                                if ($Return.PSObject.Properties['value']) {
+                                    $ValueList.AddRange(@($Return.value))
+                                }
+                                $NextLink = $Return.'@odata.nextLink'
+                                while (-not [string]::IsNullOrWhiteSpace($NextLink)) {
+                                    $Parameters.Uri = $NextLink
+                                    "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                                    $NextPage = & ($CommandInfo) @Parameters
+                                    if ($null -ne $NextPage -and $NextPage.PSObject.Properties['value']) {
+                                        $ValueList.AddRange(@($NextPage.value))
+                                    }
+                                    $NextLink = if ($null -ne $NextPage) { $NextPage.'@odata.nextLink' } else { $null }
+                                }
+                                $Return.value = $ValueList.ToArray()
+                                $Return.PSObject.Properties.Remove('@odata.nextLink')
                             }
-                            $NextPage = $null
-                            $Return.value = $ValueList.ToArray()
-                            $ValueList = $null
-                            $Return.PSObject.Properties.Remove('@odata.nextLink')
+                            finally {
+                                $Parameters.Uri = $OriginalUri
+                            }
                         }
 
                         #To support -SkipHttpErrorCheck
