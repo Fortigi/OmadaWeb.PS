@@ -20,7 +20,18 @@ function Install-Selenium {
     $Repo = "selenium"
     $AssetFilter = ".*dotnet.(?!strongnamed).*\.0\.zip"
 
-    $TempZipPath = Get-GitHubRelease -Org $Org -Repo $Repo -AssetFilter $AssetFilter
+    $GetGitHubReleaseParams = @{
+        Org         = $Org
+        Repo        = $Repo
+        AssetFilter = $AssetFilter
+    }
+    if ($Script:PowerShellType -eq "Desktop") {
+        # Selenium's .NET bindings dropped .NET Framework (net4*) targets and went netstandard2.0-only
+        # starting with selenium-4.12.0, which Windows PowerShell 5.1 (Desktop, .NET Framework) cannot load.
+        # Pin to the last release that still ships a net4* build.
+        $GetGitHubReleaseParams.Add("TagFilter", "selenium-4.11.0")
+    }
+    $TempZipPath = Get-GitHubRelease @GetGitHubReleaseParams
 
     $Package = Get-ChildItem $($TempZipPath.FullName) -Filter "*WebDriver*.nupkg"
     $NuPkgZip = Get-Item $($Package.FullName) | Rename-Item -NewName ("{0}.zip" -f $Package.FullName) -PassThru
