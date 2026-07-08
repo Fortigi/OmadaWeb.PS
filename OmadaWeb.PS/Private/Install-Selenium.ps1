@@ -37,7 +37,10 @@ function Install-Selenium {
         $TempZipPath = Get-GitHubRelease -Org $Org -Repo $Repo -AssetFilter $AssetFilter
     }
 
-    $Package = Get-ChildItem $($TempZipPath.FullName) -Filter "*WebDriver*.nupkg"
+    $Package = Get-ChildItem $($TempZipPath.FullName) -Filter "*WebDriver*.nupkg" -Recurse
+    if (-not $Package) {
+        "Could not find a '*WebDriver*.nupkg' package inside the downloaded archive from '{0}'" -f $TempZipPath.FullName | Write-Error -ErrorAction Stop
+    }
     $NuPkgZip = Get-Item $($Package.FullName) | Rename-Item -NewName ("{0}.zip" -f $Package.FullName) -PassThru
     $NuPkgPath = New-Item (Join-Path (Get-Item $NuPkgZip).PsParentPath -ChildPath $NuPkgZip.BaseName) -ItemType Directory -Force
     Get-Item $NuPkgZip | Expand-Archive -Destination $($NuPkgPath.FullName) -Force

@@ -124,7 +124,7 @@ Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/ident
 The built-in are the same for both Invoke-OmadaRestMethod and Invoke-OmadaWebRequest.
 
 ###    -AuthenticationType <string>
-The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
+The type of authentication to use for the request. Default is `WebView2`. The acceptable values for this parameter are:
 - `None`: No explicit authentication is used.
 - `Basic`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: Basic` header in the format of `base64(user:password)`.
 - `Browser`: Uses Selenium for authentication with Omada. It automatically installs and updates to the desired webdriver version based on the currently installed Microsoft Edge browser.
