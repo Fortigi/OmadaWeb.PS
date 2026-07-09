@@ -1,6 +1,9 @@
 function Get-DataFromWebView2 {
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory)]
+        $SessionContext,
+
         [string]$EdgeProfile = "Default",
         [switch]$InPrivate
     )

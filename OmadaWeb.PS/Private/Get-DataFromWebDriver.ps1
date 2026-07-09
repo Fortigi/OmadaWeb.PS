@@ -1,6 +1,9 @@
 function Get-DataFromWebDriver {
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory)]
+        $SessionContext,
+
         [string]$EdgeProfile,
         [switch]$InPrivate
     )
@@ -16,7 +19,7 @@ function Get-DataFromWebDriver {
 
         $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile -SessionKey $SessionContext.Key
 
-        Start-EdgeDriverLogin
+        Start-EdgeDriverLogin -SessionContext $SessionContext
 
         $AgentString = $EdgeDriver.ExecuteScript("return navigator.userAgent")
 
@@ -211,7 +214,7 @@ function Get-DataFromWebDriver {
                 Close-EdgeDriver
             }
             catch {}
-            Get-DataFromWebDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
+            Get-DataFromWebDriver -SessionContext $SessionContext -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
         }
         else {
             $PSCmdlet.ThrowTerminatingError($PSItem)

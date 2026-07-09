@@ -15,7 +15,9 @@ function Get-OmadaCookieFileName {
     # session's -CookiePath file name is unique when a Credential/-SessionKey distinguishes it from
     # other sessions on the same host, and two calls that resolve to the same session key in memory
     # (e.g. differing only by casing) always resolve to the same on-disk file name too.
-    $Authority = $Uri.Authority.ToLowerInvariant()
+    # ":" (present in Uri.Authority for any non-default port, e.g. "localhost:8443") is illegal in
+    # Windows filenames, so it's replaced rather than passed through.
+    $Authority = $Uri.Authority.ToLowerInvariant() -replace ":", "_"
     $Identity = $null
     if ($null -ne $Credential -and -not [string]::IsNullOrWhiteSpace($Credential.UserName)) {
         $Identity = $Credential.UserName.Trim().ToLowerInvariant()

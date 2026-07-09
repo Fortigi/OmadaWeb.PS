@@ -59,13 +59,13 @@ function Invoke-BrowserAuthentication {
             "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
             # Get-DataFromWebView2 bridges $SessionContext into $Script:CurrentWebView2Session itself
             # (WebView2's .NET event-handler closures cannot see this call stack to read it directly).
-            Get-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+            Get-DataFromWebView2 -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
             $BrowserData = @($SessionContext.AuthCookie, $Script:UserAgent)
             $SessionContext.WebView2Used = $true
         }
         else {
             "{0} - Using Selenium WebDriver for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-            $BrowserData = Get-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+            $BrowserData = Get-DataFromWebDriver -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
         }
 
         "{0} - Setting OmadaWebAuthCookie and user agent" -f $MyInvocation.MyCommand | Write-Verbose
@@ -87,8 +87,9 @@ function Invoke-BrowserAuthentication {
 
         # Uses the same helper as the read path in Invoke-OmadaRequest.ps1 to guarantee an identical
         # filename (previously this used the cookie's own .domain attribute, which may lack the port,
-        # producing a different filename than what the read path looked for).
-        $CookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
+        # producing a different filename than what the read path looked for). Built from
+        # $BoundParams.Uri directly rather than relying on the caller's $Uri local.
+        $CookieFileName = Get-OmadaCookieFileName -Uri ([System.Uri]::new($BoundParams.Uri)) -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
         $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath $CookieFileName)
         $CookieObject = [PSCustomObject]@{
             OmadaWebAuthCookie = $SessionContext.AuthCookie

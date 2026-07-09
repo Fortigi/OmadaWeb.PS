@@ -69,6 +69,10 @@ function Invoke-OmadaRequest {
                 $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath $CookieFileName)
                 "{0} - Loading custom cookie: {1}" -f $MyInvocation.MyCommand, $CookiePath | Write-Verbose
                 if (!(Test-Path $CookiePath -PathType Leaf)) {
+                    # -CookiePath is authoritative, so a missing file must not leave a stale in-memory
+                    # cookie (possibly from an earlier call for this session) in place - that would
+                    # silently defeat the "force this specific cookie" contract -CookiePath implies.
+                    $SessionContext.AuthCookie = $null
                     "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
                 }
                 else {
@@ -77,6 +81,7 @@ function Invoke-OmadaRequest {
                         "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json) | Write-Verbose
                     }
                     catch {
+                        $SessionContext.AuthCookie = $null
                         "Failure loading cookie, try to create a new one." | Write-Verbose
                     }
                 }
@@ -286,12 +291,12 @@ function Invoke-OmadaRequest {
                     }
                     if ($WebView2Authentication) {
                         "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-                        Get-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        Get-DataFromWebView2 -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                         $BrowserData = @($SessionContext.AuthCookie, $Script:UserAgent)
                         $SessionContext.WebView2Used = $true
                     }
                     else {
-                        $BrowserData = Get-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        $BrowserData = Get-DataFromWebDriver -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                     }
                     $SessionContext.AuthCookie = $BrowserData[0]
 

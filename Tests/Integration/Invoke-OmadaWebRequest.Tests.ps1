@@ -16,6 +16,13 @@ BeforeAll {
     $Script:AllowUnencryptedAuthParams = if ($PSVersionTable.PSVersion.Major -ge 6) { @{ AllowUnencryptedAuthentication = $true } } else { @{} }
     $Script:SkipHttpErrorCheckParams = if ($PSVersionTable.PSVersion -ge [version]'7.4') { @{ SkipHttpErrorCheck = $true } } else { @{} }
 
+    # The -CookiePath file name is derived from the URI authority (which includes this test's
+    # non-default port), not a plain "<host>.cookie" - compute it the same way the module does so
+    # tests seed/check the exact file the code actually reads/writes.
+    $Script:CookieFileName = InModuleScope 'OmadaWeb.PS' -Parameters @{ UriA = $Uri } {
+        Get-OmadaCookieFileName -Uri ([System.Uri]::new($UriA))
+    }
+
     InModuleScope 'OmadaWeb.PS' {
         if ($env:TF_BUILD -eq 'True' -or $env:TF_BUILD -eq $true -or $env:GITHUB_ACTIONS -eq 'true') {
             #Skip WebView2 login in CI/CD pipelines
@@ -149,7 +156,7 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
                     sameSite = "Lax"
                 }
             }
-            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            $CookiePath = Join-Path $Env:Temp $Script:CookieFileName
             $CookieObject | Export-Clixml -Path $CookiePath -Force
             $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType None -CookiePath $Env:Temp -Verbose
             Get-Item $CookiePath | Remove-Item -Force
@@ -157,7 +164,7 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         }
 
         It 'Should create cookie file when using CookiePath parameter using WebView2' {
-            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            $CookiePath = Join-Path $Env:Temp $Script:CookieFileName
             try { Get-Item $CookiePath | Remove-Item -Force } catch { }
             Test-Path $CookiePath -PathType Leaf | Should -Be $false
             Invoke-TestOmadaWebRequest -Uri $Uri -CookiePath $Env:Temp -Verbose -ForceAuthentication | Out-Null
@@ -165,7 +172,7 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         }
 
         It 'Should create cookie file when using CookiePath parameter using WebView2 -InPrivate' {
-            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            $CookiePath = Join-Path $Env:Temp $Script:CookieFileName
             try { Get-Item $CookiePath | Remove-Item -Force } catch { }
             Test-Path $CookiePath -PathType Leaf | Should -Be $false
             Invoke-TestOmadaWebRequest -Uri $Uri -CookiePath $Env:Temp -Verbose -ForceAuthentication -InPrivate | Out-Null
@@ -173,7 +180,7 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         }
 
         It 'Should create cookie file when using CookiePath parameter using WebView2' {
-            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            $CookiePath = Join-Path $Env:Temp $Script:CookieFileName
             try { Get-Item $CookiePath | Remove-Item -Force } catch { }
             Test-Path $CookiePath -PathType Leaf | Should -Be $false
             Invoke-TestOmadaWebRequest -Uri $Uri -CookiePath $Env:Temp -UseWebView2 -Verbose -ForceAuthentication | Out-Null
@@ -181,7 +188,7 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         }
 
         It 'Should create cookie file when using CookiePath parameter using WebView2 -InPrivate' {
-            $CookiePath = Join-Path $Env:Temp 'localhost.cookie'
+            $CookiePath = Join-Path $Env:Temp $Script:CookieFileName
             try { Get-Item $CookiePath | Remove-Item -Force } catch { }
             Test-Path $CookiePath -PathType Leaf | Should -Be $false
             Invoke-TestOmadaWebRequest -Uri $Uri -CookiePath $Env:Temp -UseWebView2 -Verbose -ForceAuthentication -InPrivate | Out-Null

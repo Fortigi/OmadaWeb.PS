@@ -1,6 +1,9 @@
 function Start-EdgeDriverLogin {
     [CmdletBinding()]
-    param()
+    param(
+        [Parameter(Mandatory)]
+        $SessionContext
+    )
 
     "{0} - Starting Edge WebDriver login" -f $MyInvocation.MyCommand | Write-Verbose
 
