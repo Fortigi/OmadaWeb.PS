@@ -71,7 +71,7 @@ function Get-DataFromWebView2 {
             $Script:CurrentWebView2Session.LoginRetryCount = 0
         }
         else {
-            "Could not authenticate to '{0}" -f $Script:CurrentWebView2Session.BaseUrl | Write-Error -ErrorAction "Stop"
+            "Could not authenticate to '{0}'" -f $Script:CurrentWebView2Session.BaseUrl | Write-Error -ErrorAction "Stop"
             $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
