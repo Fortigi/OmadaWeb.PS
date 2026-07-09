@@ -159,7 +159,7 @@ The type of authentication to use for the request. Default is `WebView2`. The ac
 - `Integrated`: Uses Windows Integrated Authentication.
 - `OAuth`: Requires **Credential**. OAuth2 authentication with Entra ID by default, other IDPs are possible using additional OAuth parameters.
 - `WebView2`: For environments where Selenium is restricted, you can use the [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin and downloaded automatically when not present. WebView2 uses a copy of the default Edge user profile, located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
-- `Windows`: Sends an RFC 6750 `Authorization: Bearer` header with the supplied token.
+- `Windows`: Requires **Credential**. Uses Windows authentication with the supplied credentials. On PowerShell 7+ this uses the built-in `Negotiate` authentication flow (Kerberos/NTLM); on Windows PowerShell 5.1 the supplied credential is passed to the underlying web request for Windows authentication.
 
 Supplying **AuthenticationType** overrides any Authorization headers supplied to Headers or included in WebSession.
 
