@@ -117,23 +117,23 @@ catch {}
 
 # Initialize script-level variables
 $Global:OmadaWebPSCurrentBaseUrl = $null
+# Reusable authentication session state (cookie, base URL, credential, WebView2 profile/environment,
+# etc.) lives per-session in $Script:OmadaSessions instead of single unkeyed variables - see
+# Get-OmadaSessionKey.ps1 / Get-OmadaSessionContext.ps1.
+$Script:OmadaSessions = @{}
+# Bridges the blocking WinForm/WebView2 dialog's .NET event-handler closures (which cannot see the
+# Invoke-OmadaRequest call stack) to the session context driving the current interactive login.
+$Script:CurrentWebView2Session = $null
 $Script:AccountSelectionAttempted = $false
-$Script:BrowserDataCleared = $false
-$Script:CookieCacheFilePath = $null
 $Script:DebugWebView2 = $false
-$Script:Credential = $null
 $Script:CurrentScenario = $null
-$Script:ForceAuthentication = $false
 $Script:FunctionName = $null
 $Script:IdAttributes = $null
 $Script:InstalledEdgeFilePath = $null
 $Script:LastCheckedHost = $null
 $Script:LastLoggedSecond = -1
 [double]$Script:LastFiredSecond = -1
-$Script:LastSessionType = $null
-$Script:LoginCount = 0
 $Script:LoginFailed = $false
-$Script:LoginRetryCount = 0
 $Script:LoginState = $null
 $Script:LoginSubState = $null
 $Script:LoginTask = $null
@@ -144,8 +144,9 @@ $Script:NameObjects = $null
 $Script:OmadaWatchdogStart = $null
 $Script:OmadaWatchdogRunning = $false
 $Script:OmadaWatchdogTimeout = 600
+# Only used to seed the first session context created in this Runspace when the module is imported
+# with -ArgumentList @{ Parameters = @{ OmadaWebAuthCookie = ... } } - see Get-OmadaSessionContext.ps1.
 $Script:OmadaWebAuthCookie = $null
-$Script:OmadaWebBaseUrl = $null
 $Script:PreviousAttributes = $null
 $Script:PreviousScenario = $null
 $Script:ProgressCounter = 0
@@ -154,8 +155,6 @@ $Script:Timer = $null
 $Script:Task = $null
 $Script:UserAgent = "OmadaWeb.PS/{0}"
 $Script:UserAgentParameterUsed = $false
-$Script:WebViewEnv = $null
-$Script:WebView2Used = $false
 $Script:WebView2UpdateChecked = $false
 $Script:WebView2WpfPath = $null
 $Script:WebView2LatestVersion = $null
@@ -207,9 +206,9 @@ $Script:WebView2WinFormsPath = [System.IO.Path]::Combine($WebView2BasePath, "Mic
 $Script:WebView2LoaderPath = [System.IO.Path]::Combine($WebView2BasePath, "WebView2Loader.dll")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2LoaderPath | Write-Verbose
 
-#WebView2 User Profile Location
-$Script:WebView2UserProfilePath = [System.IO.Path]::Combine($ModuleAppDataPath, "Edge User Data\OmadaWebView2Profile")
-"{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2UserProfilePath | Write-Verbose
+#WebView2 User Profile Base Location - actual profile folders are created per session (see Get-OmadaSessionContext)
+$Script:WebView2UserProfileBasePath = [System.IO.Path]::Combine($ModuleAppDataPath, "Edge User Data")
+"{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2UserProfileBasePath | Write-Verbose
 
 #Edge Location
 $Script:InstalledEdgeFilePath = [System.IO.Path]::Combine($InstalledEdgeBasePath, "msedge.exe")

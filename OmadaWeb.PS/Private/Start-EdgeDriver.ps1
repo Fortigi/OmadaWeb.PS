@@ -2,7 +2,8 @@ function Start-EdgeDriver {
     [CmdletBinding()]
     param(
         [string]$EdgeProfile,
-        [switch]$InPrivate
+        [switch]$InPrivate,
+        [string]$SessionKey
     )
 
     "{0} - Starting Edge WebDriver" -f $MyInvocation.MyCommand | Write-Verbose
@@ -95,9 +96,17 @@ function Start-EdgeDriver {
         $ProfileArgument = '--profile-directory="{0}"' -f $ProfileFolderName
         "Profile argument: '{0}'" -f $ProfileArgument | Write-Verbose
         $EdgeOptions.AddArgument($ProfileArgument)
-        $UserProfileDir = New-Item (Join-Path $env:LOCALAPPDATA -ChildPath "OmadaWeb.PS\Profiles\$ProfileFolderName") -ItemType Directory -Force
+
+        # Suffix the on-disk profile folder with a short hash of the session key so concurrent
+        # logins for different tenants/users don't collide on the same Edge user-data-dir.
+        $ProfileDirName = $ProfileFolderName
+        if (![string]::IsNullOrWhiteSpace($SessionKey)) {
+            $SessionKeyHash = (Get-OmadaShortHash -Value $SessionKey).Substring(0, 8)
+            $ProfileDirName = "{0}_{1}" -f $ProfileFolderName, $SessionKeyHash
+        }
+        $UserProfileDir = New-Item (Join-Path $env:LOCALAPPDATA -ChildPath "OmadaWeb.PS\Profiles\$ProfileDirName") -ItemType Directory -Force
         "Using profile user-data-dir: '{0}'" -f $UserProfileDir.FullName | Write-Verbose
-        $UserDataDirArgument = 'user-data-dir="{0}"' -f $UserProfileDir.FullName
+        $UserDataDirArgument = '--user-data-dir="{0}"' -f $UserProfileDir.FullName
         "User data argument: '{0}'" -f $UserDataDirArgument | Write-Verbose
         $EdgeOptions.AddArgument($UserDataDirArgument)
     }

@@ -19,6 +19,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                     ForceAuthentication = $true
                     CookiePath          = 'C:\Temp'
                     Paged               = $true
+                    SessionKey          = 'user-a'
                 }
                 $Result = Set-RequestParameter
                 $Result.Keys | Should -Contain 'Uri'
@@ -28,6 +29,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                 $Result.Keys | Should -Not -Contain 'ForceAuthentication'
                 $Result.Keys | Should -Not -Contain 'CookiePath'
                 $Result.Keys | Should -Not -Contain 'Paged'
+                $Result.Keys | Should -Not -Contain 'SessionKey'
             }
         }
     }
@@ -41,12 +43,27 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                 $BoundParams = @{
                     Uri        = 'https://example.omada.cloud'
                     Method     = 'GET'
+                    SessionKey = 'user-a'
                     NotAParam  = 'should be excluded'
                 }
                 $Result = Set-RequestParameter -InvokeOmadaRequest
                 $Result.Keys | Should -Contain 'Uri'
                 $Result.Keys | Should -Contain 'Method'
                 $Result.Keys | Should -Not -Contain 'NotAParam'
+            }
+        }
+
+        It 'Should forward SessionKey to the Invoke-OmadaRequest retry call since it is one of its own dynamic parameters' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:FunctionName = 'Invoke-RestMethod'
+                $BoundParams = @{
+                    Uri        = 'https://example.omada.cloud'
+                    Method     = 'GET'
+                    SessionKey = 'user-a'
+                }
+                $Result = Set-RequestParameter -InvokeOmadaRequest
+                $Result.Keys | Should -Contain 'SessionKey'
+                $Result.SessionKey | Should -Be 'user-a'
             }
         }
     }

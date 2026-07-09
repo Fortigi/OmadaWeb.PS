@@ -36,9 +36,9 @@ function Get-WebView2Cookie {
                     if ($null -eq $Cookies) {
                         return
                     }
-                    $Filter = [System.Uri]::New($Script:OmadaWebBaseUrl).Host.ToLower()
+                    $Filter = [System.Uri]::New($Script:CurrentWebView2Session.BaseUrl).Host.ToLower()
                     $Match = $Cookies | Where-Object { ($null -ne $_.Domain) -and $_.Domain.ToLowerInvariant().EndsWith($Filter) }
-                    $Script:OmadaWebAuthCookie = [pscustomobject]@{}
+                    $Script:CurrentWebView2Session.AuthCookie = [pscustomobject]@{}
                     $Exported = $false
 
                     if ($Match -and $Match.Count -gt 0) {
@@ -52,7 +52,7 @@ function Get-WebView2Cookie {
                                     $Script:UserAgent = $Script:WebView2.CoreWebView2.Settings.UserAgent
                                 }
 
-                                $Script:OmadaWebAuthCookie = [pscustomobject]@{
+                                $Script:CurrentWebView2Session.AuthCookie = [pscustomobject]@{
                                     name     = $_.Name
                                     value    = $_.Value
                                     domain   = $_.Domain
