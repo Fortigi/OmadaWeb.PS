@@ -56,29 +56,56 @@ Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -Authenti
 
 ## SYNTAX
 
-### Invoke-OmadaRestMethod
+<!-- BEGIN GENERATED SYNTAX -->
+### Invoke-OmadaRestMethod (StandardMethod)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
-### Invoke-OmadaRestMethod AuthenticationType: OAuth
+### Invoke-OmadaRestMethod (StandardMethodNoProxy)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
-### Invoke-OmadaWebRequest
+### Invoke-OmadaRestMethod (CustomMethod)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
-### Invoke-OmadaWebRequest AuthenticationType: OAuth
+### Invoke-OmadaRestMethod (CustomMethodNoProxy)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [<Invoke-RestMethod Parameters>]
 ```
+
+### Invoke-OmadaWebRequest (StandardMethod)
+
+```powershell
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [<Invoke-WebRequest Parameters>]
+```
+
+### Invoke-OmadaWebRequest (StandardMethodNoProxy)
+
+```powershell
+Invoke-OmadaWebRequest -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [<Invoke-WebRequest Parameters>]
+```
+
+### Invoke-OmadaWebRequest (CustomMethod)
+
+```powershell
+Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [<Invoke-WebRequest Parameters>]
+```
+
+### Invoke-OmadaWebRequest (CustomMethodNoProxy)
+
+```powershell
+Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [<Invoke-WebRequest Parameters>]
+```
+
+<!-- END GENERATED SYNTAX -->
 
 ## EXAMPLES
 
@@ -115,113 +142,26 @@ Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/ident
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
 ```
 
+### Example 7: Retrieve all Identity objects for paged OData feeds
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity" -Paged
+```
+
 ## PARAMETERS
 The built-in are the same for both Invoke-OmadaRestMethod and Invoke-OmadaWebRequest.
 
-###    -AuthenticationType <string>
-The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
+<!-- BEGIN GENERATED PARAMETERS -->
+### -AuthenticationType <string>
+The type of authentication to use for the request. Default is `WebView2`. The acceptable values for this parameter are:
 - `None`: No explicit authentication is used.
-- `Basic`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: basic` header in the format of `base64(user:password)`.
+- `Basic`: Requires **Credential**. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: basic` header in the format of `base64(user:password)`.
 - `Browser`: Uses Selenium for authentication with Omada. It automatically installs and updates to the desired webdriver version based on the currently installed Microsoft Edge browser.
-- `Integrated`: Uses Windows Integrated Authentication
-- `OAuth`: Requires <b>Credential</b>. OAuth2 authentication with Entra ID by default, other IDPs are possible using additional OAuth parameters.
-- `WebView2`:
-For environments where Selenium is restricted, you can use [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin. When the binaries are not present they will be downloaded automatically. WebView2 uses a copy of the default Edge user profile, the profile working directory is located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
+- `Integrated`: Uses Windows Integrated Authentication.
+- `OAuth`: Requires **Credential**. OAuth2 authentication with Entra ID by default, other IDPs are possible using additional OAuth parameters.
+- `WebView2`: For environments where Selenium is restricted, you can use the [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin and downloaded automatically when not present. WebView2 uses a copy of the default Edge user profile, located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
 - `Windows`: Sends an RFC 6750 `Authorization: Bearer` header with the supplied token.
 
-Supplying <b>AuthenticationType</b> overrides any Authorization headers supplied to Headers or included in WebSession.
-
-```yaml
-        Type: System.String
-        Required: false
-        Position: Named
-        Accept pipeline input: false
-        Parameter set name: (All)
-        Aliases: None
-        Dynamic: true
-        Accept wildcard characters: false
-```
-
-###    -EdgeProfile <string>
-Use the specified Edge profile for the authentication request. The acceptable values for this parameter is based on the available profiles on your system.
-
-> [!IMPORTANT]
-> Due the requirements of Selenium the selected Edge profile needs to be closed when using this parameter.
-
-```yaml
-        Type: System.String
-        Required: false
-        Position: Named
-        Accept pipeline input: false
-        Parameter set name: (All)
-        Aliases: None
-        Dynamic: true
-        Accept wildcard characters: false
-```
-
-### -ForceAuthentication <switch>
-Force authentication to Omada even when the cookie is still valid.
-
-```yaml
-        Type: System.Management.Automation.SwitchParameter
-        Required: false
-        Position: Named
-        Accept pipeline input: false
-        Parameter set name: (All)
-        Aliases: None
-        Dynamic: true
-        Accept wildcard characters: false
-```
-
-### -UseWebView2 <switch>
-Use WebView2 instead of Selenium WebDriver for browser-based authentication.
-> [!IMPORTANT]
-> This parameter is deprecated and obsolete. The default is AuthenticationType WebView2, so this parameter is not needed anymore!
-
-```yaml
-        Type: System.Management.Automation.SwitchParameter
-        Required: false
-        Position: Named
-        Accept pipeline input: false
-        Parameter set name: (All)
-        Aliases: None
-        Dynamic: true
-        Accept wildcard characters: false
-```
-
-### -InPrivate <switch>
-Use InPrivate mode for the authentication request.
-
-```yaml
-        Type: System.Management.Automation.SwitchParameter
-        Required: false
-        Position: Named
-        Accept pipeline input: false
-        Parameter set name: (All)
-        Aliases: None
-        Dynamic: true
-        Accept wildcard characters: false
-```
-
-### -SkipCookieCache <switch>
-Do not cache the encrypted Omada authentication cookie. It wil also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationMethod Browser.
-
-```yaml
-        Type: System.switch
-        Required: false
-        Position: Named
-        Accept pipeline input: false
-        Parameter set name: (All)
-        Aliases: None
-        Dynamic: true
-        Accept wildcard characters: false
-```
-
-### -CookiePath <string>
-Attempts to load a stored Omada authentication cookie from this path. This file will be updated re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached. This parameter only applies in combination with parameter -AuthenticationMethod Browser.
-
-> [!IMPORTANT]
-> Be aware that an unencrypted version of the session cookie is stored on the file system. Make sure it is stored at a secure location so it cannot be accessed by unauthorized users.
+Supplying **AuthenticationType** overrides any Authorization headers supplied to Headers or included in WebSession.
 
 ```yaml
         Type: System.String
@@ -257,16 +197,16 @@ Enter the application ID URI when the base url does not equal the configured app
         Position: Named
         Accept pipeline input: false
         Parameter set name: (All)
-        Aliases: EntraApplicationIdUri
+        Aliases: None
         Dynamic: true
         Accept wildcard characters: false
 ```
 
-### -DebugWebView2 <switch>
-Use this parameter to enable WebView2 browser debugging options like Developer Tools.
+### -OAuthScope <string>
+OAuth2 scope to be used. Defaults to the form used for Entra ID. This parameter is used for -AuthenticationType OAuth.
 
 ```yaml
-        Type: System.switch
+        Type: System.String
         Required: false
         Position: Named
         Accept pipeline input: false
@@ -276,6 +216,143 @@ Use this parameter to enable WebView2 browser debugging options like Developer T
         Accept wildcard characters: false
 ```
 
+### -OAuthUri <string>
+Provide a custom OAuth2 URI. Defaults to the form used for Entra ID based on the provided EntraIdTenantId. This parameter is used for -AuthenticationType OAuth.
+
+```yaml
+        Type: System.String
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -CookiePath <string>
+Attempts to load a stored Omada authentication cookie from this path. This file will be updated when re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached.
+
+> [!IMPORTANT]
+> Be aware that an unencrypted version of the session cookie is stored on the file system. This parameter only applies in combination with parameter -AuthenticationType Browser and -AuthenticationType WebView2. Make sure it is stored at a secure location so it cannot be accessed by unauthorized users.
+
+```yaml
+        Type: System.String
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -SkipCookieCache <switch>
+Do not cache the encrypted Omada authentication cookie. It will also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationType Browser and -AuthenticationType WebView2.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -ForceAuthentication <switch>
+Force authentication to Omada even when the cookie is still valid.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -EdgeProfile <string>
+Use the specified Edge profile for the authentication request. The acceptable values for this parameter are based on the available profiles on your system.
+
+> [!IMPORTANT]
+> Due to the requirements of Selenium, the selected Edge profile needs to be closed when using this parameter.
+
+```yaml
+        Type: System.String
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -InPrivate <switch>
+Use InPrivate mode for the authentication request.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -UseWebView2 <switch>
+Use WebView2 instead of Selenium WebDriver for browser-based authentication.
+
+> [!IMPORTANT]
+> This parameter is deprecated and obsolete. The default is AuthenticationType WebView2, so this parameter is not needed anymore and will be removed in a future release.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -DebugWebView2 <switch>
+Use this parameter to enable WebView2 browser debugging options like Developer Tools
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -Paged <switch>
+Use this parameter to retrieve all pages of data from the API. This parameter is only applicable to Omada API endpoints that support pagination. Only supported for HTTP GET requests (the default); combining -Paged with -Method PUT, POST, or PATCH throws a terminating error.
+
+This parameter only applies to Invoke-OmadaRestMethod.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+<!-- END GENERATED PARAMETERS -->
 
 ### Invoke-RestMethod Parameters / Invoke-WebRequest Parameters
 All other parameters, except the exclusion list below, are inherited from the PowerShell built-in functions [`Invoke-RestMethod`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-restmethod) for `Invoke-OmadaRestMethod` and [`Invoke-WebRequest`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest) for `Invoke-OmadaWebRequest`.
@@ -287,6 +364,8 @@ Please see Microsoft documentation for all other available options.
 ## CONTRIBUTING
 
 Contributions are welcome! If you have ideas for improvements or bug fixes, feel free to open a pull request on [GitHub](https://github.com/Fortigi/OmadaWeb.PS).
+
+After changing dynamic parameters in `OmadaWeb.PS/Private/Set-DynamicParameter.ps1`, run `Build/Update-ReadmeHelp.ps1` (PowerShell 7) to refresh the generated SYNTAX and PARAMETERS sections of this README before committing.
 
 ## RELATED LINKS
 

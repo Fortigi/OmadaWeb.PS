@@ -91,6 +91,21 @@ Task Build -depends Analyze {
 
     }
 
+    function ConvertTo-HashtableDeep {
+        param($InputObject)
+        if ($InputObject -is [System.Collections.IEnumerable] -and $InputObject -isnot [string]) {
+            return @($InputObject | ForEach-Object { ConvertTo-HashtableDeep $_ })
+        }
+        elseif ($InputObject -is [PSCustomObject]) {
+            $Hash = @{}
+            foreach ($Property in $InputObject.PSObject.Properties) {
+                $Hash[$Property.Name] = ConvertTo-HashtableDeep $Property.Value
+            }
+            return $Hash
+        }
+        return $InputObject
+    }
+
     #Read Functions
     $Public = @(Get-ChildItem -Path $ModuleSource\Public\*.ps1 -Recurse)
     $Private = @(Get-ChildItem -Path $ModuleSource\Private\*.ps1)
@@ -128,7 +143,7 @@ Task Build -depends Analyze {
     $ModulePsd1.Copyright = $ModulePsd1.Copyright -f $Date.ToString("yyyy")
 
     #Work-around for the bug in New-ModuleManifest that breaks the PrivateData key (Source: https://github.com/PowerShell/PowerShell/issues/5922)
-    $PrivateData = $ModulePsd1.PrivateData | ConvertTo-Json | ConvertFrom-Json -AsHashtable
+    $PrivateData = ConvertTo-HashtableDeep ($ModulePsd1.PrivateData | ConvertTo-Json | ConvertFrom-Json)
     $ModulePsd1.Remove("PrivateData")
 
     $SerializedContent = $PrivateData.GetEnumerator() | ForEach-Object {
@@ -219,7 +234,7 @@ Task Build -depends Analyze {
         "Use of 'Wait-Debugger' command found in script:{0}. This must be removed before building the module" -f $_.Name | Write-Error -ErrorAction Stop
     }
     "Module psm1 output file: {0}" -f $OutputDirFile | Write-Host -ForegroundColor Magenta
-    $ModuleContent | Out-File -Path $OutputDirFile -Encoding UTF8 -Force
+    $ModuleContent | Out-File -FilePath $OutputDirFile -Encoding UTF8 -Force
 
     "Copy nuspec file" | Write-Host -ForegroundColor Magenta
     Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force

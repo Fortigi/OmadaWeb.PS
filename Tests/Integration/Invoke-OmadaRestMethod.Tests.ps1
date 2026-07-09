@@ -12,6 +12,9 @@ BeforeAll {
     Start-Sleep -Seconds 2
     $Uri = "http://localhost:{0}/" -f $RandomPort
 
+    # -AllowUnencryptedAuthentication (Invoke-WebRequest/Invoke-RestMethod) needs PS6+; Windows PowerShell 5.1 has no such parameter.
+    $Script:AllowUnencryptedAuthParams = if ($PSVersionTable.PSVersion.Major -ge 6) { @{ AllowUnencryptedAuthentication = $true } } else { @{} }
+
     InModuleScope 'OmadaWeb.PS' {
         if ($env:TF_BUILD -eq 'True' -or $env:TF_BUILD -eq $true -or $env:GITHUB_ACTIONS -eq 'true') {
             #Skip WebView2 login in CI/CD pipelines
@@ -60,18 +63,18 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Basic Authentication' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential $Credential -AllowUnencryptedAuthentication
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential $Credential @AllowUnencryptedAuthParams
             $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Windows Authentication' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Windows -Credential $Credential -AllowUnencryptedAuthentication
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Windows -Credential $Credential @AllowUnencryptedAuthParams
             $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Integrated Authentication' {
-            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Integrated -AllowUnencryptedAuthentication
+            $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Integrated @AllowUnencryptedAuthParams
             $Result | Should -Be "OK"
         }
 
@@ -122,13 +125,13 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential  -OAuthUri $Uri -AllowUnencryptedAuthentication -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential  -OAuthUri $Uri @AllowUnencryptedAuthParams -Verbose
             $Result | Should -Be "OK"
         }
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri and OAuthScope' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri $Uri -OAuthScope $Uri  -AllowUnencryptedAuthentication -WarningVariable Test -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri $Uri -OAuthScope $Uri  @AllowUnencryptedAuthParams -WarningVariable Test -Verbose
             $Result | Should -Be "OK"
         }
 
@@ -214,7 +217,9 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
         It 'Should throw terminating error when -WebSession is used' {
             { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -WebSession null } | Should -Throw
         }
-        It 'Should throw terminating error when -Authentication Basic is used' {
+        It 'Should throw terminating error when -Authentication Basic is used' -Skip:($PSVersionTable.PSVersion.Major -lt 6) {
+            # -Authentication doesn't exist on Windows PowerShell 5.1's Invoke-RestMethod, so there is no native
+            # parameter here to guard against on that edition - it prefix-matches -AuthenticationType instead.
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
             { Invoke-TestOmadaRestMethod -Uri $Uri -ErrorAction Stop  -Verbose -Authentication Basic  $Credential } | Should -Throw
         }
