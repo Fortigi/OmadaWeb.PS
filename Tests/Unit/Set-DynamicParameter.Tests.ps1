@@ -25,7 +25,7 @@ Describe 'Set-DynamicParameter' -Tag 'Unit' {
         }
     }
 
-    It 'Should describe Windows authentication as Negotiate/Kerberos/NTLM instead of Bearer' {
+    It 'Should describe Windows authentication using Negotiate' {
         InModuleScope 'OmadaWeb.PS' {
             $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
             $HelpMessage = ($Dictionary['AuthenticationType'].Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } | Select-Object -First 1).HelpMessage
