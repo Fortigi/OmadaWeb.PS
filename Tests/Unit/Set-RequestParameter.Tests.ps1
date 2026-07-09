@@ -18,6 +18,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                     EntraIdTenantId     = 'tenant'
                     ForceAuthentication = $true
                     CookiePath          = 'C:\Temp'
+                    Paged               = $true
                 }
                 $Result = Set-RequestParameter
                 $Result.Keys | Should -Contain 'Uri'
@@ -26,6 +27,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                 $Result.Keys | Should -Not -Contain 'EntraIdTenantId'
                 $Result.Keys | Should -Not -Contain 'ForceAuthentication'
                 $Result.Keys | Should -Not -Contain 'CookiePath'
+                $Result.Keys | Should -Not -Contain 'Paged'
             }
         }
     }

@@ -59,19 +59,19 @@ Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -Authenti
 ### Invoke-OmadaRestMethod
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2 | None}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>]  [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod AuthenticationType: OAuth
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-DebugWebView2 <switch>] [-Paged <switch>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | Windows | WebView2 | None}] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest AuthenticationType: OAuth
@@ -115,19 +115,24 @@ Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/ident
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
 ```
 
+### Example 7: Retrieve all Identity objects for paged OData feeds
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity" -Paged
+```
+
 ## PARAMETERS
 The built-in are the same for both Invoke-OmadaRestMethod and Invoke-OmadaWebRequest.
 
 ###    -AuthenticationType <string>
-The type of authentication to use for the request. Default is `Browser`. The acceptable values for this parameter are:
+The type of authentication to use for the request. Default is `WebView2`. The acceptable values for this parameter are:
 - `None`: No explicit authentication is used.
-- `Basic`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: basic` header in the format of `base64(user:password)`.
+- `Basic`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: Basic` header in the format of `base64(user:password)`.
 - `Browser`: Uses Selenium for authentication with Omada. It automatically installs and updates to the desired webdriver version based on the currently installed Microsoft Edge browser.
 - `Integrated`: Uses Windows Integrated Authentication
 - `OAuth`: Requires <b>Credential</b>. OAuth2 authentication with Entra ID by default, other IDPs are possible using additional OAuth parameters.
 - `WebView2`:
 For environments where Selenium is restricted, you can use [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin. When the binaries are not present they will be downloaded automatically. WebView2 uses a copy of the default Edge user profile, the profile working directory is located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
-- `Windows`: Sends an RFC 6750 `Authorization: Bearer` header with the supplied token.
+- `Windows`: Requires <b>Credential</b>. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: Basic` header in the format of `base64(user:password)`.
 
 Supplying <b>AuthenticationType</b> overrides any Authorization headers supplied to Headers or included in WebSession.
 
@@ -204,7 +209,7 @@ Use InPrivate mode for the authentication request.
 ```
 
 ### -SkipCookieCache <switch>
-Do not cache the encrypted Omada authentication cookie. It wil also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationMethod Browser.
+Do not cache the encrypted Omada authentication cookie. It will also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationType Browser.
 
 ```yaml
         Type: System.switch
@@ -218,7 +223,7 @@ Do not cache the encrypted Omada authentication cookie. It wil also not be cache
 ```
 
 ### -CookiePath <string>
-Attempts to load a stored Omada authentication cookie from this path. This file will be updated re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached. This parameter only applies in combination with parameter -AuthenticationMethod Browser.
+Attempts to load a stored Omada authentication cookie from this path. This file will be updated when re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached. This parameter only applies in combination with parameter -AuthenticationType Browser.
 
 > [!IMPORTANT]
 > Be aware that an unencrypted version of the session cookie is stored on the file system. Make sure it is stored at a secure location so it cannot be accessed by unauthorized users.
@@ -264,6 +269,20 @@ Enter the application ID URI when the base url does not equal the configured app
 
 ### -DebugWebView2 <switch>
 Use this parameter to enable WebView2 browser debugging options like Developer Tools.
+
+```yaml
+        Type: System.switch
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+### -Paged <switch>
+Use this parameter to retrieve all pages for OData api endpoints that use paging. This parameter does not apply for Invoke-OmadaWebRequest. Only supported for HTTP GET requests (the default); combining `-Paged` with `-Method PUT`, `POST`, or `PATCH` throws a terminating error.
 
 ```yaml
         Type: System.switch

@@ -41,6 +41,21 @@ Describe 'Set-DynamicParameter' -Tag 'Unit' {
             $Dictionary.ContainsKey('Method') | Should -Be $true
         }
     }
+
+    It 'Should add a -Paged parameter for Invoke-RestMethod' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
+            $Dictionary.ContainsKey('Paged') | Should -Be $true
+            $Dictionary['Paged'].ParameterType | Should -Be ([System.Management.Automation.SwitchParameter])
+        }
+    }
+
+    It 'Should not add a -Paged parameter for Invoke-WebRequest' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-WebRequest'
+            $Dictionary.ContainsKey('Paged') | Should -Be $false
+        }
+    }
 }
 
 AfterAll {
