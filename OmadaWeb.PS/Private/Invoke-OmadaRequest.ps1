@@ -133,6 +133,14 @@ function Invoke-OmadaRequest {
                 $BoundParams.Add("UseBasicParsing", $true)
             }
 
+            $Paged = $false
+            if ("Paged" -in $BoundParams.Keys -and [bool]$BoundParams.Paged) {
+                if ("Method" -in $BoundParams.Keys -and $BoundParams.Method -ne "GET") {
+                    "{0} - -Paged only supports HTTP GET requests, got -Method '{1}'" -f $MyInvocation.MyCommand, $BoundParams.Method | Write-Error -ErrorAction "Stop"
+                }
+                $Paged = $true
+            }
+
             "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json) | Write-Verbose
             try {
                 $CustomErrorTrigger = "Login failed - {0}" -f (New-Guid).Guid.ToString()
@@ -170,8 +178,43 @@ function Invoke-OmadaRequest {
                             Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
                         }
-                        "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                        "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+
                         $Return = & ($CommandInfo) @Parameters
+
+                        if ($Paged -and $null -ne $Return -and $Return.PSObject.Properties['@odata.nextLink'] -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
+                            $OriginalUri = $Parameters.Uri
+                            try {
+                                $ValueList = [System.Collections.Generic.List[object]]::new()
+                                if ($Return.PSObject.Properties['value']) {
+                                    $ValueList.AddRange(@($Return.value))
+                                }
+                                $NextLink = $Return.'@odata.nextLink'
+                                $SeenLinks = [System.Collections.Generic.HashSet[string]]::new()
+                                $PageCount = 0
+                                while (-not [string]::IsNullOrWhiteSpace($NextLink)) {
+                                    $Parameters.Uri = $NextLink
+                                    if (-not $SeenLinks.Add([string]$NextLink)) {
+                                        throw ("Paging loop detected (repeated @odata.nextLink): {0}" -f $NextLink)
+                                    }
+                                    if (++$PageCount -gt 1000) {
+                                        throw "Paging aborted: exceeded maximum page limit (1000)."
+                                    }
+                                    "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                                    $NextPage = & ($CommandInfo) @Parameters
+                                    if ($null -ne $NextPage -and $NextPage.PSObject.Properties['value']) {
+                                        $ValueList.AddRange(@($NextPage.value))
+                                    }
+                                    $NextLink = if ($null -ne $NextPage) { $NextPage.'@odata.nextLink' } else { $null }
+                                }
+                                $Return.value = $ValueList.ToArray()
+                                $Return.PSObject.Properties.Remove('@odata.nextLink')
+                            }
+                            finally {
+                                $Parameters.Uri = $OriginalUri
+                            }
+                        }
+
                         #To support -SkipHttpErrorCheck
                         if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and $Return -is [System.Xml.XmlDocument]) {
                             $NamespaceManager = New-Object System.Xml.XmlNamespaceManager($Return.NameTable)
@@ -192,7 +235,7 @@ function Invoke-OmadaRequest {
                             Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
                         }
-                        "{0} - Execute: {0}\{1}, Version: {2}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
+                        "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                         $Return = & ($CommandInfo) @Parameters
 
                         #To support -SkipHttpErrorCheck
