@@ -1,6 +1,9 @@
 function Get-DataFromWebDriver {
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory)]
+        $SessionContext,
+
         [string]$EdgeProfile,
         [switch]$InPrivate
     )
@@ -11,12 +14,12 @@ function Get-DataFromWebDriver {
 
     "Opening Edge to retrieve authentication cookie" | Write-Host
     try {
-        $Script:LoginRetryCount++
-        "`n{0} - Login try {1} of max {2}" -f $MyInvocation.MyCommand, $Script:LoginRetryCount, $Script:MaxLoginRetries | Write-Verbose
+        $SessionContext.LoginRetryCount++
+        "`n{0} - Login try {1} of max {2}" -f $MyInvocation.MyCommand, $SessionContext.LoginRetryCount, $Script:MaxLoginRetries | Write-Verbose
 
-        $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
+        $EdgeDriver = Start-EdgeDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile -SessionKey $SessionContext.Key
 
-        Start-EdgeDriverLogin
+        Start-EdgeDriverLogin -SessionContext $SessionContext
 
         $AgentString = $EdgeDriver.ExecuteScript("return navigator.userAgent")
 
@@ -30,8 +33,8 @@ function Get-DataFromWebDriver {
         do {
             if (-not $LoginMessageShown) {
                 Write-Host "`r`nBrowser opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
-                if ($Script:Credential -and ![string]::IsNullOrWhiteSpace($Script:Credential.UserName)) {
-                    " Execute automated login steps for user: {0}" -f $Script:Credential.UserName.Trim() | Write-Host -ForegroundColor Yellow -NoNewline
+                if ($SessionContext.Credential -and ![string]::IsNullOrWhiteSpace($SessionContext.Credential.UserName)) {
+                    " Execute automated login steps for user: {0}" -f $SessionContext.Credential.UserName.Trim() | Write-Host -ForegroundColor Yellow -NoNewline
                 }
                 $LoginMessageShown = $true
             }
@@ -39,7 +42,7 @@ function Get-DataFromWebDriver {
             Write-Host "." -NoNewline -ForegroundColor Yellow
             Start-Sleep -Milliseconds 500
 
-            if ($Script:Credential -and ![string]::IsNullOrWhiteSpace($Script:Credential.UserName.Trim())) {
+            if ($SessionContext.Credential -and ![string]::IsNullOrWhiteSpace($SessionContext.Credential.UserName.Trim())) {
 
                 if ($EdgeDriver.url -like "https://login.microsoftonline.com/*") {
                     try {
@@ -66,7 +69,7 @@ function Get-DataFromWebDriver {
                         ) {
                             Start-Sleep -Milliseconds 500
                             "Enter username" | Write-Verbose
-                            $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))[0].SendKeys($Script:Credential.UserName.Trim())
+                            $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))[0].SendKeys($SessionContext.Credential.UserName.Trim())
                             $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                         }
 
@@ -77,7 +80,7 @@ function Get-DataFromWebDriver {
                                 -and $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonSubmitId)).ComputedAccessibleLabel -eq "Sign in"
                         ) {
                             "Enter password" | Write-Verbose
-                            $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($PasswordElementId))[0].SendKeys($Script:Credential.GetNetworkCredential().Password)
+                            $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($PasswordElementId))[0].SendKeys($SessionContext.Credential.GetNetworkCredential().Password)
                             $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                         }
 
@@ -86,7 +89,7 @@ function Get-DataFromWebDriver {
                                 -and $IdAttributes -contains $SelectUserElementId
                         ) {
                             "Select logged-in account" | Write-Verbose
-                            if ($AccountElement.GetAttribute("data-test-id") -eq $Script:Credential.UserName.Trim()) {
+                            if ($AccountElement.GetAttribute("data-test-id") -eq $SessionContext.Credential.UserName.Trim()) {
                                 $AccountElement.Click()
                             }
                         }
@@ -110,7 +113,7 @@ function Get-DataFromWebDriver {
 
                             "Select logged-in user " | Write-Verbose
                             $EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@data-test-id]")) | ForEach-Object {
-                                if ($_.GetAttribute("data-test-id") -eq $Script:Credential.UserName.Trim()) {
+                                if ($_.GetAttribute("data-test-id") -eq $SessionContext.Credential.UserName.Trim()) {
                                     $_.Click()
                                 }
                             }
@@ -161,7 +164,7 @@ function Get-DataFromWebDriver {
             if ($null -ne $EdgeDriver.url) {
                 $EdgeDriverHost = [System.Uri]::new($EdgeDriver.url).Host
                 $EdgeDriverAbsolutePath = [System.Uri]::new($EdgeDriver.url).AbsolutePath
-                $OmadaWebBaseHost = [System.Uri]::new($Script:OmadaWebBaseUrl).Host
+                $OmadaWebBaseHost = [System.Uri]::new($SessionContext.BaseUrl).Host
             }
 
             if ($OmadaWebBaseHost -ne $EdgeDriverHost -and $EdgeDriverAbsolutePath -ne "/home" ) {
@@ -175,17 +178,17 @@ function Get-DataFromWebDriver {
                 break
             }
         }
-        while ($Script:LoginRetryCount -le $Script:MaxLoginRetries)
+        while ($SessionContext.LoginRetryCount -le $Script:MaxLoginRetries)
         "{0} (Line {1}): {2}" -f $MyInvocation.MyCommand, $MyInvocation.ScriptLineNumber, $$ | Write-Verbose
 
         #$CredentialsEntered = $false
         Close-EdgeDriver
         if ($null -ne $AuthCookie) {
-            $Script:LoginRetryCount = 0
+            $SessionContext.LoginRetryCount = 0
             return $AuthCookie, $AgentString
         }
         else {
-            "Could not authenticate to '{0}" -f $Script:OmadaWebBaseUrl | Write-Error -ErrorAction "Stop"
+            "Could not authenticate to '{0}'" -f $SessionContext.BaseUrl | Write-Error -ErrorAction "Stop"
         }
     }
     catch {
@@ -197,7 +200,7 @@ function Get-DataFromWebDriver {
             $_.Exception.Message -like "*EdgeDriver window is closed*" -or
             $_.Exception.Message -like 'Exception calling "Window" with "*" argument(s): *invalid session id*'
         ) {
-            if ($Script:LoginRetryCount -ge $Script:MaxLoginRetries) {
+            if ($SessionContext.LoginRetryCount -ge $Script:MaxLoginRetries) {
                 Close-EdgeDriver
                 "`nLogin try count ({0}) exceeded! Cannot continue!" -f $Script:MaxLoginRetries | Write-Error -ErrorAction "Stop" -Category AuthenticationError
                 break
@@ -211,7 +214,7 @@ function Get-DataFromWebDriver {
                 Close-EdgeDriver
             }
             catch {}
-            Get-DataFromWebDriver -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
+            Get-DataFromWebDriver -SessionContext $SessionContext -InPrivate:$InPrivate.IsPresent -EdgeProfile $EdgeProfile
         }
         else {
             $PSCmdlet.ThrowTerminatingError($PSItem)

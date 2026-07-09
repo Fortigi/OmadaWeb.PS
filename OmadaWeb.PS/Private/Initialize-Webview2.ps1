@@ -70,12 +70,12 @@ function Initialize-WebView2 {
                                 try {
 
                                     if ($Script:WebView2.Source -eq "about:blank") {
-                                        "Initialize-WebView2 - Navigating to {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebBaseUrl | Write-Verbose
-                                        $Script:WebView2.Source = ([System.Uri]::New($Script:OmadaWebBaseUrl))
+                                        "{0} - Navigating to {1}" -f $MyInvocation.MyCommand, $Script:CurrentWebView2Session.BaseUrl | Write-Verbose
+                                        $Script:WebView2.Source = ([System.Uri]::New($Script:CurrentWebView2Session.BaseUrl))
                                         $Script:OmadaWatchdogRunning = $false
                                     }
 
-                                    if ([System.Uri]::New($Script:OmadaWebBaseUrl).Host -eq $Script:WebView2.Source.Host) {
+                                    if ([System.Uri]::New($Script:CurrentWebView2Session.BaseUrl).Host -eq $Script:WebView2.Source.Host) {
                                         if (!$Script:OmadaWatchdogRunning) {
                                             $Script:OmadaWatchdogStart = [DateTime]::Now
                                             $Script:OmadaWatchdogRunning = $true
@@ -91,7 +91,7 @@ function Initialize-WebView2 {
                                             }
                                             if ($Script:OmadaWatchdogRunning -and [System.Int32]([DateTime]::Now - $Script:OmadaWatchdogStart).TotalSeconds -ge $Script:OmadaWatchdogTimeout) {
                                                 [Console]::ForegroundColor = 'Yellow'
-                                                $m = "`nWARNING: Omada response watchdog timeout exceeded after {0} seconds. {1}!" -f [System.Int32]([DateTime]::Now - $Script:OmadaWatchdogStart).TotalSeconds, $(if ($Script:LoginRetryCount -lt $Script:MaxLoginRetries) { "A re-authentication will be triggered" } else { "Login try count exceeded, stopping" })
+                                                $m = "`nWARNING: Omada response watchdog timeout exceeded after {0} seconds. {1}!" -f [System.Int32]([DateTime]::Now - $Script:OmadaWatchdogStart).TotalSeconds, $(if ($Script:CurrentWebView2Session.LoginRetryCount -lt $Script:MaxLoginRetries) { "A re-authentication will be triggered" } else { "Login try count exceeded, stopping" })
                                                 [Console]::WriteLine($m)
                                                 [Console]::ResetColor()
 
@@ -134,7 +134,7 @@ function Initialize-WebView2 {
                                     }
 
                                     switch ($Script:WebView2.Source) {
-                                        { $_.Host -eq [System.Uri]::New($Script:OmadaWebBaseUrl).Host } {
+                                        { $_.Host -eq [System.Uri]::New($Script:CurrentWebView2Session.BaseUrl).Host } {
                                             Get-WebView2Cookie
                                         }
                                         { $_.Host -eq [System.Uri]::New("https://login.microsoftonline.com").Host -and $Script:MicrosoftOnlineLogin } {

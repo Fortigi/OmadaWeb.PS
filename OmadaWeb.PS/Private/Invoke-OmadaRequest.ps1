@@ -32,13 +32,10 @@ function Invoke-OmadaRequest {
 
             $Uri = [System.Uri]::new($BoundParams.Uri)
             if ($null -ne $Uri) {
-                $Script:OmadaWebBaseUrl = "{0}://{1}" -f $Uri.Scheme, $Uri.Host
-                if (!$Uri.IsDefaultPort) {
-                    $Script:OmadaWebBaseUrl = "{0}://{1}:{2}" -f $Uri.Scheme, $Uri.Host, $Uri.Port
-                }
-                "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebBaseUrl | Write-Verbose
-                $Global:OmadaWebPSCurrentBaseUrl = $Script:OmadaWebBaseUrl
-                "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebPSCurrentBaseUrl | Write-Verbose
+                $BaseUrl = $Uri.GetLeftPart([System.UriPartial]::Authority)
+                "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $BaseUrl | Write-Verbose
+                $Global:OmadaWebPSCurrentBaseUrl = $BaseUrl
+                "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Global:OmadaWebPSCurrentBaseUrl | Write-Verbose
             }
             else {
                 "Could not determine the base URL from '{0}', is the URL correct?" -f $BoundParams.Uri | Write-Error -ErrorAction "Stop"
@@ -51,37 +48,53 @@ function Invoke-OmadaRequest {
                 $BoundParams.Add("AuthenticationType", "WebView2")
             }
 
-            if ($null -eq $Script:OmadaWebAuthCookie) {
-                if ($BoundParams.Keys -contains "CookiePath") {
-                    $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath ("{0}.cookie" -f $Uri.Authority))
-                    "{0} - Loading custom cookie: {1}" -f $MyInvocation.MyCommand, $CookiePath | Write-Verbose
-                    if (!(Test-Path $CookiePath -PathType Leaf)) {
-                        "No cookie found at '{0}' not found, try to create a new one." -f $CookiePath | Write-Warning
+            # Reusable session state (cookie, base URL, WebView2 profile, etc.) is keyed by
+            # (tenant base URL, auth type, identity) instead of single unkeyed module variables,
+            # so concurrent sessions to different tenants/users don't clobber each other.
+            $SessionKey = Get-OmadaSessionKey -Uri $Uri -AuthenticationType $BoundParams.AuthenticationType -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
+            $SessionContext = Get-OmadaSessionContext -Key $SessionKey -AuthorityHost $Uri.Host
+            $SessionContext.BaseUrl = $BaseUrl
+            # Computed unconditionally (not just lazily inside the encrypted-cache branch below) so it's
+            # always available for Invoke-BrowserAuthentication.ps1's cache-write step later, even when
+            # this particular call took the -CookiePath branch instead on its first-ever use of this session.
+            $SessionContext.CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (Get-OmadaShortHash -Value $SessionKey)
+
+            if ($BoundParams.Keys -contains "CookiePath") {
+                # -CookiePath is authoritative on every call (not just when no cookie is cached yet),
+                # so callers can force a specific session's cookie to be used for a given call.
+                $CookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
+                $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath $CookieFileName)
+                "{0} - Loading custom cookie: {1}" -f $MyInvocation.MyCommand, $CookiePath | Write-Verbose
+                if (!(Test-Path $CookiePath -PathType Leaf)) {
+                    # -CookiePath is authoritative, so a missing file must not leave a stale in-memory
+                    # cookie (possibly from an earlier call for this session) in place - that would
+                    # silently defeat the "force this specific cookie" contract -CookiePath implies.
+                    $SessionContext.AuthCookie = $null
+                    "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
+                }
+                else {
+                    try {
+                        $SessionContext.AuthCookie = (Import-Clixml $CookiePath).OmadaWebAuthCookie
+                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json) | Write-Verbose
                     }
-                    else {
-                        try {
-                            $Script:OmadaWebAuthCookie = (Import-Clixml $CookiePath).OmadaWebAuthCookie
-                            "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($Script:OmadaWebAuthCookie | ConvertTo-Json) | Write-Verbose
-                        }
-                        catch {
-                            "Failure loading cookie, try to create a new one." | Write-Verbose
-                        }
+                    catch {
+                        $SessionContext.AuthCookie = $null
+                        "Failure loading cookie, try to create a new one." | Write-Verbose
                     }
                 }
-                elseif ($BoundParams.Keys -notcontains "SkipCookieCache") {
-                    $Script:CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($($Uri.Authority))))).Guid -replace "-", "")
-                    if ($BoundParams.Keys -notcontains "ForceAuthentication" -and (Test-Path $Script:CookieCacheFilePath -PathType Leaf)) {
-                        "{0} - Loading cached encrypted cookie: {1}" -f $MyInvocation.MyCommand, $Script:CookieCacheFilePath | Write-Verbose
+            }
+            elseif ($null -eq $SessionContext.AuthCookie -and $BoundParams.Keys -notcontains "SkipCookieCache") {
+                if ($BoundParams.Keys -notcontains "ForceAuthentication" -and (Test-Path $SessionContext.CookieCacheFilePath -PathType Leaf)) {
+                    "{0} - Loading cached encrypted cookie: {1}" -f $MyInvocation.MyCommand, $SessionContext.CookieCacheFilePath | Write-Verbose
 
-                        try {
-                            $Script:OmadaWebAuthCookie = ([System.Management.Automation.PSSerializer]::Deserialize([System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                                        [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml $Script:CookieCacheFilePath))
-                                    ))).OmadaWebAuthCookie
-                            "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($Script:OmadaWebAuthCookie | ConvertTo-Json) | Write-Verbose
-                        }
-                        catch {
-                            "Failure loading cookie, try to create a new one." | Write-Verbose
-                        }
+                    try {
+                        $SessionContext.AuthCookie = ([System.Management.Automation.PSSerializer]::Deserialize([System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                                    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml $SessionContext.CookieCacheFilePath))
+                                ))).OmadaWebAuthCookie
+                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json) | Write-Verbose
+                    }
+                    catch {
+                        "Failure loading cookie, try to create a new one." | Write-Verbose
                     }
                 }
             }
@@ -223,7 +236,7 @@ function Invoke-OmadaRequest {
                                 throw $CustomErrorTrigger
                             }
                         }
-                        $Script:LoginCount++
+                        $SessionContext.LoginCount++
                         return $Return
                     }
                     "Invoke-WebRequest" {
@@ -242,7 +255,7 @@ function Invoke-OmadaRequest {
                         if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and $Return -is [Microsoft.PowerShell.Commands.WebResponseObject] -and $Return.StatusCode -eq 401) {
                             throw $CustomErrorTrigger
                         }
-                        $Script:LoginCount++
+                        $SessionContext.LoginCount++
                         return $Return
                     }
                     default {
@@ -255,11 +268,11 @@ function Invoke-OmadaRequest {
                 if (($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and ($_.Exception.Response.StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
 
                     "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
-                    $Script:OmadaWebAuthCookie = $null
-                    if (![string]::IsNullOrWhiteSpace($Script:CookieCacheFilePath) -and (Test-Path $Script:CookieCacheFilePath -PathType Leaf)) {
-                        $Script:CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
+                    $SessionContext.AuthCookie = $null
+                    if (![string]::IsNullOrWhiteSpace($SessionContext.CookieCacheFilePath) -and (Test-Path $SessionContext.CookieCacheFilePath -PathType Leaf)) {
+                        $SessionContext.CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
                     }
-                    if ($Script:LoginCount -le 1) {
+                    if ($SessionContext.LoginCount -le 1) {
                         "Authentication needed!" | Write-Host
                     }
                     else {
@@ -269,20 +282,35 @@ function Invoke-OmadaRequest {
                     if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2 -or $BoundParams.AuthenticationType -eq "WebView2") {
                         $WebView2Authentication = $true
                     }
-                    elseif ($Script:WebView2Used) {
+                    elseif ($SessionContext.WebView2Used) {
                         "{0} - Continue to use WebView2" -f $MyInvocation.MyCommand | Write-Verbose
                         $WebView2Authentication = $true
                     }
                     if ($WebView2Authentication) {
                         "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-                        Get-DataFromWebView2 -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
-                        $BrowserData = @($Script:OmadaWebAuthCookie, $Script:UserAgent)
-                        $Script:WebView2Used = $true
+                        Get-DataFromWebView2 -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        $BrowserData = @($SessionContext.AuthCookie, $Script:UserAgent)
+                        $SessionContext.WebView2Used = $true
                     }
                     else {
-                        $BrowserData = Get-DataFromWebDriver -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        $BrowserData = Get-DataFromWebDriver -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
                     }
-                    $Script:OmadaWebAuthCookie = $BrowserData[0]
+                    $SessionContext.AuthCookie = $BrowserData[0]
+
+                    if ($BoundParams.Keys -contains "CookiePath") {
+                        # -CookiePath is now authoritative on every call (including this recursive retry),
+                        # so the freshly re-authenticated cookie must be persisted here first - otherwise the
+                        # recursive call below would immediately reload and clobber it with the stale cookie
+                        # still on disk (the one that caused this 401 in the first place), looping forever.
+                        $RetryCookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
+                        $RetryCookiePath = Join-Path $BoundParams.CookiePath -ChildPath $RetryCookieFileName
+                        try {
+                            [PSCustomObject]@{ OmadaWebAuthCookie = $SessionContext.AuthCookie } | Export-Clixml $RetryCookiePath -Force
+                        }
+                        catch {
+                            "{0} - Failed to update cookie file '{1}' after re-authentication." -f $MyInvocation.MyCommand, $RetryCookiePath | Write-Verbose
+                        }
+                    }
 
                     try {
                         $Parameters = Set-RequestParameter -InvokeOmadaRequest

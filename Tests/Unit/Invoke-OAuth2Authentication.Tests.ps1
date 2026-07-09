@@ -14,7 +14,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
         It 'Should throw when Credential is missing' {
             InModuleScope 'OmadaWeb.PS' {
                 $BoundParams = @{ EntraIdTenantId = 'tenant' }
-                $Script:OmadaWebBaseUrl = 'https://example.omada.cloud'
+                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
                 { Invoke-OAuth2Authentication -ErrorAction Stop } | Should -Throw
             }
         }
@@ -22,7 +22,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
         It 'Should throw when neither EntraIdTenantId nor OAuthUri is provided' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
                 $BoundParams = @{ Credential = $Credential }
-                $Script:OmadaWebBaseUrl = 'https://example.omada.cloud'
+                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
                 { Invoke-OAuth2Authentication -ErrorAction Stop } | Should -Throw
             }
         }
@@ -34,7 +34,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'test-token'; token_type = 'Bearer' } } -Verifiable
 
                 $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'c1ec94c3-4a7a-4568-9321-79b0a74b8e70'; Headers = @{} }
-                $Script:OmadaWebBaseUrl = 'https://example.omada.cloud'
+                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
 
                 Invoke-OAuth2Authentication
 
@@ -50,7 +50,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'custom-token' } }
 
                 $BoundParams = @{ Credential = $Credential; OAuthUri = 'https://idp.example.com/oauth2/token'; Headers = @{} }
-                $Script:OmadaWebBaseUrl = 'https://example.omada.cloud'
+                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
 
                 Invoke-OAuth2Authentication
 
@@ -64,7 +64,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
 
                 $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
-                $Script:OmadaWebBaseUrl = 'https://example.omada.cloud'
+                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
 
                 Invoke-OAuth2Authentication
 
@@ -77,7 +77,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
 
                 $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'tenant'; OAuthScope = 'customScope'; Headers = @{} }
-                $Script:OmadaWebBaseUrl = 'https://example.omada.cloud'
+                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
 
                 Invoke-OAuth2Authentication
 

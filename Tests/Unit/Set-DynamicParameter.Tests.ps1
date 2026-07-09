@@ -12,9 +12,16 @@ Describe 'Set-DynamicParameter' -Tag 'Unit' {
         InModuleScope 'OmadaWeb.PS' {
             $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
             $Dictionary | Should -BeOfType [System.Management.Automation.RuntimeDefinedParameterDictionary]
-            foreach ($Name in @('AuthenticationType', 'EntraIdTenantId', 'CookiePath', 'ForceAuthentication', 'InPrivate', 'UseWebView2')) {
+            foreach ($Name in @('AuthenticationType', 'EntraIdTenantId', 'CookiePath', 'ForceAuthentication', 'InPrivate', 'UseWebView2', 'SessionKey')) {
                 $Dictionary.ContainsKey($Name) | Should -Be $true
             }
+        }
+    }
+
+    It 'Should add a SessionKey parameter of type string' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
+            $Dictionary['SessionKey'].ParameterType | Should -Be ([string])
         }
     }
 

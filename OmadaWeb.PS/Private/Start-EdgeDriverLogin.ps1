@@ -1,6 +1,9 @@
 function Start-EdgeDriverLogin {
     [CmdletBinding()]
-    param()
+    param(
+        [Parameter(Mandatory)]
+        $SessionContext
+    )
 
     "{0} - Starting Edge WebDriver login" -f $MyInvocation.MyCommand | Write-Verbose
 
@@ -13,8 +16,8 @@ function Start-EdgeDriverLogin {
     #$EdgeDriver.Manage().Window.size = $WindowSize
 
     try {
-        "{0} - Navigate to: {1}" -f $MyInvocation.MyCommand, $Script:OmadaWebBaseUrl | Write-Verbose
-        $EdgeDriver.Navigate().GoToUrl($Script:OmadaWebBaseUrl) | Out-Null
+        "{0} - Navigate to: {1}" -f $MyInvocation.MyCommand, $SessionContext.BaseUrl | Write-Verbose
+        $EdgeDriver.Navigate().GoToUrl($SessionContext.BaseUrl) | Out-Null
         "{0} - Switch Edge WebView window" -f $MyInvocation.MyCommand | Write-Verbose
         $EdgeDriver.SwitchTo().Window($EdgeDriver.CurrentWindowHandle) | Out-Null
     }
