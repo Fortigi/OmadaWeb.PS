@@ -1,9 +1,6 @@
 name: PR Validation
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -41,7 +38,8 @@ jobs:
 
       - name: Determine changed files
         run: |
-          $files = git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }}
+          $baseSha = git merge-base origin/main HEAD
+          $files = git diff --name-only $baseSha ${{ github.sha }}
           $joined = ($files -join ';')
           "PR_CHANGED_FILES=$joined" | Out-File -FilePath $env:GITHUB_ENV -Append
 
