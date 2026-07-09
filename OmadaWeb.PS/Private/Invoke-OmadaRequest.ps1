@@ -69,7 +69,7 @@ function Invoke-OmadaRequest {
                 $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath $CookieFileName)
                 "{0} - Loading custom cookie: {1}" -f $MyInvocation.MyCommand, $CookiePath | Write-Verbose
                 if (!(Test-Path $CookiePath -PathType Leaf)) {
-                    "No cookie found at '{0}' not found, try to create a new one." -f $CookiePath | Write-Warning
+                    "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
                 }
                 else {
                     try {
