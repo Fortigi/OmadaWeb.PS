@@ -6,7 +6,7 @@
     if ($BoundParams.keys -notcontains "Credential") {
         $BoundParams.Add("Credential", (Get-Credential -Message "Please enter your authentication credentials"))
     }
-    if ($PSVersionTable.PSVersion.Major -ge 6) {
-        $BoundParams["Authentication"] = "Negotiate"
+    if ($BoundParams.Keys -contains "Headers" -and $BoundParams.Headers.ContainsKey("Authorization")) {
+        $BoundParams.Headers.Remove("Authorization")
     }
 }

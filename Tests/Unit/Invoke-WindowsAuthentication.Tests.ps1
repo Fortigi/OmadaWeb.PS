@@ -19,14 +19,25 @@ Describe 'Invoke-WindowsAuthentication' -Tag 'Unit' {
         }
     }
 
-    It 'Should set Authentication to Negotiate in BoundParams on PowerShell 6+' -Skip:($PSVersionTable.PSVersion.Major -lt 6) {
+    It 'Should not set Authentication in BoundParams' {
         InModuleScope 'OmadaWeb.PS' {
             $Credential = New-Object System.Management.Automation.PSCredential('domain\user', (ConvertTo-SecureString 'password' -AsPlainText -Force))
             $BoundParams = @{ Credential = $Credential; Headers = @{} }
 
             Invoke-WindowsAuthentication
 
-            $BoundParams.Authentication | Should -Be "Negotiate"
+            $BoundParams.ContainsKey('Authentication') | Should -Be $false
+        }
+    }
+
+    It 'Should remove a pre-existing Authorization header' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Credential = New-Object System.Management.Automation.PSCredential('domain\user', (ConvertTo-SecureString 'password' -AsPlainText -Force))
+            $BoundParams = @{ Credential = $Credential; Headers = @{ Authorization = '******' } }
+
+            Invoke-WindowsAuthentication
+
+            $BoundParams.Headers.Keys | Should -Not -Contain 'Authorization'
         }
     }
 

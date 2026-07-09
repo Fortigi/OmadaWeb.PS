@@ -73,7 +73,7 @@
 - ''Integrated'': Uses Windows Integrated Authentication.
 - ''OAuth'': Requires Credential. OAuth2 authentication with Entra ID by default, other IDPs are possible using additional OAuth parameters.
 - ''WebView2'': For environments where Selenium is restricted, you can use the Microsoft WebView2 NuGet package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin and downloaded automatically when not present. WebView2 uses a copy of the default Edge user profile, located in %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
-- ''Windows'': Requires Credential. Uses Windows authentication with the supplied credentials. On PowerShell 6+ (PowerShell Core / PowerShell 7+) this uses the built-in ''Negotiate'' authentication flow (Kerberos/NTLM); on Windows PowerShell 5.1 the supplied credential is passed to the underlying web request for Windows authentication.
+- ''Windows'': Requires Credential. Uses Windows authentication with the supplied credentials. The supplied credential is passed to the underlying web request; on PowerShell 6+ (PowerShell Core / PowerShell 7+) the HTTP stack will automatically negotiate NTLM or Kerberos when the server requires it.
 
 Supplying AuthenticationType overrides any Authorization headers supplied to Headers or included in WebSession.'
     New-DynamicParam -Name "EntraIdTenantId" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The tenant id or name for -AuthenticationType OAuth." -Alias "AzureAdTenantId"
