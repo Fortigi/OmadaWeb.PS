@@ -11,7 +11,7 @@ Describe 'Get-OmadaCookieFileName' -Tag 'Unit' {
     It 'Should return the plain "<Authority>.cookie" name when no Credential or SessionKey is supplied' {
         InModuleScope 'OmadaWeb.PS' {
             $Name = Get-OmadaCookieFileName -Uri ([System.Uri]::new('http://localhost:19000/'))
-            $Name | Should -Be 'localhost:19000.cookie'
+            $Name | Should -Be 'localhost_19000.cookie'
         }
     }
 
@@ -19,15 +19,15 @@ Describe 'Get-OmadaCookieFileName' -Tag 'Unit' {
         InModuleScope 'OmadaWeb.PS' {
             $Credential = New-Object System.Management.Automation.PSCredential('user-a', (ConvertTo-SecureString 'x' -AsPlainText -Force))
             $Name = Get-OmadaCookieFileName -Uri ([System.Uri]::new('http://localhost:19000/')) -Credential $Credential
-            $Name | Should -Not -Be 'localhost:19000.cookie'
-            $Name | Should -BeLike 'localhost:19000_*.cookie'
+            $Name | Should -Not -Be 'localhost_19000.cookie'
+            $Name | Should -BeLike 'localhost_19000_*.cookie'
         }
     }
 
     It 'Should append an identity hash suffix when a SessionKey is supplied' {
         InModuleScope 'OmadaWeb.PS' {
             $Name = Get-OmadaCookieFileName -Uri ([System.Uri]::new('http://localhost:19000/')) -SessionKey 'user-a'
-            $Name | Should -BeLike 'localhost:19000_*.cookie'
+            $Name | Should -BeLike 'localhost_19000_*.cookie'
         }
     }
 
