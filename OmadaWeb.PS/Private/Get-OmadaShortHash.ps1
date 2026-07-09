@@ -5,5 +5,11 @@ function Get-OmadaShortHash {
         [string]$Value
     )
 
-    return ([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Value)))).Guid -replace "-", ""
+    $Md5 = [System.Security.Cryptography.MD5]::Create()
+    try {
+        return ([System.Guid]($Md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Value)))).Guid -replace "-", ""
+    }
+    finally {
+        $Md5.Dispose()
+    }
 }

@@ -11,21 +11,23 @@ function Get-OmadaCookieFileName {
         [string]$SessionKey
     )
 
-    # Matches Get-OmadaSessionKey's identity resolution, so a given session's -CookiePath file name
-    # is unique when a Credential/-SessionKey distinguishes it from other sessions on the same host -
-    # otherwise it keeps the plain "<Authority>.cookie" name used before per-session keying existed.
+    # Matches Get-OmadaSessionKey's identity resolution (including case normalization), so a given
+    # session's -CookiePath file name is unique when a Credential/-SessionKey distinguishes it from
+    # other sessions on the same host, and two calls that resolve to the same session key in memory
+    # (e.g. differing only by casing) always resolve to the same on-disk file name too.
+    $Authority = $Uri.Authority.ToLowerInvariant()
     $Identity = $null
     if ($null -ne $Credential -and -not [string]::IsNullOrWhiteSpace($Credential.UserName)) {
-        $Identity = $Credential.UserName.Trim()
+        $Identity = $Credential.UserName.Trim().ToLowerInvariant()
     }
     elseif (-not [string]::IsNullOrWhiteSpace($SessionKey)) {
-        $Identity = $SessionKey.Trim()
+        $Identity = $SessionKey.Trim().ToLowerInvariant()
     }
 
     if ([string]::IsNullOrEmpty($Identity)) {
-        return "{0}.cookie" -f $Uri.Authority
+        return "{0}.cookie" -f $Authority
     }
 
     $IdentityHash = (Get-OmadaShortHash $Identity).Substring(0, 8)
-    return "{0}_{1}.cookie" -f $Uri.Authority, $IdentityHash
+    return "{0}_{1}.cookie" -f $Authority, $IdentityHash
 }

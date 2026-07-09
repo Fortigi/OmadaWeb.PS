@@ -106,7 +106,7 @@ function Start-EdgeDriver {
         }
         $UserProfileDir = New-Item (Join-Path $env:LOCALAPPDATA -ChildPath "OmadaWeb.PS\Profiles\$ProfileDirName") -ItemType Directory -Force
         "Using profile user-data-dir: '{0}'" -f $UserProfileDir.FullName | Write-Verbose
-        $UserDataDirArgument = 'user-data-dir="{0}"' -f $UserProfileDir.FullName
+        $UserDataDirArgument = '--user-data-dir="{0}"' -f $UserProfileDir.FullName
         "User data argument: '{0}'" -f $UserDataDirArgument | Write-Verbose
         $EdgeOptions.AddArgument($UserDataDirArgument)
     }
