@@ -240,7 +240,7 @@ function Invoke-WebView2MicrosoftLogin {
         }
 
         # Check if we have credentials - so we know whether to attempt login
-        if ($Script:Credential -and -not [string]::IsNullOrWhiteSpace($Script:Credential.UserName)) {
+        if ($Script:CurrentWebView2Session.Credential -and -not [string]::IsNullOrWhiteSpace($Script:CurrentWebView2Session.Credential.UserName)) {
             # Initialize login state if needed
             if ($null -eq $Script:LoginState) {
                 $Script:LoginState = "GettingIds"
@@ -377,7 +377,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         if ($isVisible -eq "true") {
                                             "Matched Scenario 1: Username entry page" | Write-Verbose
                                             "Username field is visible, entering username..." | Write-Verbose
-                                            $usernameScript = "$setElementValueScript('$UserNameElementId', '$($Script:Credential.UserName.Trim())')"
+                                            $usernameScript = "$setElementValueScript('$UserNameElementId', '$($Script:CurrentWebView2Session.Credential.UserName.Trim())')"
                                             $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($usernameScript)
                                             $Script:LoginSubState = "SettingUsername"
                                         }
@@ -482,7 +482,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         if ($isVisible -eq "true") {
                                             "Matched Scenario 2: Password entry page" | Write-Verbose
                                             "Password field is visible, entering password..." | Write-Verbose
-                                            $password = $Script:Credential.GetNetworkCredential().Password
+                                            $password = $Script:CurrentWebView2Session.Credential.GetNetworkCredential().Password
                                             $passwordScript = "$setElementValueScript('$PasswordElementId', '$password')"
                                             $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($passwordScript)
                                             $Script:LoginSubState = "SettingPassword"
@@ -619,7 +619,7 @@ function Invoke-WebView2MicrosoftLogin {
                             $null {
                                 # Try to click account with matching data-test-id
                                 "Attempting to select account..." | Write-Verbose
-                                $clickAccountScript = "$getElementByDataTestIdScript('$($Script:Credential.UserName.Trim())')"
+                                $clickAccountScript = "$getElementByDataTestIdScript('$($Script:CurrentWebView2Session.Credential.UserName.Trim())')"
                                 $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickAccountScript)
                                 $Script:LoginSubState = "ClickingAccount"
                                 $Script:AccountSelectionAttempted = $false

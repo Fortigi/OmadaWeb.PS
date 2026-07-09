@@ -26,12 +26,12 @@
         "{0} - Neither EntraIdTenantId nor OAuthUri provided! Cannot proceed with OAuth authentication!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
     }
 
-    $Script:EntraApplicationIdUri = $Script:OmadaWebBaseUrl
+    $EntraApplicationIdUri = $SessionContext.BaseUrl
     if ("EntraApplicationIdUri" -in $BoundParams.Keys) {
-        $Script:EntraApplicationIdUri = $BoundParams.EntraApplicationIdUri
+        $EntraApplicationIdUri = $BoundParams.EntraApplicationIdUri
     }
 
-    $OAuthScope = ("{0}/.default" -f $Script:EntraApplicationIdUri )
+    $OAuthScope = ("{0}/.default" -f $EntraApplicationIdUri )
     if ($BoundParams.Keys -contains "OAuthScope" -and $null -ne $BoundParams.OAuthScope) {
         "{0} - OAuthScope parameter used! OAuthScope: {1}" -f $MyInvocation.MyCommand, $BoundParams.OAuthScope | Write-Verbose
         $OAuthScope = $BoundParams.OAuthScope

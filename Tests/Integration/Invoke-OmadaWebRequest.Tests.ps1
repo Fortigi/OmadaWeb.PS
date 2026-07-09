@@ -19,7 +19,9 @@ BeforeAll {
     InModuleScope 'OmadaWeb.PS' {
         if ($env:TF_BUILD -eq 'True' -or $env:TF_BUILD -eq $true -or $env:GITHUB_ACTIONS -eq 'true') {
             #Skip WebView2 login in CI/CD pipelines
-            Mock -ModuleName OmadaWeb.PS Start-WebView2Login { $Script:OmadaWebAuthCookie = [pscustomobject]@{
+            # Get-DataFromWebView2 sets $Script:CurrentWebView2Session before calling this (mocked) function,
+            # so writing through that pointer lands the fake cookie in the correct per-session context.
+            Mock -ModuleName OmadaWeb.PS Start-WebView2Login { $Script:CurrentWebView2Session.AuthCookie = [pscustomobject]@{
                     name     = "oisauthtoken"
                     value    = "test-cookie-value"
                     domain   = "localhost"
@@ -187,7 +189,10 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         }
 
         It 'Should create cached cookie file when using CookiePath parameter using WebView2' {
-            $CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($(( [System.Uri]::New($Uri)).Authority))))).Guid -replace "-", "")
+            # The encrypted cookie cache is keyed by the full session key (base URL :: auth type :: identity),
+            # not just the URI authority, so different auth types/identities to the same host don't collide.
+            $SessionKey = "{0}::webview2::" -f ([System.Uri]::New($Uri)).Authority.ToLowerInvariant()
+            $CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($SessionKey)))).Guid -replace "-", "")
             try { Get-Item $CookieCacheFilePath | Remove-Item -Force } catch { }
             Test-Path $CookieCacheFilePath -PathType Leaf | Should -Be $false
             Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -Verbose -ForceAuthentication | Out-Null
@@ -196,7 +201,10 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         }
 
         It 'Should not create cached cookie file when using CookiePath parameter using WebView2' {
-            $CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($(( [System.Uri]::New($Uri)).Authority))))).Guid -replace "-", "")
+            # The encrypted cookie cache is keyed by the full session key (base URL :: auth type :: identity),
+            # not just the URI authority, so different auth types/identities to the same host don't collide.
+            $SessionKey = "{0}::webview2::" -f ([System.Uri]::New($Uri)).Authority.ToLowerInvariant()
+            $CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($SessionKey)))).Guid -replace "-", "")
             try { Get-Item $CookieCacheFilePath | Remove-Item -Force } catch { }
             Test-Path $CookieCacheFilePath -PathType Leaf | Should -Be $false
             Invoke-TestOmadaWebRequest -Uri $Uri -UseWebView2 -Verbose -ForceAuthentication -SkipCookieCache | Out-Null

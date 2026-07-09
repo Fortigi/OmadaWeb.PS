@@ -15,8 +15,9 @@ function Start-WebView2Login {
         $Script:WinForm = New-Object System.Windows.Forms.Form
         [Microsoft.Web.WebView2.WinForms.WebView2] $Script:WebView2 = New-Object Microsoft.Web.WebView2.WinForms.WebView2
         $Script:WebView2.CreationProperties = New-Object Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties
-        if (-not (Test-Path $Script:WebView2UserProfilePath -PathType Container)) { New-Item -ItemType Directory -Force -Path $Script:WebView2UserProfilePath | Out-Null }
-        $Script:WebView2.CreationProperties.UserDataFolder = $Script:WebView2UserProfilePath
+        $WebView2ProfilePath = $Script:CurrentWebView2Session.WebView2ProfilePath
+        if (-not (Test-Path $WebView2ProfilePath -PathType Container)) { New-Item -ItemType Directory -Force -Path $WebView2ProfilePath | Out-Null }
+        $Script:WebView2.CreationProperties.UserDataFolder = $WebView2ProfilePath
         $Script:WebView2.CreationProperties.ProfileName = $EdgeProfile
         $Script:Timer = New-Object System.Windows.Forms.Timer
 
@@ -146,21 +147,23 @@ function Start-WebView2Login {
         $Script:WebView2.ZoomFactor = 1
         $Script:WebView2.add_SourceChanged($Script:WebView_SourceChanged)
 
-        # Create the env once and reuse it for all WebView2 instances in this session
-        if ($null -eq $Script:WebViewEnv) {
+        # Create the env once per session and reuse it for all WebView2 instances of that session -
+        # a CoreWebView2Environment is bound 1:1 to the UserDataFolder it was created against, so it
+        # must be scoped to the same session as the profile folder above.
+        if ($null -eq $Script:CurrentWebView2Session.WebViewEnv) {
             "{0} - Creating CoreWebView2Environment..." -f $MyInvocation.MyCommand | Write-Verbose
             $EnvOptions = [Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions]::new()
             $EnvOptions.AllowSingleSignOnUsingOSPrimaryAccount = $true
             try {
                 "{0} - Try to start CoreWebView2Environment using implicit configuration..." -f $MyInvocation.MyCommand | Write-Verbose
-                $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $Script:WebView2UserProfilePath, $EnvOptions)
-                $Script:WebViewEnv = $Task.GetAwaiter().GetResult()
+                $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $WebView2ProfilePath, $EnvOptions)
+                $Script:CurrentWebView2Session.WebViewEnv = $Task.GetAwaiter().GetResult()
             }
             catch {
                 try {
                     "{0} - Failed to start CoreWebView2Environment using using implicit configuration, now try explicit Edge WebView path: '{1}'..." -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
-                    $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($Script:InstalledEdgeWebView2Path, $Script:WebView2UserProfilePath, $EnvOptions)
-                    $Script:WebViewEnv = $Task.GetAwaiter().GetResult()
+                    $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($Script:InstalledEdgeWebView2Path, $WebView2ProfilePath, $EnvOptions)
+                    $Script:CurrentWebView2Session.WebViewEnv = $Task.GetAwaiter().GetResult()
                 }
                 catch {
                     $Script:StopError = $true
@@ -174,17 +177,17 @@ function Start-WebView2Login {
             $Script:WebView2.Visible = $false
 
             # Start initialization
-            $InitTask = $Script:WebView2.EnsureCoreWebView2Async($Script:WebViewEnv)
+            $InitTask = $Script:WebView2.EnsureCoreWebView2Async($Script:CurrentWebView2Session.WebViewEnv)
 
             # If ForceAuthentication, clear data after initialization
-            if ($Script:ForceAuthentication -and -not $Script:BrowserDataCleared) {
+            if ($Script:CurrentWebView2Session.ForceAuthentication -and -not $Script:CurrentWebView2Session.BrowserDataCleared) {
                 $InitTask.GetAwaiter().OnCompleted({
                         try {
                             "Start-WebView2Login - WebView2 initialized, clearing browsing data..." | Write-Verbose
                             $ClearTask = $Script:WebView2.CoreWebView2.Profile.ClearBrowsingDataAsync()
                             $ClearTask.GetAwaiter().OnCompleted({
                                     "Start-WebView2Login - Browsing data cleared" | Write-Verbose
-                                    $Script:BrowserDataCleared = $true
+                                    $Script:CurrentWebView2Session.BrowserDataCleared = $true
                                 })
                         }
                         catch {
