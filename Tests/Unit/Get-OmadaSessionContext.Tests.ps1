@@ -73,10 +73,10 @@ Describe 'Get-OmadaSessionContext' -Tag 'Unit' {
                 $Script:OmadaWebAuthCookie = [pscustomobject]@{ name = 'oisauthtoken'; value = 'seed-value'; domain = 'a.example.com' }
 
                 # A different tenant's session is created first - it must NOT receive the seed meant for tenant A.
-                $ContextB = Get-OmadaSessionContext -Key 'b.example.com::webview2::'
+                $ContextB = Get-OmadaSessionContext -Key 'b.example.com::webview2::' -AuthorityHost 'b.example.com'
                 $ContextB.AuthCookie | Should -BeNullOrEmpty
 
-                $ContextA = Get-OmadaSessionContext -Key 'a.example.com::webview2::'
+                $ContextA = Get-OmadaSessionContext -Key 'a.example.com::webview2::' -AuthorityHost 'a.example.com'
                 $ContextA.AuthCookie.value | Should -Be 'seed-value'
             }
         }
@@ -85,12 +85,33 @@ Describe 'Get-OmadaSessionContext' -Tag 'Unit' {
             InModuleScope 'OmadaWeb.PS' {
                 $Script:OmadaWebAuthCookie = [pscustomobject]@{ name = 'oisauthtoken'; value = 'seed-value'; domain = 'a.example.com' }
 
-                Get-OmadaSessionContext -Key 'b.example.com::webview2::' | Out-Null
+                Get-OmadaSessionContext -Key 'b.example.com::webview2::' -AuthorityHost 'b.example.com' | Out-Null
                 $Script:OmadaWebAuthCookie | Should -Not -BeNullOrEmpty
 
-                $ContextA = Get-OmadaSessionContext -Key 'a.example.com::webview2::'
+                $ContextA = Get-OmadaSessionContext -Key 'a.example.com::webview2::' -AuthorityHost 'a.example.com'
                 $ContextA.AuthCookie.value | Should -Be 'seed-value'
                 $Script:OmadaWebAuthCookie | Should -BeNullOrEmpty
+            }
+        }
+
+        It 'Should not seed (and not throw) when -AuthorityHost is omitted, rather than mis-parsing the composite Key' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:OmadaWebAuthCookie = [pscustomobject]@{ name = 'oisauthtoken'; value = 'seed-value'; domain = 'a.example.com' }
+
+                $Context = Get-OmadaSessionContext -Key 'a.example.com::webview2::'
+                $Context.AuthCookie | Should -BeNullOrEmpty
+                $Script:OmadaWebAuthCookie | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Should correctly match an IPv6 authority host, which a naive split on the Key string would mis-parse' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:OmadaWebAuthCookie = [pscustomobject]@{ name = 'oisauthtoken'; value = 'seed-value'; domain = '::1' }
+
+                # The Key embeds the bracketed IPv6 literal authority, which itself contains "::" -
+                # a naive $Key -split '::' would mis-parse this; AuthorityHost must be used instead.
+                $Context = Get-OmadaSessionContext -Key '[::1]:8443::webview2::' -AuthorityHost '::1'
+                $Context.AuthCookie.value | Should -Be 'seed-value'
             }
         }
     }

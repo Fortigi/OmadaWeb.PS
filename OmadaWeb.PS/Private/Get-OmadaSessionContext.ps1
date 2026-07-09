@@ -2,7 +2,10 @@ function Get-OmadaSessionContext {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$Key
+        [string]$Key,
+
+        [AllowNull()]
+        [string]$AuthorityHost
     )
 
     if ($Script:OmadaSessions.ContainsKey($Key)) {
@@ -17,13 +20,14 @@ function Get-OmadaSessionContext {
     $KeyHash = Get-OmadaShortHash -Value $Key
 
     $AuthCookie = $null
-    if ($null -ne $Script:OmadaWebAuthCookie -and -not [string]::IsNullOrEmpty($Script:OmadaWebAuthCookie.domain)) {
+    if ($null -ne $Script:OmadaWebAuthCookie -and -not [string]::IsNullOrEmpty($Script:OmadaWebAuthCookie.domain) -and -not [string]::IsNullOrWhiteSpace($AuthorityHost)) {
         # Preserve the legacy `Import-Module OmadaWeb.PS -ArgumentList @{ Parameters = @{ OmadaWebAuthCookie = ... } }`
         # seed by handing it only to the session whose host it actually matches (mirroring the old domain-match
         # check in Invoke-BrowserAuthentication.ps1), not just whichever session happens to be created first -
         # otherwise a seed for tenant A could be silently discarded if tenant B's session is created first.
-        $AuthorityHost = (($Key -split '::', 2)[0]).Split(':')[0]
-        if ($AuthorityHost -eq $Script:OmadaWebAuthCookie.domain.ToLowerInvariant()) {
+        # AuthorityHost is passed in by the caller (from System.Uri.Host) rather than re-parsed out of $Key here,
+        # since naively splitting $Key on ":" breaks for IPv6 authorities (e.g. "[::1]:8443").
+        if ($AuthorityHost.ToLowerInvariant() -eq $Script:OmadaWebAuthCookie.domain.ToLowerInvariant()) {
             $AuthCookie = $Script:OmadaWebAuthCookie
             $Script:OmadaWebAuthCookie = $null
         }

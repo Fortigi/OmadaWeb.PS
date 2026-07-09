@@ -55,7 +55,7 @@ function Invoke-OmadaRequest {
             # (tenant base URL, auth type, identity) instead of single unkeyed module variables,
             # so concurrent sessions to different tenants/users don't clobber each other.
             $SessionKey = Get-OmadaSessionKey -Uri $Uri -AuthenticationType $BoundParams.AuthenticationType -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
-            $SessionContext = Get-OmadaSessionContext -Key $SessionKey
+            $SessionContext = Get-OmadaSessionContext -Key $SessionKey -AuthorityHost $Uri.Host
             $SessionContext.BaseUrl = $BaseUrl
             # Computed unconditionally (not just lazily inside the encrypted-cache branch below) so it's
             # always available for Invoke-BrowserAuthentication.ps1's cache-write step later, even when
