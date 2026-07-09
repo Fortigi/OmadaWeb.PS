@@ -32,6 +32,17 @@ Describe 'Set-DynamicParameter' -Tag 'Unit' {
         }
     }
 
+    It 'Should describe Windows authentication using Negotiate' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
+            $HelpMessage = ($Dictionary['AuthenticationType'].Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } | Select-Object -First 1).HelpMessage
+
+            $HelpMessage | Should -Match "Windows.+Negotiate"
+            $HelpMessage | Should -Match "Kerberos/NTLM"
+            $HelpMessage | Should -Not -Match "Windows.+Bearer"
+        }
+    }
+
     It 'Should exclude PowerShell common parameters from the generated dynamic parameters' {
         InModuleScope 'OmadaWeb.PS' {
             $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
