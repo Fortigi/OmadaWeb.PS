@@ -70,7 +70,7 @@ function Initialize-WebView2 {
                                 try {
 
                                     if ($Script:WebView2.Source -eq "about:blank") {
-                                        "Initialize-WebView2 - Navigating to {1}" -f $MyInvocation.MyCommand, $Script:CurrentWebView2Session.BaseUrl | Write-Verbose
+                                        "{0} - Navigating to {1}" -f $MyInvocation.MyCommand, $Script:CurrentWebView2Session.BaseUrl | Write-Verbose
                                         $Script:WebView2.Source = ([System.Uri]::New($Script:CurrentWebView2Session.BaseUrl))
                                         $Script:OmadaWatchdogRunning = $false
                                     }
