@@ -161,7 +161,7 @@ function Start-WebView2Login {
             }
             catch {
                 try {
-                    "{0} - Failed to start CoreWebView2Environment using using implicit configuration, now try explicit Edge WebView path: '{1}'..." -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
+                    "{0} - Failed to start CoreWebView2Environment using implicit configuration, now try explicit Edge WebView path: '{1}'..." -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
                     $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($Script:InstalledEdgeWebView2Path, $WebView2ProfilePath, $EnvOptions)
                     $Script:CurrentWebView2Session.WebViewEnv = $Task.GetAwaiter().GetResult()
                 }
