@@ -81,4 +81,7 @@ function Get-DataFromWebView2 {
     catch {
         $PSCmdlet.ThrowTerminatingError($PSItem)
     }
+    finally {
+        $Script:CurrentWebView2Session = $null
+    }
 }

@@ -32,10 +32,7 @@ function Invoke-OmadaRequest {
 
             $Uri = [System.Uri]::new($BoundParams.Uri)
             if ($null -ne $Uri) {
-                $BaseUrl = "{0}://{1}" -f $Uri.Scheme, $Uri.Host
-                if (!$Uri.IsDefaultPort) {
-                    $BaseUrl = "{0}://{1}:{2}" -f $Uri.Scheme, $Uri.Host, $Uri.Port
-                }
+                $BaseUrl = $Uri.GetLeftPart([System.UriPartial]::Authority)
                 "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $BaseUrl | Write-Verbose
                 $Global:OmadaWebPSCurrentBaseUrl = $BaseUrl
                 "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Global:OmadaWebPSCurrentBaseUrl | Write-Verbose
