@@ -2,15 +2,83 @@ name: PR Validation
 
 on:
   workflow_dispatch:
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
   checks: write
   pull-requests: write
+  issues: write
+  statuses: write
 
 jobs:
+  dispatch:
+    name: Dispatch
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event.issue.pull_request != null && startsWith(github.event.comment.body, '/validate'))
+    outputs:
+      should_run: ${{ steps.resolve.outputs.should_run }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+    steps:
+      - name: Resolve trigger context
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName === 'workflow_dispatch') {
+              core.setOutput('should_run', 'true');
+              core.setOutput('head_sha', context.sha);
+              return;
+            }
+
+            const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            const association = context.payload.comment.author_association;
+            if (!allowedAssociations.includes(association)) {
+              core.warning(`Comment author association '${association}' is not authorized to trigger validation.`);
+              core.setOutput('should_run', 'false');
+              return;
+            }
+
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('should_run', 'true');
+            core.setOutput('head_sha', pr.data.head.sha);
+
+      - name: Set pending status
+        if: steps.resolve.outputs.should_run == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ steps.resolve.outputs.head_sha }}',
+              state: 'pending',
+              context: 'PR Validation',
+              description: 'Validation running...',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
+
+      - name: Acknowledge comment
+        if: github.event_name == 'issue_comment' && steps.resolve.outputs.should_run == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+
   validate:
     name: Validate (${{ matrix.shell }})
+    needs: dispatch
+    if: needs.dispatch.outputs.should_run == 'true'
     runs-on: windows-latest
     defaults:
       run:
@@ -24,6 +92,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.dispatch.outputs.head_sha }}
           fetch-depth: 0
 
       - name: Check branch is up to date with main
@@ -39,7 +108,7 @@ jobs:
       - name: Determine changed files
         run: |
           $baseSha = git merge-base origin/main HEAD
-          $files = git diff --name-only $baseSha ${{ github.sha }}
+          $files = git diff --name-only $baseSha ${{ needs.dispatch.outputs.head_sha }}
           $joined = ($files -join ';')
           "PR_CHANGED_FILES=$joined" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -67,3 +136,24 @@ jobs:
           name: Pester Tests (${{ matrix.shell }})
           path: buildoutput/TestResults.xml
           reporter: java-junit
+
+  report-status:
+    name: Report status
+    needs: [dispatch, validate]
+    if: always() && needs.dispatch.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set final commit status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const success = '${{ needs.validate.result }}' === 'success';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ needs.dispatch.outputs.head_sha }}',
+              state: success ? 'success' : 'failure',
+              context: 'PR Validation',
+              description: success ? 'Validation passed' : 'Validation failed',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
