@@ -185,7 +185,7 @@ function Get-DataFromWebDriver {
             return $AuthCookie, $AgentString
         }
         else {
-            "Could not authenticate to '{0}" -f $SessionContext.BaseUrl | Write-Error -ErrorAction "Stop"
+            "Could not authenticate to '{0}'" -f $SessionContext.BaseUrl | Write-Error -ErrorAction "Stop"
         }
     }
     catch {
