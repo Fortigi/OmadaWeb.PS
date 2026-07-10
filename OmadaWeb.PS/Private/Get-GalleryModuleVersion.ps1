@@ -23,9 +23,10 @@
             $Parameters.Add("TimeoutSec", $TimeoutSec)
         }
         $Response = Invoke-RestMethod @Parameters
+        $Response = $Response | Select-Object *,@{Name='Published';Expression={($_.Properties.Published.'#text') }}
 
         if ($null -ne $Response) {
-            $LatestVersion = $Response | Sort-Object updated -Descending | Select-Object -First 1
+            $LatestVersion = $Response | Sort-Object Published -Descending | Select-Object -First 1
             return $LatestVersion.Properties.version
         }
         else {
