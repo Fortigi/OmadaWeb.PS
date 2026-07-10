@@ -12,8 +12,18 @@ Describe 'Get-GalleryModuleVersion' -Tag 'Unit' {
         InModuleScope 'OmadaWeb.PS' {
             Mock Invoke-RestMethod {
                 @(
-                    [PSCustomObject]@{ updated = (Get-Date).AddDays(-5); Properties = [PSCustomObject]@{ version = '1.0.0' } }
-                    [PSCustomObject]@{ updated = (Get-Date); Properties = [PSCustomObject]@{ version = '2.0.0' } }
+                    [PSCustomObject]@{
+                        Properties = [PSCustomObject]@{
+                            version   = '1.0.0'
+                            Published = [PSCustomObject]@{ '#text' = (Get-Date).AddDays(-5) }
+                        }
+                    }
+                    [PSCustomObject]@{
+                        Properties = [PSCustomObject]@{
+                            version   = '2.0.0'
+                            Published = [PSCustomObject]@{ '#text' = (Get-Date) }
+                        }
+                    }
                 )
             }
 
