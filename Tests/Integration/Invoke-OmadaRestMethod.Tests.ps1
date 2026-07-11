@@ -70,6 +70,15 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
             $Result | Should -Be "OK"
         }
 
+        It 'Should proceed with the request when the environment is not suspended' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ UriA = $Uri } {
+                Mock Test-EnvironmentSuspended { $false } -Verifiable
+                $Result = Invoke-OmadaRestMethod -Uri $UriA -AuthenticationType None
+                $Result | Should -Be "OK"
+                Should -Invoke Test-EnvironmentSuspended -Times 1 -ParameterFilter { $TimeoutSec -eq 10 }
+            }
+        }
+
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Basic Authentication' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
             $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential $Credential @AllowUnencryptedAuthParams
@@ -277,6 +286,13 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
             InModuleScope 'OmadaWeb.PS' {
                 Mock Invoke-OmadaRequest { throw "Test Error" }
                 { Invoke-OmadaRestMethod -Uri "http://localhost" -ErrorAction Stop } | Should -Throw
+            }
+        }
+
+        It 'Should throw terminating error when the environment is suspended' {
+            InModuleScope 'OmadaWeb.PS' {
+                Mock Test-EnvironmentSuspended { $true }
+                { Invoke-OmadaRestMethod -Uri "http://localhost" -AuthenticationType None -ErrorAction Stop } | Should -Throw "*Environment is suspended*"
             }
         }
 
