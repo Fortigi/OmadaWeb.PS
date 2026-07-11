@@ -65,14 +65,14 @@ Describe 'Test-EnvironmentSuspended' -Tag 'Unit' {
             }
         }
 
-        It 'Should have a default TimeoutSec value of 30' {
+        It 'Should have a default TimeoutSec value of 5' {
             InModuleScope 'OmadaWeb.PS' {
                 $Ast = (Get-Command Test-EnvironmentSuspended).ScriptBlock.Ast
                 $ParameterAst = $Ast.Find(
                     { $args[0] -is [System.Management.Automation.Language.ParameterAst] -and $args[0].Name.VariablePath.UserPath -eq 'TimeoutSec' },
                     $true
                 )
-                $ParameterAst.DefaultValue.Value | Should -Be 30
+                $ParameterAst.DefaultValue.Value | Should -Be 5
             }
         }
     }
