@@ -99,6 +99,11 @@ function Invoke-OmadaRequest {
                 }
             }
 
+            #Test environment status
+            if(Test-EnvironmentSuspended -Url $BaseUrl -TimeoutSec 10) {
+                "{0} - Environment is suspended, aborting request." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+            }
+
             "{0} - Authentication type: {1}" -f $MyInvocation.MyCommand, $($BoundParams.AuthenticationType) | Write-Verbose
 
             switch ($BoundParams.AuthenticationType) {
