@@ -8,15 +8,20 @@ function Test-EnvironmentSuspended {
 
     try {
         $Uri = [System.Uri]::new($Url)
-        $Url = "{0}://{1}:{2}/" -f $Uri.Scheme, $Uri.Host, $Uri.Port
+        $BaseUrl = $Uri.GetLeftPart([System.UriPartial]::Authority) + '/'
         Add-Type -AssemblyName System.Net.Http
         $Client = [System.Net.Http.HttpClient]::new()
         $Client.Timeout = [System.TimeSpan]::FromSeconds($TimeoutSec)
-        $Result = $Client.GetAsync($Url).Result
-        $Html = $Result.Content.ReadAsStringAsync().Result
-        $Client.Dispose()
+        try {
+            $Response = $Client.GetAsync($BaseUrl).GetAwaiter().GetResult()
+            $Html = $Response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        }
+        finally {
+            if ($null -ne $Response) { $Response.Dispose() }
+            $Client.Dispose()
+        }
         $IsSuspended = $Html -match 'The environment is suspended'
-        "{0} - Environment is IsSuspended: {1}." -f $MyInvocation.MyCommand, $IsSuspended | Write-Verbose
+        "{0} - Environment suspended: {1}." -f $MyInvocation.MyCommand, $IsSuspended | Write-Verbose
         return $IsSuspended
     }
     catch {
