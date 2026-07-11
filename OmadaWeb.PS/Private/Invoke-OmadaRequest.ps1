@@ -33,6 +33,15 @@ function Invoke-OmadaRequest {
             $Uri = [System.Uri]::new($BoundParams.Uri)
             if ($null -ne $Uri) {
                 $BaseUrl = $Uri.GetLeftPart([System.UriPartial]::Authority)
+
+                # Test environment status
+                if ($BaseUrl -ne $Global:OmadaWebPSCurrentBaseUrl) {
+                    $Script:EnvironmentSuspended = Test-EnvironmentSuspended -Url $BaseUrl -TimeoutSec 5
+                }
+                if ($Script:EnvironmentSuspended) {
+                    "{0} - Environment is suspended, aborting request." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+                }
+
                 "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $BaseUrl | Write-Verbose
                 $Global:OmadaWebPSCurrentBaseUrl = $BaseUrl
                 "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Global:OmadaWebPSCurrentBaseUrl | Write-Verbose
@@ -97,11 +106,6 @@ function Invoke-OmadaRequest {
                         "Failure loading cookie, try to create a new one." | Write-Verbose
                     }
                 }
-            }
-
-            # Test environment status
-            if (Test-EnvironmentSuspended -Url $BaseUrl -TimeoutSec 10) {
-                "{0} - Environment is suspended, aborting request." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
             }
 
             "{0} - Authentication type: {1}" -f $MyInvocation.MyCommand, $($BoundParams.AuthenticationType) | Write-Verbose

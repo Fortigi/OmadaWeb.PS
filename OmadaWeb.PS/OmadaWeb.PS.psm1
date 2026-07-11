@@ -117,6 +117,7 @@ catch {}
 
 # Initialize script-level variables
 $Global:OmadaWebPSCurrentBaseUrl = $null
+[bool]$Script:EnvironmentSuspended = $false
 # Reusable authentication session state (cookie, base URL, credential, WebView2 profile/environment,
 # etc.) lives per-session in $Script:OmadaSessions instead of single unkeyed variables - see
 # Get-OmadaSessionKey.ps1 / Get-OmadaSessionContext.ps1.
