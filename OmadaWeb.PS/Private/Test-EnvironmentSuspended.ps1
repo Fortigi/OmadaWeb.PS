@@ -3,7 +3,7 @@ function Test-EnvironmentSuspended {
     param (
         [Parameter(Mandatory)]
         [string]$Url,
-        [int]$TimeoutSec = 30
+        [int]$TimeoutSec = 5
     )
 
     try {
@@ -11,6 +11,7 @@ function Test-EnvironmentSuspended {
         $Url = "{0}://{1}:{2}/" -f $Uri.Scheme, $Uri.Host, $Uri.Port
         Add-Type -AssemblyName System.Net.Http
         $Client = [System.Net.Http.HttpClient]::new()
+        $Client.Timeout = [System.TimeSpan]::FromSeconds($TimeoutSec)
         $Result = $Client.GetAsync($Url).Result
         $Html = $Result.Content.ReadAsStringAsync().Result
         $Client.Dispose()
