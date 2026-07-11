@@ -16,7 +16,7 @@ function Test-EnvironmentSuspended {
         $Html = $Result.Content.ReadAsStringAsync().Result
         $Client.Dispose()
         $IsSuspended = $Html -match 'The environment is suspended'
-        "{0} - Environment is {1}." -f $MyInvocation.MyCommand, ($IsSuspended ? "suspended" : "active") | Write-Verbose
+        "{0} - Environment is IsSuspended: {1}." -f $MyInvocation.MyCommand, $IsSuspended | Write-Verbose
         return $IsSuspended
     }
     catch {
