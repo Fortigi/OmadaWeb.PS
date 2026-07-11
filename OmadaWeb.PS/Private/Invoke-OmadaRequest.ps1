@@ -99,8 +99,8 @@ function Invoke-OmadaRequest {
                 }
             }
 
-            #Test environment status
-            if(Test-EnvironmentSuspended -Url $BaseUrl -TimeoutSec 10) {
+            # Test environment status
+            if (Test-EnvironmentSuspended -Url $BaseUrl -TimeoutSec 10) {
                 "{0} - Environment is suspended, aborting request." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
             }
 
