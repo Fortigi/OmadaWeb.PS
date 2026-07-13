@@ -287,6 +287,26 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
             }
         }
 
+        It 'Should cache the suspended result and not re-probe repeated calls to the same base URL' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Global:OmadaWebPSCurrentBaseUrl = $null
+                $Script:EnvironmentSuspended = $false
+                $Script:RecheckEnvironmentSuspended = $false
+                Mock Test-EnvironmentSuspended { $true }
+                try {
+                    { Invoke-OmadaWebRequest -Uri "http://localhost" -AuthenticationType None -ErrorAction Stop } | Should -Throw "*Environment is suspended*"
+                    { Invoke-OmadaWebRequest -Uri "http://localhost" -AuthenticationType None -ErrorAction Stop } | Should -Throw "*Environment is suspended*"
+                    # The suspended status must be cached even though the abort throws: only the
+                    # first call probes; the second reuses the cached result.
+                    Should -Invoke Test-EnvironmentSuspended -Times 1 -Exactly
+                }
+                finally {
+                    $Script:EnvironmentSuspended = $false
+                    $Global:OmadaWebPSCurrentBaseUrl = $null
+                }
+            }
+        }
+
         It 'Should throw terminating error when -WebSession is used' {
             { Invoke-TestOmadaWebRequest -Uri $Uri -ErrorAction Stop  -Verbose -WebSession null } | Should -Throw
         }
