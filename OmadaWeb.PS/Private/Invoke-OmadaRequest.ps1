@@ -286,11 +286,19 @@ function Invoke-OmadaRequest {
 
             catch {
                 # Not every exception reaching here is HTTP-based (e.g. the $CustomErrorTrigger
-                # re-auth signal thrown above has no .Response), so read the status code once
-                # through a null guard and reuse it for the 502/401 checks rather than
-                # dereferencing $_.Exception.Response.StatusCode - which would fault under
-                # Set-StrictMode - on every branch.
-                $StatusCode = if ($null -ne $_.Exception.Response) { $_.Exception.Response.StatusCode } else { $null }
+                # re-auth signal thrown above has no .Response). Resolve the status code once via
+                # PSObject.Properties lookups so a missing .Response/.StatusCode safely evaluates to
+                # $null instead of faulting the catch handler under Set-StrictMode (a bare
+                # $_.Exception.Response.StatusCode read throws on exceptions lacking those members),
+                # and reuse the single value for the 502/401 checks below.
+                $StatusCode = $null
+                $ResponseProperty = $_.Exception.PSObject.Properties['Response']
+                if ($ResponseProperty -and $null -ne $ResponseProperty.Value) {
+                    $StatusCodeProperty = $ResponseProperty.Value.PSObject.Properties['StatusCode']
+                    if ($StatusCodeProperty) {
+                        $StatusCode = $StatusCodeProperty.Value
+                    }
+                }
                 if ($StatusCode -eq 502) {
                     # A 502 is how a suspended Omada environment surfaces once a session already
                     # exists; invalidate the cached status so the next request re-probes the
