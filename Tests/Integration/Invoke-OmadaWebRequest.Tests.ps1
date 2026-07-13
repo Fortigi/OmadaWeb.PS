@@ -68,12 +68,45 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
             $Result | Should -Be "OK"
         }
 
-        It 'Should proceed with the request when the environment is not suspended' {
+        It 'Should probe the environment once and proceed when it is not suspended' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ UriA = $Uri } {
+                # Clear the cached suspension state so the probe is guaranteed to run for this
+                # call, independent of any earlier test that already warmed the cache.
+                $Global:OmadaWebPSCurrentBaseUrl = $null
+                $Script:EnvironmentSuspended = $false
+                $Script:RecheckEnvironmentSuspended = $false
                 Mock Test-EnvironmentSuspended { $false } -Verifiable
                 $Result = Invoke-OmadaWebRequest -Uri $UriA -AuthenticationType None
                 $Result | Should -Be "OK"
-                Should -Invoke Test-EnvironmentSuspended -Times 1 -ParameterFilter { $TimeoutSec -eq 10 }
+                Should -Invoke Test-EnvironmentSuspended -Times 1 -Exactly -ParameterFilter { $TimeoutSec -eq 5 }
+            }
+        }
+
+        It 'Should probe the environment only once for repeated requests to the same base URL' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ UriA = $Uri } {
+                $Global:OmadaWebPSCurrentBaseUrl = $null
+                $Script:EnvironmentSuspended = $false
+                $Script:RecheckEnvironmentSuspended = $false
+                Mock Test-EnvironmentSuspended { $false } -Verifiable
+                $null = Invoke-OmadaWebRequest -Uri $UriA -AuthenticationType None
+                $null = Invoke-OmadaWebRequest -Uri $UriA -AuthenticationType None
+                # Cached after the first probe: the second request must not re-probe.
+                Should -Invoke Test-EnvironmentSuspended -Times 1 -Exactly
+            }
+        }
+
+        It 'Should re-probe the environment when a re-check is flagged (as after a 502)' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ UriA = $Uri } {
+                # Cache is already warm for this base URL...
+                $Global:OmadaWebPSCurrentBaseUrl = ([System.Uri]::new($UriA)).GetLeftPart([System.UriPartial]::Authority)
+                $Script:EnvironmentSuspended = $false
+                # ...but a prior 502 flagged that the environment must be re-checked.
+                $Script:RecheckEnvironmentSuspended = $true
+                Mock Test-EnvironmentSuspended { $false } -Verifiable
+                $null = Invoke-OmadaWebRequest -Uri $UriA -AuthenticationType None
+                Should -Invoke Test-EnvironmentSuspended -Times 1 -Exactly
+                # The flag is consumed so the check falls back to once-per-base-URL caching.
+                $Script:RecheckEnvironmentSuspended | Should -Be $false
             }
         }
 
@@ -239,8 +272,18 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
 
         It 'Should throw terminating error when the environment is suspended' {
             InModuleScope 'OmadaWeb.PS' {
+                $Global:OmadaWebPSCurrentBaseUrl = $null
+                $Script:EnvironmentSuspended = $false
+                $Script:RecheckEnvironmentSuspended = $false
                 Mock Test-EnvironmentSuspended { $true }
-                { Invoke-OmadaWebRequest -Uri "http://localhost" -AuthenticationType None -ErrorAction Stop } | Should -Throw "*Environment is suspended*"
+                try {
+                    { Invoke-OmadaWebRequest -Uri "http://localhost" -AuthenticationType None -ErrorAction Stop } | Should -Throw "*Environment is suspended*"
+                }
+                finally {
+                    # Clear the cached suspended flag so it does not leak into later tests.
+                    $Script:EnvironmentSuspended = $false
+                    $Global:OmadaWebPSCurrentBaseUrl = $null
+                }
             }
         }
 

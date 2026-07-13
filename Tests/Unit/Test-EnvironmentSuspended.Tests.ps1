@@ -53,6 +53,11 @@ BeforeAll {
 
         try { $Server.Listener.Stop() } catch {}
         try { $Server.Listener.Close() } catch {}
+        # End the async pipeline started with BeginInvoke before disposing so the background
+        # runspace is properly completed and any exception it raised is observed. Stopping the
+        # listener above unblocks a pending GetContext() (it throws, which the scriptblock
+        # swallows), so EndInvoke returns promptly instead of leaving the pipeline unobserved.
+        try { $Server.PowerShellInstance.EndInvoke($Server.AsyncResult) } catch {}
         try { $Server.PowerShellInstance.Dispose() } catch {}
     }
 }
