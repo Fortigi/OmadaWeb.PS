@@ -126,6 +126,15 @@ $Global:OmadaWebPSCurrentBaseUrl = $null
 # Single module-scoped HttpClient reused by Test-EnvironmentSuspended so the suspension probe
 # doesn't allocate a new handler/socket per call (which contributes to .NET port exhaustion).
 $Script:EnvironmentSuspendedHttpClient = $null
+# Dispose that shared HttpClient when the module unloads - Remove-Module, or the implicit remove
+# during Import-Module -Force - so repeated import/remove cycles don't keep sockets and handlers
+# alive longer than necessary.
+$ExecutionContext.SessionState.Module.OnRemove = {
+    if ($null -ne $Script:EnvironmentSuspendedHttpClient) {
+        $Script:EnvironmentSuspendedHttpClient.Dispose()
+        $Script:EnvironmentSuspendedHttpClient = $null
+    }
+}
 # Reusable authentication session state (cookie, base URL, credential, WebView2 profile/environment,
 # etc.) lives per-session in $Script:OmadaSessions instead of single unkeyed variables - see
 # Get-OmadaSessionKey.ps1 / Get-OmadaSessionContext.ps1.
