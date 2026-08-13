@@ -20,8 +20,12 @@ function Get-OmadaWebCacheItem {
     if ($SelectedScopes -contains "Cookies") {
         $Items.Add((New-OmadaWebCacheItem -Scope "Cookies" -Artefact "Encrypted cookie cache" -Path $Script:CookieCachePath -ItemType "Directory" -Protection "Encrypted with DPAPI for the current user and machine"))
 
-        foreach ($LegacyFile in (Get-OmadaLegacyCookieCacheFile)) {
-            $Items.Add((New-OmadaWebCacheItem -Scope "Cookies" -Artefact "Encrypted cookie cache (legacy %TEMP% location)" -Path $LegacyFile.FullName -ItemType "File" -Protection "Encrypted with DPAPI for the current user and machine"))
+        # Reported as one artefact rather than one row per file: a machine that has been using the
+        # module for a while collects one of these per session, and listing them individually buries
+        # everything else. Only the files themselves are ever removed, never the %TEMP% folder.
+        $LegacyFiles = @(Get-OmadaLegacyCookieCacheFile)
+        if ($LegacyFiles.Count -gt 0) {
+            $Items.Add((New-OmadaWebCacheItem -Scope "Cookies" -Artefact "Encrypted cookie cache (legacy %TEMP% location)" -Path $Script:LegacyCookieCachePath -ItemType "File" -Protection "Encrypted with DPAPI for the current user and machine" -File $LegacyFiles))
         }
     }
 

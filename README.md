@@ -85,7 +85,7 @@ Everything the module stores lives under one root: `%LOCALAPPDATA%\OmadaWeb.PS`.
 | In-memory sessions | Not written to disk | Session cookies, base URLs and browser profile paths for the current PowerShell session | Process memory | Until the PowerShell session ends or you run `Clear-OmadaWebCache` |
 
 > [!NOTE]
-> Up to and including the previous release the encrypted cookie cache was written directly into `%TEMP%`. Any cache found there is moved to `%LOCALAPPDATA%\OmadaWeb.PS\Cookies` the first time the same session is used again, and `Clear-OmadaWebCache` removes whatever is left over.
+> Up to and including the previous release the encrypted cookie cache was written directly into `%TEMP%`, one file per session. Any cache found there is moved to `%LOCALAPPDATA%\OmadaWeb.PS\Cookies` the first time that same session is used again. Caches for sessions you never use again would otherwise stay in `%TEMP%` indefinitely, so `Clear-OmadaWebCache` reports them as a separate artefact and removes them. It identifies them by content as well as by name, and removes only those files - never the `%TEMP%` folder itself, and never files it did not write.
 
 Nothing is sent anywhere except to the Omada instance and identity provider you address, and to the download locations of the components listed above.
 
@@ -175,7 +175,7 @@ Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-Authenticati
 
 OmadaWeb.PS keeps state between commands so you do not have to sign in again for every call. All of it lives under %LOCALAPPDATA%\OmadaWeb.PS:
 
-- Cookies: the Omada session cookie of each session, encrypted with DPAPI for the current user. Caches left in %TEMP% by an earlier version of the module are included.
+- Cookies: the Omada session cookie of each session, encrypted with DPAPI for the current user. Caches left in %TEMP% by an earlier version of the module are reported as one extra artefact and removed file by file; the %TEMP% folder itself is never touched, and files there that were not written by this module are left alone.
 - BrowserProfiles: the per-session Edge user profiles used by WebView2 and by Selenium. These hold the Entra ID cookies and tokens that make re-authentication silent, so they are the artefacts to remove when you want to sign out completely or switch user.
 - Binaries: Selenium, WebView2, msedgedriver.exe and their dependencies, downloaded on first use. Removing them only costs a fresh download next time.
 - Sessions: the authentication state held in memory by the current PowerShell session.

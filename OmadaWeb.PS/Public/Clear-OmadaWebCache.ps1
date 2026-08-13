@@ -8,7 +8,9 @@ function Clear-OmadaWebCache {
         call. All of it lives under %LOCALAPPDATA%\OmadaWeb.PS:
 
         - Cookies: the Omada session cookie of each session, encrypted with DPAPI for the current
-          user. Caches left in %TEMP% by an earlier version of the module are included.
+          user. Caches left in %TEMP% by an earlier version of the module are reported as one extra
+          artefact and removed file by file; the %TEMP% folder itself is never touched, and files
+          there that were not written by this module are left alone.
         - BrowserProfiles: the per-session Edge user profiles used by WebView2 and by Selenium.
           These hold the Entra ID cookies and tokens that make re-authentication silent, so they
           are the artefacts to remove when you want to sign out completely or switch user.
@@ -44,8 +46,10 @@ function Clear-OmadaWebCache {
         None. This command does not accept pipeline input.
 
     .OUTPUTS
-        PSCustomObject. One object per artefact, with the Scope, Artefact, Path, ItemType,
-        Protection, Exists, ItemCount, SizeBytes and Removed properties.
+        PSCustomObject. One object per artefact, with the Scope, Artefact, Path, TargetPath,
+        ItemType, Protection, Exists, ItemCount, SizeBytes and Removed properties. TargetPath lists
+        what removal actually operates on, which for the loose caches in %TEMP% is the individual
+        files rather than the folder shown in Path.
 
     .EXAMPLE
         Clear-OmadaWebCache -ListOnly | Format-Table Scope, Artefact, Path, ItemCount, SizeBytes
@@ -128,18 +132,33 @@ function Clear-OmadaWebCache {
                 }
 
                 $Action = "Remove {0} ({1} item(s), {2:N0} bytes)" -f $Item.Artefact, $Item.ItemCount, $Item.SizeBytes
-                if ($PSCmdlet.ShouldProcess($Item.Path, $Action)) {
-                    try {
-                        Remove-Item -Path $Item.Path -Recurse -Force -ErrorAction Stop
-                        $Item.Removed = $true
-                        "{0} - Removed '{1}'" -f $MyInvocation.MyCommand, $Item.Path | Write-Verbose
+
+                # Naming the containing folder as the target would read as though the whole folder is
+                # about to go, which for the loose caches in %TEMP% is emphatically not the case.
+                $Target = $Item.Path
+                if (@($Item.TargetPath).Count -gt 1 -or $Item.ItemType -eq "File") {
+                    $Target = "{0} file(s) in {1}" -f @($Item.TargetPath).Count, $Item.Path
+                }
+
+                if ($PSCmdlet.ShouldProcess($Target, $Action)) {
+                    # TargetPath is what actually gets removed. For most artefacts that is the path
+                    # itself, but the loose cookie caches in %TEMP% are removed file by file - the
+                    # folder they sit in belongs to the system, not to this module.
+                    $Failed = $false
+                    foreach ($PathToRemove in $Item.TargetPath) {
+                        try {
+                            Remove-Item -Path $PathToRemove -Recurse -Force -ErrorAction Stop
+                            "{0} - Removed '{1}'" -f $MyInvocation.MyCommand, $PathToRemove | Write-Verbose
+                        }
+                        catch {
+                            # A binary that is already loaded into this process is locked until the
+                            # session ends, so a failure here is expected rather than exceptional:
+                            # report it and carry on with the remaining artefacts.
+                            $Failed = $true
+                            "Could not remove '{0}': {1} Close this PowerShell session and try again if the files are still in use." -f $PathToRemove, $_.Exception.Message | Write-Warning
+                        }
                     }
-                    catch {
-                        # A binary that is already loaded into this process is locked until the
-                        # session ends, so a failure here is expected rather than exceptional: report
-                        # it and carry on with the remaining artefacts.
-                        "Could not remove '{0}': {1} Close this PowerShell session and try again if the files are still in use." -f $Item.Path, $_.Exception.Message | Write-Warning
-                    }
+                    $Item.Removed = -not $Failed
                 }
             }
 

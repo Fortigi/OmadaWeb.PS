@@ -92,13 +92,11 @@ Task Build -depends Analyze {
     }
 
     function Select-ModuleSourceLine {
-        <#
-            The single .psm1 that ships to the Gallery is assembled by concatenating the source
-            files, dropping their comments to keep it compact. Comment-based help has to survive
-            that though, otherwise Get-Help returns nothing for the exported commands, so lines
-            inside a <# #> block are kept for the public functions (-KeepCommentBasedHelp) and
-            dropped for everything else.
-        #>
+        # The single .psm1 that ships to the Gallery is assembled by concatenating the source files,
+        # dropping their comments to keep it compact. Comment-based help has to survive that though,
+        # otherwise Get-Help returns nothing for the exported commands, so lines inside a block
+        # comment are kept for the public functions (-KeepCommentBasedHelp) and dropped for
+        # everything else.
         param(
             [string[]]$Line,
             [switch]$KeepCommentBasedHelp

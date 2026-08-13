@@ -72,7 +72,31 @@ Describe 'Clear-OmadaWebCache' -Tag 'Unit' {
         It 'Should report a cookie cache left behind in the legacy %TEMP% location' {
             $Legacy = @(Clear-OmadaWebCache -ListOnly -Scope Cookies) | Where-Object { $_.Artefact -like '*legacy*' }
             $Legacy | Should -Not -BeNullOrEmpty
-            $Legacy.Path | Should -BeLike (Join-Path ([System.IO.Path]::GetTempPath()) '*bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+            $Legacy.TargetPath | Should -BeLike (Join-Path ([System.IO.Path]::GetTempPath()) '*bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
+        }
+
+        It 'Should report all legacy caches as one artefact rather than one row each' {
+            # A machine that has used the module for a while collects one of these per session;
+            # listing them individually buries every other artefact in the output.
+            InModuleScope 'OmadaWeb.PS' {
+                foreach ($Name in @('11111111111111111111111111111111', '22222222222222222222222222222222')) {
+                    ConvertTo-SecureString -String 'legacy-cookie' -AsPlainText -Force |
+                        Export-Clixml -Path (Join-Path $Script:LegacyCookieCachePath -ChildPath $Name) -Force
+                }
+            }
+
+            $Legacy = @(@(Clear-OmadaWebCache -ListOnly -Scope Cookies) | Where-Object { $_.Artefact -like '*legacy*' })
+
+            $Legacy.Count | Should -Be 1
+            $Legacy[0].ItemCount | Should -Be 3
+            @($Legacy[0].TargetPath).Count | Should -Be 3
+        }
+
+        It 'Should not report a legacy artefact when nothing is left in %TEMP%' {
+            InModuleScope 'OmadaWeb.PS' {
+                Remove-Item -Path (Join-Path $Script:LegacyCookieCachePath -ChildPath 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb') -Force
+            }
+            @(@(Clear-OmadaWebCache -ListOnly -Scope Cookies) | Where-Object { $_.Artefact -like '*legacy*' }) | Should -BeNullOrEmpty
         }
 
         It 'Should remove nothing when -ListOnly is used' {
@@ -151,6 +175,14 @@ Describe 'Clear-OmadaWebCache' -Tag 'Unit' {
             InModuleScope 'OmadaWeb.PS' {
                 Test-Path (Join-Path $Script:LegacyCookieCachePath -ChildPath 'cccccccccccccccccccccccccccccccc') | Should -BeTrue
                 Test-Path (Join-Path $Script:LegacyCookieCachePath -ChildPath 'unrelated.tmp') | Should -BeTrue
+            }
+        }
+
+        It 'Should never remove the %TEMP% folder itself, only the caches inside it' {
+            Clear-OmadaWebCache -Scope Cookies -Force -Confirm:$false | Out-Null
+
+            InModuleScope 'OmadaWeb.PS' {
+                Test-Path $Script:LegacyCookieCachePath -PathType Container | Should -BeTrue
             }
         }
 
