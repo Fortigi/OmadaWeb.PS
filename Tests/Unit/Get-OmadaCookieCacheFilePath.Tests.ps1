@@ -83,6 +83,23 @@ Describe 'Get-OmadaCookieCacheFilePath' -Tag 'Unit' {
             }
         }
 
+        It 'Should not migrate a file that is not one of our cookie caches, even on a name collision' {
+            InModuleScope 'OmadaWeb.PS' {
+                # %TEMP% is shared with every other program on the machine, so the hashed file name
+                # alone is not proof the file is ours. Moving it would take someone else's file, and
+                # a failed move would delete it.
+                $SessionKey = 'collision.omada.cloud::webview2::'
+                $LegacyFilePath = Join-Path $Script:LegacyCookieCachePath -ChildPath (Get-OmadaShortHash -Value $SessionKey)
+                Set-Content -Path $LegacyFilePath -Value 'someone elses file that happens to collide' -NoNewline
+
+                $Path = Get-OmadaCookieCacheFilePath -SessionKey $SessionKey
+
+                Test-Path $LegacyFilePath -PathType Leaf | Should -BeTrue -Because 'a file we did not write must not be moved or deleted'
+                Get-Content -Path $LegacyFilePath -Raw | Should -Be 'someone elses file that happens to collide'
+                Test-Path $Path -PathType Leaf | Should -BeFalse -Because 'nothing should have been migrated into the cache folder'
+            }
+        }
+
         It 'Should leave files belonging to other sessions in the legacy folder alone' {
             InModuleScope 'OmadaWeb.PS' {
                 $OtherFilePath = Join-Path $Script:LegacyCookieCachePath -ChildPath (Get-OmadaShortHash -Value 'other.omada.cloud::webview2::')

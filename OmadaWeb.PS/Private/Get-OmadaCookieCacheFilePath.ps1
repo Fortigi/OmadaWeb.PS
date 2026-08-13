@@ -18,7 +18,11 @@ function Get-OmadaCookieCacheFilePath {
     # neither forces everyone to re-authenticate nor leaves a usable session cookie behind in %TEMP%.
     if (-not (Test-Path $CacheFilePath -PathType Leaf) -and -not [string]::IsNullOrWhiteSpace($Script:LegacyCookieCachePath)) {
         $LegacyFilePath = Join-Path $Script:LegacyCookieCachePath -ChildPath $FileName
-        if ((Test-Path $LegacyFilePath -PathType Leaf) -and $LegacyFilePath -ne $CacheFilePath) {
+        # The file name alone is not proof the file is ours: it is just a hash, sitting in a folder
+        # shared with every other program on the machine. The contents are checked too, matching what
+        # Get-OmadaLegacyCookieCacheFile does, so a name collision cannot make this move - or, if the
+        # move then fails, delete - a file written by something else.
+        if ((Test-Path $LegacyFilePath -PathType Leaf) -and $LegacyFilePath -ne $CacheFilePath -and (Test-OmadaCookieCacheFile -Path $LegacyFilePath)) {
             try {
                 Move-Item -Path $LegacyFilePath -Destination $CacheFilePath -Force -ErrorAction Stop
                 "{0} - Migrated cookie cache '{1}' to '{2}'" -f $MyInvocation.MyCommand, $LegacyFilePath, $CacheFilePath | Write-Verbose
