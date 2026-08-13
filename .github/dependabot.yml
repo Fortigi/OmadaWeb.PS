@@ -1,0 +1,24 @@
+# Dependabot keeps the pinned action versions used by the workflows in .github/workflows up to date.
+#
+# The module's runtime dependencies (Selenium's WebDriver.dll, Newtonsoft.Json.dll,
+# System.Text.Json.dll, System.Runtime.dll, the Microsoft WebView2 assemblies and msedgedriver.exe)
+# are downloaded to %LOCALAPPDATA%\OmadaWeb.PS\Bin at runtime instead of being restored from a
+# package manifest, so there is no NuGet ecosystem here for Dependabot to read. Those components are
+# inventoried in Build/Dependencies.psd1 and published as a CycloneDX SBOM with every release
+# (see SECURITY.md). Add a "nuget" entry below once those downloads are driven by a real manifest.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
