@@ -21,7 +21,8 @@ try {
             return $true
         }
         $ProcessObject = Get-Process | Where-Object { $_.Id -eq $Global:WebServerPid }
-        "ProcessObject: {0}" -f ($ProcessObject | ConvertTo-Json)
+        # Diagnostics only: Process objects have a deep graph, a shallow depth is enough here.
+        "ProcessObject: {0}" -f ($ProcessObject | ConvertTo-Json -Depth 3)
         if ($Force -and $null -ne $ProcessObject) {
             $ProcessObject | Stop-Process -ErrorAction Stop
             "Web server process (PID: {0}) stopped" -f $Global:WebServerPid | Write-Host

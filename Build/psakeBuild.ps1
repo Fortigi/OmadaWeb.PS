@@ -143,7 +143,9 @@ Task Build -depends Analyze {
     $ModulePsd1.Copyright = $ModulePsd1.Copyright -f $Date.ToString("yyyy")
 
     #Work-around for the bug in New-ModuleManifest that breaks the PrivateData key (Source: https://github.com/PowerShell/PowerShell/issues/5922)
-    $PrivateData = ConvertTo-HashtableDeep ($ModulePsd1.PrivateData | ConvertTo-Json | ConvertFrom-Json)
+    # Explicit -Depth: PrivateData.PSData nests two levels today, which the default depth of 2 just
+    # survives; any extra nesting would be silently dropped from the generated manifest.
+    $PrivateData = ConvertTo-HashtableDeep ($ModulePsd1.PrivateData | ConvertTo-Json -Depth 10 | ConvertFrom-Json)
     $ModulePsd1.Remove("PrivateData")
 
     $SerializedContent = $PrivateData.GetEnumerator() | ForEach-Object {

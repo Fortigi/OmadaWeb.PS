@@ -27,6 +27,8 @@
     }
 
     "Parameters" | Write-Verbose
-    $Parameters | ConvertTo-Json | Write-Verbose
+    # Diagnostics only: the parameter set holds rich objects (credential, session, body), so the
+    # depth stays deliberately low - this string is built on every request, even without -Verbose.
+    $Parameters | ConvertTo-Json -Depth 5 | Write-Verbose
     return $Parameters
 }

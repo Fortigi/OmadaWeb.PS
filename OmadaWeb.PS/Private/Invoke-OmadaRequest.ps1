@@ -75,7 +75,9 @@ function Invoke-OmadaRequest {
                 else {
                     try {
                         $SessionContext.AuthCookie = (Import-Clixml $CookiePath).OmadaWebAuthCookie
-                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json) | Write-Verbose
+                        # Diagnostics only: depth is kept shallow on purpose so a verbose log does not
+                        # expand the whole cookie object graph.
+                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json -Depth 3) | Write-Verbose
                     }
                     catch {
                         $SessionContext.AuthCookie = $null
@@ -91,7 +93,9 @@ function Invoke-OmadaRequest {
                         $SessionContext.AuthCookie = ([System.Management.Automation.PSSerializer]::Deserialize([System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
                                     [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml $SessionContext.CookieCacheFilePath))
                                 ))).OmadaWebAuthCookie
-                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json) | Write-Verbose
+                        # Diagnostics only: depth is kept shallow on purpose so a verbose log does not
+                        # expand the whole cookie object graph.
+                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json -Depth 3) | Write-Verbose
                     }
                     catch {
                         "Failure loading cookie, try to create a new one." | Write-Verbose
@@ -154,7 +158,9 @@ function Invoke-OmadaRequest {
                 $Paged = $true
             }
 
-            "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json) | Write-Verbose
+            # Diagnostics only: $BoundParams holds rich objects (credential, session, cookie), and this
+            # string is built on every request even without -Verbose, so the depth stays deliberately low.
+            "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json -Depth 5) | Write-Verbose
             try {
                 $CustomErrorTrigger = "Login failed - {0}" -f (New-Guid).Guid.ToString()
                 $FullyQualifiedModule = @{
@@ -166,7 +172,8 @@ function Invoke-OmadaRequest {
                     $FullyQualifiedModule.ModuleVersion = [Version]"3.1.0.0"
                 }
 
-                "{0} - Using Microsoft.PowerShell.Utility module: {1}" -f $MyInvocation.MyCommand, ($FullyQualifiedModule | ConvertTo-Json) | Write-Verbose
+                # Diagnostics only: the hashtable above is flat, depth 5 is ample.
+                "{0} - Using Microsoft.PowerShell.Utility module: {1}" -f $MyInvocation.MyCommand, ($FullyQualifiedModule | ConvertTo-Json -Depth 5) | Write-Verbose
 
                 switch ($Script:FunctionName) {
                     "Invoke-RestMethod" {

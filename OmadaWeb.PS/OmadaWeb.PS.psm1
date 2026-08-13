@@ -113,7 +113,9 @@ try {
 }
 catch {}
 
-"PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json) | Write-Verbose
+# Diagnostics only: an explicit shallow depth keeps the log readable and avoids walking deep
+# object graphs, which happens on every load because the string is built before Write-Verbose.
+"PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json -Depth 5) | Write-Verbose
 
 # Initialize script-level variables
 $Global:OmadaWebPSCurrentBaseUrl = $null
