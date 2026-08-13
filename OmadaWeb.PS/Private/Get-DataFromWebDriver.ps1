@@ -69,6 +69,11 @@ function Get-DataFromWebDriver {
                         ) {
                             Start-Sleep -Milliseconds 500
                             "Enter username" | Write-Verbose
+                            # Credentials are handed to the browser through the WebDriver API, which transports
+                            # them out of band. They are never concatenated into a script string, so no escaping
+                            # is required here. Do not move these values into ExecuteScript - that would reopen
+                            # the injection hole fixed in Invoke-WebView2MicrosoftLogin.ps1 (issue #19). Use
+                            # ConvertTo-JavaScriptLiteral if a value ever has to cross into JavaScript.
                             $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))[0].SendKeys($SessionContext.Credential.UserName.Trim())
                             $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                         }
@@ -80,6 +85,7 @@ function Get-DataFromWebDriver {
                                 -and $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonSubmitId)).ComputedAccessibleLabel -eq "Sign in"
                         ) {
                             "Enter password" | Write-Verbose
+                            # See the note above: SendKeys transports the password out of band, no escaping needed.
                             $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($PasswordElementId))[0].SendKeys($SessionContext.Credential.GetNetworkCredential().Password)
                             $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
                         }
