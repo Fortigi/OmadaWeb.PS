@@ -104,7 +104,7 @@ function Start-EdgeDriver {
             $SessionKeyHash = (Get-OmadaShortHash -Value $SessionKey).Substring(0, 8)
             $ProfileDirName = "{0}_{1}" -f $ProfileFolderName, $SessionKeyHash
         }
-        $UserProfileDir = New-Item (Join-Path $env:LOCALAPPDATA -ChildPath "OmadaWeb.PS\Profiles\$ProfileDirName") -ItemType Directory -Force
+        $UserProfileDir = New-Item (Join-Path $Script:SeleniumProfileBasePath -ChildPath $ProfileDirName) -ItemType Directory -Force
         "Using profile user-data-dir: '{0}'" -f $UserProfileDir.FullName | Write-Verbose
         $UserDataDirArgument = '--user-data-dir="{0}"' -f $UserProfileDir.FullName
         "User data argument: '{0}'" -f $UserDataDirArgument | Write-Verbose

@@ -10,9 +10,9 @@ Properties {
 }
 
 
-Task default -depends Analyze, Build, ImportModule, Test
+Task default -depends Analyze, Build, ImportModule, TestHelp, Test
 Task DeployOnly -depends Build, Deploy
-Task TestBuildOnly -depends Analyze, Build, ImportModule, Test
+Task TestBuildOnly -depends Analyze, Build, ImportModule, TestHelp, Test
 
 Task Analyze {
 
@@ -89,6 +89,51 @@ Task Build -depends Analyze {
         $HeaderRow += "{0}`n" -f $EndChar
         return $HeaderRow
 
+    }
+
+    function Select-ModuleSourceLine {
+        # The single .psm1 that ships to the Gallery is assembled by concatenating the source files,
+        # dropping their comments to keep it compact. Comment-based help has to survive that though,
+        # otherwise Get-Help returns nothing for the exported commands, so lines inside a block
+        # comment are kept for the public functions (-KeepCommentBasedHelp) and dropped for
+        # everything else.
+        param(
+            [string[]]$Line,
+            [switch]$KeepCommentBasedHelp
+        )
+
+        $Output = [System.Collections.Generic.List[string]]::new()
+        $InBlockComment = $false
+
+        foreach ($CurrentLine in $Line) {
+            if ($InBlockComment) {
+                if ($KeepCommentBasedHelp) {
+                    $Output.Add($CurrentLine)
+                }
+                if ($CurrentLine -match '#>') {
+                    $InBlockComment = $false
+                }
+                continue
+            }
+
+            # Only a block comment that stays open past this line changes the state; one that opens
+            # and closes on the same line, or that trails code, is handled as an ordinary line.
+            if ($CurrentLine -match '^\s*<#' -and $CurrentLine -notmatch '#>') {
+                $InBlockComment = $true
+                if ($KeepCommentBasedHelp) {
+                    $Output.Add($CurrentLine)
+                }
+                continue
+            }
+
+            if ($CurrentLine -match '^\s*#') {
+                continue
+            }
+
+            $Output.Add($CurrentLine)
+        }
+
+        return $Output.ToArray()
     }
 
     function ConvertTo-HashtableDeep {
@@ -208,14 +253,16 @@ Task Build -depends Analyze {
             "Adding functions" | Write-Host -ForegroundColor Magenta
             $ModuleContent += "#region public functions`n"
             foreach ($import in $Public) {
-                $Content = Get-Content $import.FullName -Encoding UTF8 | Where-Object { $_ -notmatch '^\s*#requires' -and $_ -notmatch '^\s*#' }
-                $ModuleContent += $Content.Trim() -join "`n"
+                $Content = Select-ModuleSourceLine -Line (Get-Content $import.FullName -Encoding UTF8) -KeepCommentBasedHelp
+                # Joined before trimming so the indentation inside the comment-based help block
+                # survives; only leading and trailing blank lines are removed.
+                $ModuleContent += ($Content -join "`n").Trim()
                 $ModuleContent += "`n`n"
             }
             $ModuleContent += "#endregion`n`n#region private functions`n"
             foreach ($import in $Private) {
-                $Content = Get-Content $import.FullName -Encoding UTF8 | Where-Object { $_ -notmatch '^\s*#requires' -and $_ -notmatch '^\s*#' }
-                $ModuleContent += $Content.Trim() -join "`n"
+                $Content = Select-ModuleSourceLine -Line (Get-Content $import.FullName -Encoding UTF8)
+                $ModuleContent += ($Content -join "`n").Trim()
                 $ModuleContent += "`n`n"
             }
             $ModuleContent += "#endregion`n`n"
@@ -285,6 +332,12 @@ Task ImportModule -depends Build {
     }
 }
 
+
+# Checks the assembled module rather than the source files, so it also proves the comment-based help
+# survived being concatenated into the single .psm1 that ships to the Gallery.
+Task TestHelp -depends ImportModule {
+    & (Join-Path $PSScriptRoot -ChildPath "Test-CommentBasedHelp.ps1") -ModuleManifestPath (Join-Path -Path $OutputDir -ChildPath ("{0}.psd1" -f $ModuleName))
+}
 
 Task Test -depends ImportModule {
     $Tests = Get-ChildItem ..\Tests -Filter *.Tests.ps1 -Recurse

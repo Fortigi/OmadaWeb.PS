@@ -77,7 +77,7 @@ function Invoke-OmadaRequest {
             # Computed unconditionally (not just lazily inside the encrypted-cache branch below) so it's
             # always available for Invoke-BrowserAuthentication.ps1's cache-write step later, even when
             # this particular call took the -CookiePath branch instead on its first-ever use of this session.
-            $SessionContext.CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (Get-OmadaShortHash -Value $SessionKey)
+            $SessionContext.CookieCacheFilePath = Get-OmadaCookieCacheFilePath -SessionKey $SessionKey
 
             if ($BoundParams.Keys -contains "CookiePath") {
                 # -CookiePath is authoritative on every call (not just when no cookie is cached yet),

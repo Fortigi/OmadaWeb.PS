@@ -228,6 +228,22 @@ $Script:WebView2LoaderPath = [System.IO.Path]::Combine($WebView2BasePath, "WebVi
 $Script:WebView2UserProfileBasePath = [System.IO.Path]::Combine($ModuleAppDataPath, "Edge User Data")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebView2UserProfileBasePath | Write-Verbose
 
+#Selenium/Edge user-data-dir Base Location - actual profile folders are created per session (see Start-EdgeDriver)
+$Script:SeleniumProfileBasePath = [System.IO.Path]::Combine($ModuleAppDataPath, "Profiles")
+"{0} - {1}" -f $MyInvocation.MyCommand, $Script:SeleniumProfileBasePath | Write-Verbose
+
+#Module root under %LOCALAPPDATA%, holding every artefact the module stores (see Clear-OmadaWebCache)
+$Script:ModuleAppDataPath = $ModuleAppDataPath
+
+#Encrypted cookie cache location. Created on demand by Get-OmadaCookieCacheFilePath so importing the
+#module never leaves an empty folder behind.
+$Script:CookieCachePath = [System.IO.Path]::Combine($ModuleAppDataPath, "Cookies")
+"{0} - {1}" -f $MyInvocation.MyCommand, $Script:CookieCachePath | Write-Verbose
+
+#Cookie caches used to live directly in %TEMP%. Ones left there by an earlier module version are
+#migrated to $Script:CookieCachePath on first use, and Clear-OmadaWebCache cleans up the rest.
+$Script:LegacyCookieCachePath = $Env:Temp
+
 #Edge Location
 $Script:InstalledEdgeFilePath = [System.IO.Path]::Combine($InstalledEdgeBasePath, "msedge.exe")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:InstalledEdgeFilePath | Write-Verbose

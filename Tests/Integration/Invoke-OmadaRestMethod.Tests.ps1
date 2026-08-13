@@ -242,7 +242,7 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
             # The encrypted cookie cache is keyed by the full session key (base URL :: auth type :: identity),
             # not just the URI authority, so different auth types/identities to the same host don't collide.
             $SessionKey = "{0}::webview2::" -f ([System.Uri]::New($Uri)).Authority.ToLowerInvariant()
-            $CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($SessionKey)))).Guid -replace "-", "")
+            $CookieCacheFilePath = Join-Path (Join-Path $Env:LOCALAPPDATA -ChildPath "OmadaWeb.PS\Cookies") -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($SessionKey)))).Guid -replace "-", "")
             try { Get-Item $CookieCacheFilePath | Remove-Item -Force } catch { }
             Test-Path $CookieCacheFilePath -PathType Leaf | Should -Be $false
             Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -Verbose -ForceAuthentication | Out-Null
@@ -254,7 +254,7 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
             # The encrypted cookie cache is keyed by the full session key (base URL :: auth type :: identity),
             # not just the URI authority, so different auth types/identities to the same host don't collide.
             $SessionKey = "{0}::webview2::" -f ([System.Uri]::New($Uri)).Authority.ToLowerInvariant()
-            $CookieCacheFilePath = Join-Path $Env:Temp -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($SessionKey)))).Guid -replace "-", "")
+            $CookieCacheFilePath = Join-Path (Join-Path $Env:LOCALAPPDATA -ChildPath "OmadaWeb.PS\Cookies") -ChildPath (([System.Guid]([System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($SessionKey)))).Guid -replace "-", "")
             try { Get-Item $CookieCacheFilePath | Remove-Item -Force } catch { }
             Test-Path $CookieCacheFilePath -PathType Leaf | Should -Be $false
             Invoke-TestOmadaRestMethod -Uri $Uri -UseWebView2 -Verbose -ForceAuthentication -SkipCookieCache | Out-Null
