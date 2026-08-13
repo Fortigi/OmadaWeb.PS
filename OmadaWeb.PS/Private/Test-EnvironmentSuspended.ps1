@@ -18,7 +18,12 @@ function Test-EnvironmentSuspended {
         if ($null -eq $Script:EnvironmentSuspendedHttpClient) {
             Add-Type -AssemblyName System.Net.Http
             $Script:EnvironmentSuspendedHttpClient = [System.Net.Http.HttpClient]::new()
-            $Script:EnvironmentSuspendedHttpClient.Timeout = [System.Threading.Timeout]::InfiniteTimeSpan
+            # Represent "no client-level timeout" with TimeSpan.FromMilliseconds(Timeout.Infinite)
+            # rather than Timeout.InfiniteTimeSpan: the latter static is missing on some older .NET
+            # Framework builds (Windows PowerShell 5.1) and would fault while initializing the client.
+            # Both are the same infinite value; the real per-call limit is applied via the
+            # CancellationToken below.
+            $Script:EnvironmentSuspendedHttpClient.Timeout = [System.TimeSpan]::FromMilliseconds([System.Threading.Timeout]::Infinite)
         }
         $Client = $Script:EnvironmentSuspendedHttpClient
 

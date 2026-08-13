@@ -44,11 +44,12 @@ function Invoke-OmadaRequest {
                 $Global:OmadaWebPSCurrentBaseUrl = $BaseUrl
                 "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Global:OmadaWebPSCurrentBaseUrl | Write-Verbose
 
-                # Test environment status. The suspended status is cached per base URL so the probe
-                # runs once per environment, not on every request. It is re-evaluated only when the
-                # base URL changes, when the module is re-imported with -Force (which resets the
-                # module-scoped state), or after a 502 response (flagged on the catch path below,
-                # which is how a suspended environment surfaces once a session is already active).
+                # Test environment status. The result is cached for the current base URL (only the
+                # single last-used URL is tracked, so alternating between two environments re-probes
+                # each switch) so the probe normally runs once, not on every request. It is
+                # re-evaluated when the base URL changes, when the module is re-imported with -Force
+                # (which resets the module-scoped state), or after a 502 response (flagged on the catch
+                # path below, which is how a suspended environment surfaces once a session is active).
                 if ($BaseUrl -ne $PreviousBaseUrl -or $Script:RecheckEnvironmentSuspended) {
                     $Script:EnvironmentSuspended = Test-EnvironmentSuspended -Url $BaseUrl -TimeoutSec 5
                     $Script:RecheckEnvironmentSuspended = $false

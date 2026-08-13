@@ -118,10 +118,12 @@ catch {}
 # Initialize script-level variables
 $Global:OmadaWebPSCurrentBaseUrl = $null
 [bool]$Script:EnvironmentSuspended = $false
-# The suspended status is probed once per base URL and cached in $Script:EnvironmentSuspended.
-# This flag forces the next request to re-probe even when the base URL is unchanged; it is set
-# after a 502 response (how a suspended Omada environment surfaces once a session is active).
-# An Import-Module -Force re-runs this file, which resets all of this state and re-probes as well.
+# The suspended status is cached in $Script:EnvironmentSuspended for the current base URL only
+# ($Global:OmadaWebPSCurrentBaseUrl tracks that single last-used URL - there is no per-URL map, so
+# alternating between two environments re-probes on each switch). This flag forces the next request
+# to re-probe even when the base URL is unchanged; it is set after a 502 response (how a suspended
+# Omada environment surfaces once a session is active). An Import-Module -Force re-runs this file,
+# which resets all of this state and re-probes as well.
 [bool]$Script:RecheckEnvironmentSuspended = $false
 # Single module-scoped HttpClient reused by Test-EnvironmentSuspended so the suspension probe
 # doesn't allocate a new handler/socket per call (which contributes to .NET port exhaustion).
