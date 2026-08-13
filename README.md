@@ -5,9 +5,26 @@
 
 OmadaWeb.PS is a PowerShell module containing commands to manage data via Omada web and OData endpoints in the cloud or on-prem. This module adds support for additional authentication types like OAuth2 based on client credentials and browser-based login.
 
-This module contains two functions that wraps over the built-in PowerShell commands [`Invoke-RestMethod`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-restmethod) and [`Invoke-WebRequest`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest). It adds authentication handling to be used with Omada.
+This module contains two functions that wrap over the built-in PowerShell commands [`Invoke-RestMethod`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-restmethod) and [`Invoke-WebRequest`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest). It adds authentication handling to be used with Omada. A third command, `Clear-OmadaWebCache`, reports and removes everything the module stores on the machine.
 
 When using browser based authentication this module is able to sign-in automatically to Entra ID when providing credentials via the -Credential parameter. When using number based MFA it is also capable to copy the required number to you clipboard if you have PhoneLink active. It makes it a little bit easier to past the number directly in the Authenticator app on your phone.
+
+## COMMANDS
+
+<!-- BEGIN GENERATED COMMANDS -->
+| Command | Description |
+|---|---|
+| [`Clear-OmadaWebCache`](#clear-omadawebcache) | Reports and removes the data OmadaWeb.PS stores on this machine. |
+| [`Invoke-OmadaRestMethod`](#invoke-omadarestmethod) | Sends a request to an Omada REST or OData endpoint and returns the response as objects. |
+| [`Invoke-OmadaWebRequest`](#invoke-omadawebrequest) | Sends a request to an Omada web endpoint and returns the raw HTTP response. |
+<!-- END GENERATED COMMANDS -->
+
+Every command documents itself, so `Get-Help` works as you would expect:
+
+```powershell
+Get-Help Invoke-OmadaRestMethod -Full
+Get-Help Invoke-OmadaRestMethod -Examples
+```
 
 ## INSTALLATION
 
@@ -54,9 +71,53 @@ Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data"
 Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -AuthenticationType "Browser"
 ```
 
+### Local data footprint
+
+Everything the module stores lives under one root: `%LOCALAPPDATA%\OmadaWeb.PS`. This is what ends up there, and why:
+
+| Artefact | Path | Contents | Protection | Lifetime |
+|---|---|---|---|---|
+| Encrypted cookie cache | `%LOCALAPPDATA%\OmadaWeb.PS\Cookies\<session hash>` | The Omada session cookie, so a later command does not have to sign in again | Encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), readable only by the current user on the current machine | Until the cookie is rejected, `-ForceAuthentication` or `-SkipCookieCache` is used, or you run `Clear-OmadaWebCache` |
+| Custom cookie file | The folder you pass to `-CookiePath` | The same session cookie | **Not encrypted** - protected only by the file system permissions of the location you choose | Until you delete it. It is not touched by `Clear-OmadaWebCache`, because the module does not know where you put it |
+| WebView2 browser profiles | `%LOCALAPPDATA%\OmadaWeb.PS\Edge User Data\OmadaWebView2Profile_<session hash>` | A dedicated Edge user profile per session, holding the Entra ID cookies and tokens that make re-authentication silent | File system permissions of your Windows user profile | Until you run `Clear-OmadaWebCache` |
+| Selenium browser profiles | `%LOCALAPPDATA%\OmadaWeb.PS\Profiles\<Edge profile>_<session hash>` | The Edge `user-data-dir` used when `-EdgeProfile` is combined with `-AuthenticationType Browser` | File system permissions of your Windows user profile | Until you run `Clear-OmadaWebCache` |
+| Downloaded binaries | `%LOCALAPPDATA%\OmadaWeb.PS\Bin` | Selenium, WebView2, `msedgedriver.exe` and their dependencies, downloaded on first use (see [SECURITY.md](SECURITY.md) for the full inventory) | File system permissions of your Windows user profile | Until you run `Clear-OmadaWebCache`; re-downloaded when needed |
+| In-memory sessions | Not written to disk | Session cookies, base URLs and browser profile paths for the current PowerShell session | Process memory | Until the PowerShell session ends or you run `Clear-OmadaWebCache` |
+
+> [!NOTE]
+> Up to and including the previous release the encrypted cookie cache was written directly into `%TEMP%`, one file per session. Any cache found there is moved to `%LOCALAPPDATA%\OmadaWeb.PS\Cookies` the first time that same session is used again. Caches for sessions you never use again would otherwise stay in `%TEMP%` indefinitely, so `Clear-OmadaWebCache` reports them as a separate artefact and removes them. It identifies them by content as well as by name, and removes only those files - never the `%TEMP%` folder itself, and never files it did not write.
+
+Nothing is sent anywhere except to the Omada instance and identity provider you address, and to the download locations of the components listed above.
+
+### Clearing cached data
+
+`Clear-OmadaWebCache` reports and removes everything in the table above.
+
+```powershell
+# See what is stored, without removing anything
+Clear-OmadaWebCache -ListOnly | Format-Table Scope, Artefact, Path, ItemCount, SizeBytes
+
+# See what would be removed
+Clear-OmadaWebCache -WhatIf
+
+# Sign out everywhere: drop cookies and browser profiles, keep the downloaded binaries
+Clear-OmadaWebCache -Scope Cookies, BrowserProfiles
+
+# Remove everything without being prompted
+Clear-OmadaWebCache -Force
+```
+
+`-Scope` accepts `All` (the default), `Cookies`, `BrowserProfiles`, `Binaries` and `Sessions`. Binaries that are already loaded into the running PowerShell session are locked by Windows; the command reports which ones it could not remove, and they can be removed after closing that session.
+
 ## SYNTAX
 
 <!-- BEGIN GENERATED SYNTAX -->
+### Clear-OmadaWebCache (__AllParameterSets)
+
+```powershell
+Clear-OmadaWebCache [-Scope {All | Cookies | BrowserProfiles | Binaries | Sessions}] [-ListOnly <switch>] [-Force <switch>] [-WhatIf <switch>] [-Confirm <switch>] [<CommonParameters>]
+```
+
 ### Invoke-OmadaRestMethod (StandardMethod)
 
 ```powershell
@@ -109,49 +170,187 @@ Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-Authenticati
 
 ## EXAMPLES
 
-Here are some example commands you can use with the OmadaWeb.PS module:
+<!-- BEGIN GENERATED EXAMPLES -->
+### Clear-OmadaWebCache
 
-### Example 1: Example command to invoke a web request. This uses -AuthenticationType "WebView2" by default.
+OmadaWeb.PS keeps state between commands so you do not have to sign in again for every call. All of it lives under %LOCALAPPDATA%\OmadaWeb.PS:
+
+- Cookies: the Omada session cookie of each session, encrypted with DPAPI for the current user. Caches left in %TEMP% by an earlier version of the module are reported as one extra artefact and removed file by file; the %TEMP% folder itself is never touched, and files there that were not written by this module are left alone.
+- BrowserProfiles: the per-session Edge user profiles used by WebView2 and by Selenium. These hold the Entra ID cookies and tokens that make re-authentication silent, so they are the artefacts to remove when you want to sign out completely or switch user.
+- Binaries: Selenium, WebView2, msedgedriver.exe and their dependencies, downloaded on first use. Removing them only costs a fresh download next time.
+- Sessions: the authentication state held in memory by the current PowerShell session.
+
+Run with -ListOnly to see what is stored without changing anything. Without -ListOnly the artefacts are removed, after confirmation; use -WhatIf to preview and -Force to skip the prompt.
+
+In both cases one object per artefact is returned, reporting the path, how many items it holds, how large it is, how it is protected and whether it was removed.
+
+A binary that is already loaded into the running PowerShell session is locked by Windows and cannot be removed. The command reports which ones it could not remove and continues; close that PowerShell session and run it again to remove them.
+
+Files written by -CookiePath are not touched, because their location is chosen by the caller and is not known to the module. Remove those yourself.
+
+#### Example 1
+
 ```powershell
-Invoke-OmadaWebRequest -Uri "https://example.omada.cloud"
+Clear-OmadaWebCache -ListOnly | Format-Table Scope, Artefact, Path, ItemCount, SizeBytes
 ```
 
-### Example 2: Retrieve an Identity object to the OData endpoint using explicit WebView2 based authentication.
+Shows everything the module has stored on this machine without removing any of it.
+
+#### Example 2
+
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "WebView2"
+Clear-OmadaWebCache -WhatIf
 ```
 
-### Example 3: Retrieve an Identity object to the OData endpoint using Browser based authentication by using the Microsoft Web Driver (Selenium) engine.
+Reports exactly what would be removed, and removes nothing.
+
+#### Example 3
+
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser"
+Clear-OmadaWebCache -Scope Cookies, BrowserProfiles
 ```
 
-### Example 4: Retrieve Identity object using EntraId OAuth authentication
+Signs out everywhere by dropping the cached session cookies and the Edge profiles holding the Entra ID tokens, while keeping the downloaded binaries so the next command does not have to download them again. Asks for confirmation first.
+
+#### Example 4
+
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -Credential $ClientCredential
+Clear-OmadaWebCache -Force
 ```
 
-### Example 5: Retrieve Identity object using WebView2 authentication on EntraID with a credential specified
-When adding a credential parameter the sign-in process will try to automatically select the correct user when already signed-in or and enters the provided credentials automatically. When PhoneLink is active, you have clipboard sharing configured, number based MFA is used, the required value is copied to the clipboard so you only need to paste it in the authenticator app.
+Removes everything the module stores, without prompting. Useful when handing a machine over, or as a cleanup step at the end of an automated run.
+
+### Invoke-OmadaRestMethod
+
+Invoke-OmadaRestMethod wraps the built-in Invoke-RestMethod and adds the authentication Omada Identity Cloud and on-premises installations need. Every parameter of Invoke-RestMethod is accepted unchanged, so an existing call can be switched over by changing the command name.
+
+Authentication is selected with -AuthenticationType. The default, WebView2, signs in with an embedded Microsoft Edge browser and works for interactive use, including Entra ID and multi-factor authentication. OAuth authenticates with a client credential and needs no interaction, which is what unattended scripts and scheduled jobs should use. Browser, Windows, Integrated and Basic cover Selenium-driven sign-in and the classic on-premises authentication schemes.
+
+After a successful interactive sign-in the session cookie is cached, encrypted with DPAPI for the current user, so subsequent commands in the same or a later PowerShell session do not prompt again. Use Clear-OmadaWebCache to remove it, or -SkipCookieCache to never write it. Sessions are kept apart by base URL, authentication type and, when known, user, so several Omada environments can be addressed from the same PowerShell session.
+
+For OData feeds that return results one page at a time, -Paged follows every @odata.nextLink and returns the complete result set as a single object.
+
+The command name Invoke-OmadaODataMethod is an alias for this command.
+
+#### Example 1
+
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser" -Credential $UserCredential
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)"
 ```
 
-### Example 6: Retrieve Identity object using Okta OAuth authentication
-```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
-```
+Retrieves one identity from the OData endpoint. Because no -AuthenticationType is given, an embedded Edge browser opens for sign-in the first time; later commands reuse the cached session cookie.
 
-### Example 7: Retrieve all Identity objects for paged OData feeds
+#### Example 2
+
 ```powershell
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity" -Paged
 ```
 
+Retrieves every identity from a paged OData feed. Without -Paged only the first page is returned, together with an @odata.nextLink property.
+
+#### Example 3
+
+```powershell
+$ClientCredential = Get-Credential
+$Identities = Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity" -Paged -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -Credential $ClientCredential
+```
+
+Extracts all identities without any interaction, authenticating to Entra ID with a client id and secret. This is the form to use in unattended scripts and scheduled tasks.
+
+#### Example 4
+
+```powershell
+$Body = @{ FIRSTNAME = "Jane"; LASTNAME = "Doe" }
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/DataObject/Identity" -Method "POST" -Body $Body
+```
+
+Creates an object through the Omada API. -Body is accepted as a hashtable and sent as JSON; the Content-Type and Accept headers default to application/json.
+
+#### Example 5
+
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "Browser"
+```
+
+Signs in through a full Microsoft Edge browser driven by Selenium instead of the embedded WebView2 browser. The matching WebDriver version is installed automatically.
+
+#### Example 6
+
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -Credential $UserCredential
+```
+
+Signs in interactively, but hands the sign-in page the account to use and fills in the password, which saves picking the right account when several are signed in. With number matching multi-factor authentication the number is copied to the clipboard, so with Phone Link and clipboard sharing active it can be pasted straight into the Authenticator app.
+
+#### Example 7
+
+```powershell
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
+```
+
+Authenticates against an identity provider other than Entra ID - here Okta - by supplying the token endpoint and scope explicitly.
+
+#### Example 8
+
+```powershell
+Invoke-OmadaRestMethod -Uri "https://omada.contoso.local/odata/dataobjects/identity(123456)" -AuthenticationType "Integrated"
+```
+
+Retrieves an identity from an on-premises installation using Windows Integrated Authentication, without opening a browser.
+
+### Invoke-OmadaWebRequest
+
+Invoke-OmadaWebRequest wraps the built-in Invoke-WebRequest and adds the authentication Omada Identity Cloud and on-premises installations need. Every parameter of Invoke-WebRequest is accepted unchanged, so an existing call can be switched over by changing the command name.
+
+Use this command when the response itself matters - status code, headers, raw content or a file to download. For REST and OData endpoints that return JSON, Invoke-OmadaRestMethod is usually the better fit because it deserializes the response for you and can page through OData feeds.
+
+Authentication is selected with -AuthenticationType. The default, WebView2, signs in with an embedded Microsoft Edge browser and works for interactive use, including Entra ID and multi-factor authentication. OAuth authenticates with a client credential and needs no interaction, which is what unattended scripts and scheduled jobs should use. Browser, Windows, Integrated and Basic cover Selenium-driven sign-in and the classic on-premises authentication schemes.
+
+After a successful interactive sign-in the session cookie is cached, encrypted with DPAPI for the current user, so subsequent commands in the same or a later PowerShell session do not prompt again. Use Clear-OmadaWebCache to remove it, or -SkipCookieCache to never write it. Sessions are kept apart by base URL, authentication type and, when known, user, so several Omada environments can be addressed from the same PowerShell session.
+
+#### Example 1
+
+```powershell
+Invoke-OmadaWebRequest -Uri "https://example.omada.cloud"
+```
+
+Signs in to the Omada portal through an embedded Edge browser and returns the response. Useful as a first call to confirm that authentication works and to prime the cookie cache.
+
+#### Example 2
+
+```powershell
+$Response = Invoke-OmadaWebRequest -Uri "https://example.omada.cloud/api/Health"
+$Response.StatusCode
+```
+
+Keeps the full response so the status code and headers can be inspected, which Invoke-OmadaRestMethod does not expose.
+
+#### Example 3
+
+```powershell
+$ClientCredential = Get-Credential
+Invoke-OmadaWebRequest -Uri "https://example.omada.cloud/Report/Export?id=42" -OutFile "C:\Temp\report.xlsx" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -Credential $ClientCredential
+```
+
+Downloads a report to disk without any interaction, authenticating to Entra ID with a client id and secret.
+
+#### Example 4
+
+```powershell
+Invoke-OmadaWebRequest -Uri "https://omada.contoso.local/OData/DataObjects" -AuthenticationType "Windows" -Credential $UserCredential
+```
+
+Requests an on-premises endpoint with explicit Windows credentials, negotiating Kerberos or NTLM when the server issues a challenge.
+<!-- END GENERATED EXAMPLES -->
+
 ## PARAMETERS
-The built-in are the same for both Invoke-OmadaRestMethod and Invoke-OmadaWebRequest.
 
 <!-- BEGIN GENERATED PARAMETERS -->
-### -AuthenticationType <string>
+### Invoke-OmadaRestMethod and Invoke-OmadaWebRequest parameters
+
+These are added on top of the parameters of the wrapped cmdlet and are the same for both commands, unless stated otherwise.
+
+#### -AuthenticationType <string>
 The type of authentication to use for the request. Default is `WebView2`. The acceptable values for this parameter are:
 - `None`: No explicit authentication is used.
 - `Basic`: Requires **Credential**. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: basic` header in the format of `base64(user:password)`.
@@ -174,7 +373,7 @@ Supplying **AuthenticationType** overrides any Authorization headers supplied to
         Accept wildcard characters: false
 ```
 
-### -EntraIdTenantId <string>
+#### -EntraIdTenantId <string>
 The tenant id or name for -AuthenticationType OAuth.
 
 ```yaml
@@ -188,7 +387,7 @@ The tenant id or name for -AuthenticationType OAuth.
         Accept wildcard characters: false
 ```
 
-### -EntraApplicationIdUri <string>
+#### -EntraApplicationIdUri <string>
 Enter the application ID URI when the base url does not equal the configured application ID URI in Entra ID. This parameter is used for -AuthenticationType OAuth.
 
 ```yaml
@@ -202,7 +401,7 @@ Enter the application ID URI when the base url does not equal the configured app
         Accept wildcard characters: false
 ```
 
-### -OAuthScope <string>
+#### -OAuthScope <string>
 OAuth2 scope to be used. Defaults to the form used for Entra ID. This parameter is used for -AuthenticationType OAuth.
 
 ```yaml
@@ -216,7 +415,7 @@ OAuth2 scope to be used. Defaults to the form used for Entra ID. This parameter 
         Accept wildcard characters: false
 ```
 
-### -OAuthUri <string>
+#### -OAuthUri <string>
 Provide a custom OAuth2 URI. Defaults to the form used for Entra ID based on the provided EntraIdTenantId. This parameter is used for -AuthenticationType OAuth.
 
 ```yaml
@@ -230,7 +429,7 @@ Provide a custom OAuth2 URI. Defaults to the form used for Entra ID based on the
         Accept wildcard characters: false
 ```
 
-### -CookiePath <string>
+#### -CookiePath <string>
 Attempts to load a stored Omada authentication cookie from this path. This file will be updated when re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached.
 
 > [!IMPORTANT]
@@ -247,7 +446,7 @@ Attempts to load a stored Omada authentication cookie from this path. This file 
         Accept wildcard characters: false
 ```
 
-### -SkipCookieCache <switch>
+#### -SkipCookieCache <switch>
 Do not cache the encrypted Omada authentication cookie. It will also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationType Browser and -AuthenticationType WebView2.
 
 ```yaml
@@ -261,7 +460,7 @@ Do not cache the encrypted Omada authentication cookie. It will also not be cach
         Accept wildcard characters: false
 ```
 
-### -ForceAuthentication <switch>
+#### -ForceAuthentication <switch>
 Force authentication to Omada even when the cookie is still valid.
 
 ```yaml
@@ -275,7 +474,7 @@ Force authentication to Omada even when the cookie is still valid.
         Accept wildcard characters: false
 ```
 
-### -EdgeProfile <string>
+#### -EdgeProfile <string>
 Use the specified Edge profile for the authentication request. The acceptable values for this parameter are based on the available profiles on your system.
 
 > [!IMPORTANT]
@@ -292,7 +491,7 @@ Use the specified Edge profile for the authentication request. The acceptable va
         Accept wildcard characters: false
 ```
 
-### -InPrivate <switch>
+#### -InPrivate <switch>
 Use InPrivate mode for the authentication request.
 
 ```yaml
@@ -306,7 +505,7 @@ Use InPrivate mode for the authentication request.
         Accept wildcard characters: false
 ```
 
-### -UseWebView2 <switch>
+#### -UseWebView2 <switch>
 Use WebView2 instead of Selenium WebDriver for browser-based authentication.
 
 > [!IMPORTANT]
@@ -323,7 +522,7 @@ Use WebView2 instead of Selenium WebDriver for browser-based authentication.
         Accept wildcard characters: false
 ```
 
-### -DebugWebView2 <switch>
+#### -DebugWebView2 <switch>
 Use this parameter to enable WebView2 browser debugging options like Developer Tools
 
 ```yaml
@@ -337,7 +536,7 @@ Use this parameter to enable WebView2 browser debugging options like Developer T
         Accept wildcard characters: false
 ```
 
-### -Paged <switch>
+#### -Paged <switch>
 Use this parameter to retrieve all pages of data from the API. This parameter is only applicable to Omada API endpoints that support pagination. Only supported for HTTP GET requests (the default); combining -Paged with -Method PUT, POST, or PATCH throws a terminating error.
 
 This parameter only applies to Invoke-OmadaRestMethod.
@@ -353,7 +552,7 @@ This parameter only applies to Invoke-OmadaRestMethod.
         Accept wildcard characters: false
 ```
 
-### -SessionKey <string>
+#### -SessionKey <string>
 Explicitly discriminate the reusable authentication session (cookie, base URL, WebView2/Selenium profile) to use for this call, in addition to the base URL, -AuthenticationType and -Credential (when supplied). Use this to keep multiple concurrent sessions apart when they would otherwise share the same base URL, authentication type and credential - for example two interactive Browser/WebView2 logins to the same tenant before either has a known user identity. Has no effect on which cookie/base URL etc. is used beyond distinguishing sessions from each other; defaults to an empty value, which reproduces prior single-session-per-(base URL, AuthenticationType, Credential) behavior.
 
 ```yaml
@@ -366,6 +565,51 @@ Explicitly discriminate the reusable authentication session (cookie, base URL, W
         Dynamic: true
         Accept wildcard characters: false
 ```
+
+### Clear-OmadaWebCache parameters
+
+#### -Force <switch>
+Remove without asking for confirmation. -WhatIf still takes precedence.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+#### -ListOnly <switch>
+Report what is stored without removing anything.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+#### -Scope <string[]>
+Which artefacts to report and remove: All (the default), Cookies, BrowserProfiles,
+Binaries or Sessions. More than one value can be given.
+
+```yaml
+        Type: System.String[]
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
 <!-- END GENERATED PARAMETERS -->
 
 ### Invoke-RestMethod Parameters / Invoke-WebRequest Parameters
@@ -375,11 +619,22 @@ The following native parameters are excluded because they are handled within the
 
 Please see Microsoft documentation for all other available options.
 
+## SECURITY
+
+Found a security problem? Please report it privately through [GitHub Security Advisories](https://github.com/Fortigi/OmadaWeb.PS/security/advisories/new) instead of opening an issue. See [SECURITY.md](SECURITY.md) for supported versions, response targets and scope.
+
+Every release has a CycloneDX Software Bill of Materials (`OmadaWeb.PS-<version>.cdx.json`) attached as a release asset, covering the module and the components it downloads at runtime. The inventory it is generated from is [`Build/Dependencies.psd1`](Build/Dependencies.psd1).
+
 ## CONTRIBUTING
 
 Contributions are welcome! If you have ideas for improvements or bug fixes, feel free to open a pull request on [GitHub](https://github.com/Fortigi/OmadaWeb.PS).
 
-After changing dynamic parameters in `OmadaWeb.PS/Private/Set-DynamicParameter.ps1`, run `Build/Update-ReadmeHelp.ps1` (PowerShell 7) to refresh the generated SYNTAX and PARAMETERS sections of this README before committing.
+The COMMANDS, SYNTAX, EXAMPLES and PARAMETERS sections of this README are generated from the module, so help is written once:
+
+- Comment-based help in `OmadaWeb.PS/Public/*.ps1` is the source of every synopsis, description and example, and of the parameter descriptions of commands that declare their parameters normally. It is the same help `Get-Help` shows.
+- The `-HelpMessage` strings in `OmadaWeb.PS/Private/Set-DynamicParameter.ps1` are the source of the parameter descriptions of `Invoke-OmadaRestMethod` and `Invoke-OmadaWebRequest`, whose parameters are all added at runtime and so cannot carry comment-based `.PARAMETER` entries. `Get-Help` reads the same strings.
+
+After changing either, run `Build/Update-ReadmeHelp.ps1` (PowerShell 7) to refresh those sections before committing. Do not edit them by hand. `Build/Test-CommentBasedHelp.ps1` runs as part of the build and fails when an exported command is missing a synopsis, a description, at least three examples, a link, or help for one of its parameters.
 
 ## RELATED LINKS
 

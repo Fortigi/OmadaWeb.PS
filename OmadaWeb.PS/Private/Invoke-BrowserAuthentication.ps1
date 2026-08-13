@@ -100,7 +100,7 @@ function Invoke-BrowserAuthentication {
             "Cookie file exported to: {0}" -f $CookiePath | Write-Verbose
         }
         catch [System.UnauthorizedAccessException] {
-            "Unable to export the cookie file due insufficient permissions in folder {0}" -f $($BoundParams.CookiePath) | Write-Warning
+            "Unable to export the cookie file due to insufficient permissions in folder {0}" -f $($BoundParams.CookiePath) | Write-Warning
         }
         catch {
             $PSCmdlet.ThrowTerminatingError($PSItem)
@@ -125,7 +125,7 @@ function Invoke-BrowserAuthentication {
             "{0} - Updated encrypted cookie cache: {1}" -f $MyInvocation.MyCommand, $SessionContext.CookieCacheFilePath | Write-Verbose
         }
         catch [System.UnauthorizedAccessException] {
-            "Unable to cache cookie due insufficient permissions to the temp folder" | Write-Warning
+            "Unable to cache cookie due to insufficient permissions in folder '{0}'" -f (Split-Path $SessionContext.CookieCacheFilePath) | Write-Warning
         }
         catch {
             $PSCmdlet.ThrowTerminatingError($PSItem)

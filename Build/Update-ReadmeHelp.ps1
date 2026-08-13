@@ -3,17 +3,28 @@
 
 <#
 .SYNOPSIS
-    Regenerates the SYNTAX and PARAMETERS sections of README.md from the live OmadaWeb.PS module.
+    Regenerates the COMMANDS, SYNTAX, EXAMPLES and PARAMETERS sections of README.md from the live
+    OmadaWeb.PS module.
 .DESCRIPTION
-    Invoke-OmadaRestMethod and Invoke-OmadaWebRequest have no comment-based help - every parameter is
-    added at runtime via DynamicParam/Set-DynamicParameter.ps1, and the parameter descriptions live as
-    -HelpMessage strings on the New-DynamicParam calls in that file. This script imports the module,
-    reflects over the resulting Get-Command output (which resolves the dynamic parameters and mirrors
-    the real parameter sets of Invoke-RestMethod/Invoke-WebRequest), and rewrites the generated regions
-    of README.md - delimited by "<!-- BEGIN GENERATED ... -->" / "<!-- END GENERATED ... -->" comments -
-    so hand-written prose elsewhere in the file is never touched.
+    The README is generated from the module so that help is written once and cannot drift. It is read
+    from two sources, because the module's commands document themselves in two different ways:
 
-    Run this after changing dynamic parameters in OmadaWeb.PS/Private/Set-DynamicParameter.ps1.
+      - Comment-based help in OmadaWeb.PS/Public/*.ps1 supplies the synopsis, description and examples
+        of every exported command, and the parameter descriptions of commands that declare their
+        parameters normally. This is the same help Get-Help shows.
+      - -HelpMessage strings on the New-DynamicParam calls in
+        OmadaWeb.PS/Private/Set-DynamicParameter.ps1 supply the parameter descriptions of the
+        Invoke-Omada* wrappers, whose parameters are all added at runtime via DynamicParam and so
+        cannot carry comment-based .PARAMETER entries. Get-Help reads the same strings.
+
+    The script imports the module and reflects over the resulting Get-Command output (which resolves
+    the dynamic parameters and mirrors the real parameter sets of Invoke-RestMethod/Invoke-WebRequest),
+    then rewrites the generated regions of README.md - delimited by "<!-- BEGIN GENERATED ... -->" /
+    "<!-- END GENERATED ... -->" comments - so hand-written prose elsewhere in the file is never
+    touched.
+
+    Run this after changing comment-based help in OmadaWeb.PS/Public/*.ps1 or dynamic parameters in
+    OmadaWeb.PS/Private/Set-DynamicParameter.ps1.
 
     Note: the real parameter sets (StandardMethod/StandardMethodNoProxy/CustomMethod/CustomMethodNoProxy)
     only exist on PowerShell 7's Invoke-RestMethod/Invoke-WebRequest - Windows PowerShell 5.1's versions
@@ -23,18 +34,16 @@
 [CmdletBinding()]
 param(
     [string]$ModuleManifestPath = (Join-Path $PSScriptRoot "..\OmadaWeb.PS\OmadaWeb.PS.psd1"),
-    [string]$ReadmePath = (Join-Path $PSScriptRoot "..\README.md")
+    [string]$ReadmePath = (Join-Path $PSScriptRoot "..\README.md"),
+    [string]$PublicCommandsPath = (Join-Path $PSScriptRoot "PublicCommands.psd1")
 )
 
 $ErrorActionPreference = "Stop"
 
-# Maps each Omada wrapper function to the native cmdlet it wraps (mirrors the $Script:FunctionName
-# assignment inside each Public function's DynamicParam block). Add an entry here if a new wrapper
-# function is introduced.
-$NativeCommandMap = [ordered]@{
-    "Invoke-OmadaRestMethod" = "Invoke-RestMethod"
-    "Invoke-OmadaWebRequest" = "Invoke-WebRequest"
-}
+# Maps each exported function to the native cmdlet it wraps (mirroring the $Script:FunctionName
+# assignment inside that function's DynamicParam block), or to an empty string when it is a command
+# in its own right. Shared with Build/Test-CommentBasedHelp.ps1.
+$NativeCommandMap = (Import-PowerShellDataFile -Path $PublicCommandsPath).WrappedCommands
 
 # Preferred display order for Omada-specific parameters, taken from the declaration order in
 # Set-DynamicParameter.ps1. Any Omada-specific parameter not listed here (e.g. a newly added one)
@@ -134,25 +143,39 @@ function Format-ParameterToken {
 }
 
 function New-SyntaxSection {
-    param($Command, $NativeCommand, [string]$FunctionName, [string]$NativeName, [string[]]$OmadaParameterNames)
+    param($Command, [string]$FunctionName, [string]$NativeName, [string[]]$OmadaParameterNames)
 
     $Blocks = [System.Collections.Generic.List[string]]::new()
     foreach ($ParameterSet in $Command.ParameterSets) {
-        $MandatoryNativeParams = $ParameterSet.Parameters | Where-Object {
-            $_.IsMandatory -and $_.Name -notin $OmadaParameterNames
-        }
-        $OrderedMandatory = @($MandatoryNativeParams | Where-Object Name -eq "Uri") +
-        @($MandatoryNativeParams | Where-Object { $_.Name -ne "Uri" } | Sort-Object Name)
-
         $Tokens = [System.Collections.Generic.List[string]]::new()
         $Tokens.Add($FunctionName)
-        foreach ($Param in $OrderedMandatory) {
-            $Tokens.Add((Format-ParameterToken -ParameterMetadata $Param -Mandatory))
+
+        if ([string]::IsNullOrWhiteSpace($NativeName)) {
+            # A command in its own right: every parameter it declares is listed, since there is no
+            # native cmdlet whose documentation the reader can be sent to for the rest.
+            foreach ($Param in $ParameterSet.Parameters) {
+                if ($Param.Name -in $CommonParameterNames) {
+                    continue
+                }
+                $Tokens.Add((Format-ParameterToken -ParameterMetadata $Param -Mandatory:$Param.IsMandatory))
+            }
+            $Tokens.Add("[<CommonParameters>]")
         }
-        foreach ($Name in $OmadaParameterNames) {
-            $Tokens.Add((Format-ParameterToken -ParameterMetadata $Command.Parameters[$Name]))
+        else {
+            $MandatoryNativeParams = $ParameterSet.Parameters | Where-Object {
+                $_.IsMandatory -and $_.Name -notin $OmadaParameterNames
+            }
+            $OrderedMandatory = @($MandatoryNativeParams | Where-Object Name -eq "Uri") +
+            @($MandatoryNativeParams | Where-Object { $_.Name -ne "Uri" } | Sort-Object Name)
+
+            foreach ($Param in $OrderedMandatory) {
+                $Tokens.Add((Format-ParameterToken -ParameterMetadata $Param -Mandatory))
+            }
+            foreach ($Name in $OmadaParameterNames) {
+                $Tokens.Add((Format-ParameterToken -ParameterMetadata $Command.Parameters[$Name]))
+            }
+            $Tokens.Add("[<{0} Parameters>]" -f $NativeName)
         }
-        $Tokens.Add("[<{0} Parameters>]" -f $NativeName)
 
         $Fence = '```'
         $Header = "### {0} ({1})" -f $FunctionName, $ParameterSet.Name
@@ -161,6 +184,75 @@ function New-SyntaxSection {
         $Blocks.Add(($BlockLines -join "`n"))
     }
     return ($Blocks -join "`n")
+}
+
+function Format-Paragraph {
+    param([string]$Text)
+
+    # Comment-based help is hard-wrapped for the console, but markdown treats a single newline as a
+    # space, so the wrapping has to be undone or the README renders with ragged lines. List items are
+    # the exception: each one has to keep its own line to stay a list.
+    $LogicalLines = [System.Collections.Generic.List[string]]::new()
+    foreach ($Line in ($Text -split "\r?\n")) {
+        $Trimmed = $Line.Trim()
+        if ([string]::IsNullOrWhiteSpace($Trimmed)) {
+            continue
+        }
+        if ($LogicalLines.Count -eq 0 -or $Trimmed -match "^([-*+]|\d+\.)\s") {
+            $LogicalLines.Add($Trimmed)
+        }
+        else {
+            $LogicalLines[$LogicalLines.Count - 1] = "{0} {1}" -f $LogicalLines[$LogicalLines.Count - 1], $Trimmed
+        }
+    }
+    return ($LogicalLines -join "`n")
+}
+
+function New-CommandsSection {
+    param($HelpByFunctionName)
+
+    $Lines = [System.Collections.Generic.List[string]]::new()
+    $Lines.Add("| Command | Description |")
+    $Lines.Add("|---|---|")
+    foreach ($FunctionName in $HelpByFunctionName.Keys) {
+        $Synopsis = ($HelpByFunctionName[$FunctionName].Synopsis | Out-String).Trim() -replace "\s*\r?\n\s*", " "
+        $Lines.Add(("| [``{0}``](#{1}) | {2} |" -f $FunctionName, $FunctionName.ToLowerInvariant(), $Synopsis))
+    }
+    return ($Lines -join "`n")
+}
+
+function New-ExamplesSection {
+    param($HelpByFunctionName)
+
+    $Fence = '```'
+    $Blocks = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($FunctionName in $HelpByFunctionName.Keys) {
+        $Help = $HelpByFunctionName[$FunctionName]
+        $Blocks.Add(("### {0}`n" -f $FunctionName))
+
+        $Description = ($Help.Description | Out-String).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($Description)) {
+            $Paragraphs = $Description -split "\r?\n\s*\r?\n" | ForEach-Object { Format-Paragraph -Text $_ }
+            $Blocks.Add((($Paragraphs -join "`n`n") + "`n"))
+        }
+
+        $ExampleNumber = 0
+        foreach ($Example in @($Help.Examples.Example)) {
+            $ExampleNumber++
+            $Code = ($Example.code | Out-String).Trim()
+            $Remarks = @($Example.remarks | ForEach-Object { $_.Text } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            $RemarkText = Format-Paragraph -Text ($Remarks -join "`n")
+
+            $Blocks.Add(("#### Example {0}`n" -f $ExampleNumber))
+            $Blocks.Add((@(($Fence + "powershell"), $Code, $Fence) -join "`n") + "`n")
+            if (-not [string]::IsNullOrWhiteSpace($RemarkText)) {
+                $Blocks.Add($RemarkText + "`n")
+            }
+        }
+    }
+
+    return (($Blocks -join "`n").TrimEnd())
 }
 
 function Format-Description {
@@ -189,7 +281,7 @@ function Format-Description {
 }
 
 function New-ParametersSection {
-    param($ParameterInfoByName)
+    param($ParameterInfoByName, [switch]$Dynamic, [string]$HeadingPrefix = "####")
 
     $Blocks = foreach ($Name in ($ParameterInfoByName.Keys | Sort-Object -Property @(
                 @{ Expression = { $Index = $PreferredParameterOrder.IndexOf($_); if ($Index -lt 0) { [int]::MaxValue } else { $Index } } },
@@ -201,7 +293,7 @@ function New-ParametersSection {
         $IsSwitch = $ParameterMetadata.ParameterType -eq [System.Management.Automation.SwitchParameter]
         $TypeToken = if ($IsSwitch) { "<switch>" } else { "<{0}>" -f (Get-FriendlyTypeName -Type $ParameterMetadata.ParameterType) }
 
-        $Description = Format-Description -HelpMessage $Attribute.HelpMessage -ParameterName $Name
+        $Description = Format-Description -HelpMessage $Info.HelpText -ParameterName $Name
         if ($Info.Functions.Count -lt $Info.TotalFunctionCount) {
             $Description += "`n`nThis parameter only applies to {0}." -f ($Info.Functions -join ", ")
         }
@@ -229,11 +321,11 @@ function New-ParametersSection {
             "        Accept pipeline input: $AcceptPipeline",
             "        Parameter set name: $ParameterSetName",
             "        Aliases: $Aliases",
-            "        Dynamic: true",
+            "        Dynamic: $($Dynamic.IsPresent.ToString().ToLowerInvariant())",
             "        Accept wildcard characters: $($SupportsWildcards.ToString().ToLowerInvariant())"
         )
         $ParamBlockLines = @(
-            "### -$Name $TypeToken",
+            "$HeadingPrefix -$Name $TypeToken",
             $Description,
             "",
             ($Fence + "yaml")
@@ -245,27 +337,65 @@ function New-ParametersSection {
 
 Import-Module $ModuleManifestPath -Force
 
+$CommonParameterNames = @([System.Management.Automation.Cmdlet]::CommonParameters)
+$OptionalCommonParameterNames = @([System.Management.Automation.Cmdlet]::OptionalCommonParameters)
+
 $Manifest = Import-PowerShellDataFile $ModuleManifestPath
 $SyntaxSections = [System.Collections.Generic.List[string]]::new()
+$StandaloneParameterSections = [System.Collections.Generic.List[string]]::new()
+$HelpByFunctionName = [ordered]@{}
 $ParameterInfoByName = [ordered]@{}
+$WrapperFunctionNames = [System.Collections.Generic.List[string]]::new()
 
 foreach ($FunctionName in $Manifest.FunctionsToExport) {
-    $NativeName = $NativeCommandMap[$FunctionName]
-    if (-not $NativeName) {
-        throw "No native command mapping registered for '$FunctionName' in `$NativeCommandMap. Update Build/Update-ReadmeHelp.ps1."
+    if (-not $NativeCommandMap.ContainsKey($FunctionName)) {
+        throw "'$FunctionName' is exported but not listed in $PublicCommandsPath. Add it, mapping it to the cmdlet it wraps or to an empty string."
     }
+    $NativeName = $NativeCommandMap[$FunctionName]
 
     $Command = Get-Command -Name $FunctionName
+    $HelpByFunctionName[$FunctionName] = Get-Help -Name $FunctionName -Full
+
+    if ([string]::IsNullOrWhiteSpace($NativeName)) {
+        # A command in its own right: its parameters are declared normally, so their descriptions
+        # come from the .PARAMETER entries in its comment-based help.
+        $SyntaxSections.Add((New-SyntaxSection -Command $Command -FunctionName $FunctionName -NativeName "" -OmadaParameterNames @()))
+
+        $OwnParameterInfo = [ordered]@{}
+        foreach ($Name in $Command.Parameters.Keys) {
+            # -WhatIf and -Confirm are listed in the syntax, because whether a command supports them
+            # is worth knowing, but they are documented by PowerShell itself rather than here.
+            if ($Name -in $CommonParameterNames -or $Name -in $OptionalCommonParameterNames) {
+                continue
+            }
+            $ParameterHelp = $HelpByFunctionName[$FunctionName].parameters.parameter | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+            $OwnParameterInfo[$Name] = [ordered]@{
+                ParameterMetadata    = $Command.Parameters[$Name]
+                HelpText             = (($ParameterHelp.description | ForEach-Object { $_.Text }) -join "`n").Trim()
+                Functions            = [System.Collections.Generic.List[string]]::new()
+                AllParameterSetNames = $Command.ParameterSets.Name
+                TotalFunctionCount   = 1
+            }
+            $OwnParameterInfo[$Name].Functions.Add($FunctionName)
+        }
+
+        $StandaloneParameterSections.Add(("### {0} parameters`n`n{1}" -f $FunctionName, (New-ParametersSection -ParameterInfoByName $OwnParameterInfo)))
+        continue
+    }
+
+    $WrapperFunctionNames.Add($FunctionName)
     $NativeCommand = Get-Command -Name $NativeName
     $OmadaParameterNames = Get-OmadaSpecificParameterNames -Command $Command -NativeCommand $NativeCommand
 
-    $SyntaxSections.Add((New-SyntaxSection -Command $Command -NativeCommand $NativeCommand -FunctionName $FunctionName -NativeName $NativeName -OmadaParameterNames $OmadaParameterNames))
+    $SyntaxSections.Add((New-SyntaxSection -Command $Command -FunctionName $FunctionName -NativeName $NativeName -OmadaParameterNames $OmadaParameterNames))
 
     foreach ($Name in $OmadaParameterNames) {
         if (-not $ParameterInfoByName.Contains($Name)) {
+            $Attribute = Get-ParameterAttribute -ParameterMetadata $Command.Parameters[$Name]
             $ParameterInfoByName[$Name] = [ordered]@{
-                ParameterMetadata  = $Command.Parameters[$Name]
-                Functions          = [System.Collections.Generic.List[string]]::new()
+                ParameterMetadata    = $Command.Parameters[$Name]
+                HelpText             = $Attribute.HelpMessage
+                Functions            = [System.Collections.Generic.List[string]]::new()
                 AllParameterSetNames = $Command.ParameterSets.Name
             }
         }
@@ -274,11 +404,17 @@ foreach ($FunctionName in $Manifest.FunctionsToExport) {
 }
 
 foreach ($Info in $ParameterInfoByName.Values) {
-    $Info.TotalFunctionCount = $Manifest.FunctionsToExport.Count
+    $Info.TotalFunctionCount = $WrapperFunctionNames.Count
 }
 
 $SyntaxMarkdown = ($SyntaxSections -join "`n")
-$ParametersMarkdown = New-ParametersSection -ParameterInfoByName $ParameterInfoByName
+$CommandsMarkdown = New-CommandsSection -HelpByFunctionName $HelpByFunctionName
+$ExamplesMarkdown = New-ExamplesSection -HelpByFunctionName $HelpByFunctionName
+
+$ParametersMarkdown = "### {0} parameters`n`nThese are added on top of the parameters of the wrapped cmdlet and are the same for both commands, unless stated otherwise.`n`n{1}" -f ($WrapperFunctionNames -join " and "), (New-ParametersSection -ParameterInfoByName $ParameterInfoByName -Dynamic)
+if ($StandaloneParameterSections.Count -gt 0) {
+    $ParametersMarkdown += "`n`n" + ($StandaloneParameterSections -join "`n`n")
+}
 
 $ReadmeContent = Get-Content -Path $ReadmePath -Raw -Encoding UTF8
 
@@ -292,7 +428,9 @@ function Set-MarkerRegion {
     return [regex]::Replace($Content, $Pattern, { param($Match) $Match.Groups[1].Value + $Replacement + $Match.Groups[2].Value })
 }
 
+$ReadmeContent = Set-MarkerRegion -Content $ReadmeContent -Marker "COMMANDS" -Replacement $CommandsMarkdown
 $ReadmeContent = Set-MarkerRegion -Content $ReadmeContent -Marker "SYNTAX" -Replacement $SyntaxMarkdown
+$ReadmeContent = Set-MarkerRegion -Content $ReadmeContent -Marker "EXAMPLES" -Replacement $ExamplesMarkdown
 $ReadmeContent = Set-MarkerRegion -Content $ReadmeContent -Marker "PARAMETERS" -Replacement $ParametersMarkdown
 
 Set-Content -Path $ReadmePath -Value $ReadmeContent -Encoding UTF8 -NoNewline
