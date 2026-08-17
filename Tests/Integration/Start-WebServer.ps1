@@ -146,7 +146,7 @@ catch{{
                 $ProbeStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
                 while ($ProbeStopwatch.Elapsed -lt $ProbeDeadline) {
                     if ($WebServerProcess.HasExited) {
-                        "Web server process exited with code {0} while probing" -f $WebServerProcess.ExitCode | Write-Verbose
+                        "Web server process exited while probing" | Write-Verbose
                         break
                     }
 
@@ -165,11 +165,19 @@ catch{{
                 }
 
                 $ProbeStopwatch.Stop()
-                if ($Result.StatusCode -ne 200) {
+                if ($null -eq $Result -or $Result.StatusCode -ne 200) {
                     $StdOutContent = Get-Content $StdOutLog -Raw -ErrorAction SilentlyContinue
                     $StdErrContent = Get-Content $StdErrLog -Raw -ErrorAction SilentlyContinue
                     if ($WebServerProcess.HasExited) {
-                        $ProcessState = "exited with code {0}" -f $WebServerProcess.ExitCode
+                        # ExitCode is not always available on a Start-Process -PassThru object,
+                        # even once the process has exited, so fall back to a plain statement.
+                        $ExitCode = $WebServerProcess.ExitCode
+                        if ($null -eq $ExitCode) {
+                            $ProcessState = "exited (exit code unavailable)"
+                        }
+                        else {
+                            $ProcessState = "exited with code {0}" -f $ExitCode
+                        }
                     }
                     else {
                         $ProcessState = "still running, but did not answer within {0:N0} seconds" -f $ProbeStopwatch.Elapsed.TotalSeconds
