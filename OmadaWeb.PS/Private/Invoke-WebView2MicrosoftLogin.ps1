@@ -94,7 +94,7 @@ function Invoke-WebView2MicrosoftLogin {
         return element[property] || element.getAttribute(property);
     }
     return null;
-})();
+})
 "@
 
 

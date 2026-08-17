@@ -58,6 +58,23 @@ Describe 'ConvertTo-JavaScriptLiteral' -Tag 'Unit' {
             }
         }
 
+        It 'Escapes the Unicode line and paragraph separators' {
+            InModuleScope 'OmadaWeb.PS' {
+                # U+2028 and U+2029 are legal raw in JSON but terminate a JavaScript string literal
+                # before ES2019. Built from code points so this file stays pure ASCII on disk.
+                $LineSeparator = [System.String][System.Char]0x2028
+                $ParagraphSeparator = [System.String][System.Char]0x2029
+                $Value = "a{0}b{1}c" -f $LineSeparator, $ParagraphSeparator
+
+                $Literal = ConvertTo-JavaScriptLiteral $Value
+
+                $Literal.Contains($LineSeparator) | Should -BeFalse
+                $Literal.Contains($ParagraphSeparator) | Should -BeFalse
+                # The escaped form is still JSON, so no information is lost.
+                ($Literal | ConvertFrom-Json) | Should -BeExactly $Value
+            }
+        }
+
         It 'Emits the JavaScript null literal for a null value' {
             InModuleScope 'OmadaWeb.PS' {
                 (ConvertTo-JavaScriptLiteral $null) | Should -BeExactly 'null'
