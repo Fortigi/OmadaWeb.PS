@@ -349,8 +349,8 @@ function Invoke-WebView2MicrosoftLogin {
                                 "Scenario 1: CheckingForError" | Write-Verbose
                                 if ($Script:LoginTask.IsCompleted) {
                                     if (-not $Script:LoginTask.IsFaulted) {
-                                        $errorMessage = $Script:LoginTask.Result -replace '"', ''
-                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage) -and $errorMessage -ne "null") {
+                                        $errorMessage = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
+                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
                                             Write-Warning "Login error detected: $errorMessage"
                                             Write-Warning "Please verify your credentials and try again. Automatic login aborted."
                                             $Script:LoginFailed = $true
@@ -455,8 +455,8 @@ function Invoke-WebView2MicrosoftLogin {
                                 "Scenario 2: CheckingForError" | Write-Verbose
                                 if ($Script:LoginTask.IsCompleted) {
                                     if (-not $Script:LoginTask.IsFaulted) {
-                                        $errorMessage = $Script:LoginTask.Result -replace '"', ''
-                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage) -and $errorMessage -ne "null") {
+                                        $errorMessage = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
+                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
                                             "Login error detected: $errorMessage" | Write-Warning
                                             "Please verify your credentials and try again. Automatic login aborted." | Write-Warning
                                             $Script:LoginFailed = $true
@@ -556,7 +556,7 @@ function Invoke-WebView2MicrosoftLogin {
                                 "Scenario 3: CheckingBackButton" | Write-Verbose
                                 if ($Script:LoginTask.IsCompleted) {
                                     if (-not $Script:LoginTask.IsFaulted) {
-                                        $Script:BackButtonText = $Script:LoginTask.Result -replace '"', ''
+                                        $Script:BackButtonText = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
                                         # Now check submit button
                                         $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript($(ConvertTo-JavaScriptLiteral $SubmitButtonId), $(ConvertTo-JavaScriptLiteral 'textContent'))")
                                         $Script:LoginSubState = "CheckingSubmitButton"
@@ -571,7 +571,7 @@ function Invoke-WebView2MicrosoftLogin {
                                 "Scenario 3: CheckingSubmitButton" | Write-Verbose
                                 if ($Script:LoginTask.IsCompleted) {
                                     if (-not $Script:LoginTask.IsFaulted) {
-                                        $submitText = $Script:LoginTask.Result -replace '"', ''
+                                        $submitText = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
                                         if ($Script:BackButtonText -like "*No*" -and $submitText -like "*Yes*") {
                                             "Clicking 'No' to stay signed in prompt..." | Write-Verbose
                                             $clickScript = "$clickElementScript($(ConvertTo-JavaScriptLiteral $ButtonBackId))"

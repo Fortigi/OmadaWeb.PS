@@ -110,8 +110,12 @@ Describe 'ConvertTo-JavaScriptLiteral' -Tag 'Unit' {
                 $Script | Should -BeLike "*(`"i0118`", `"*`")"
                 $Script | Should -Not -BeLike "*('i0118'*"
 
-                # The argument list parses back to exactly the two intended arguments.
-                $Arguments = "[{0}]" -f $Script.Substring($Script.LastIndexOf('(') + 1).TrimEnd(')') | ConvertFrom-Json
+                # The argument list parses back to exactly the two intended arguments. It is cut out
+                # by position - between the parenthesis that opens the call and the single one that
+                # closes it - because a parenthesis in the value itself must not confuse the test.
+                $OpeningParenthesis = $Script.IndexOf('})') + 2
+                $ArgumentList = $Script.Substring($OpeningParenthesis + 1, $Script.Length - $OpeningParenthesis - 2)
+                $Arguments = "[{0}]" -f $ArgumentList | ConvertFrom-Json
                 $Arguments.Count | Should -Be 2
                 $Arguments[0] | Should -BeExactly 'i0118'
                 $Arguments[1] | Should -BeExactly $Password
