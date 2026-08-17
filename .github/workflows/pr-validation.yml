@@ -1,9 +1,25 @@
 name: PR Validation
 
+# Runs on `issue_comment`, so GITHUB_SHA / github.ref always point at the default
+# branch, never at the PR being validated. Everything that identifies the PR has to
+# come from `needs.dispatch.outputs.head_sha` — never from the ambient github context —
+# otherwise concurrent validations of different PRs all report against main.
+run-name: >-
+  ${{ github.event_name == 'issue_comment'
+  && format('PR Validation #{0} — {1}', github.event.issue.number, github.event.issue.title)
+  || format('PR Validation — {0}', github.ref_name) }}
+
 on:
   workflow_dispatch:
   issue_comment:
     types: [created]
+
+# Keyed on the PR number so validations of *different* PRs run in parallel, while a
+# second /validate on the same PR supersedes the first instead of racing it to write
+# the commit status.
+concurrency:
+  group: pr-validation-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -129,18 +145,103 @@ jobs:
           $exists = Test-Path 'buildoutput/TestResults.xml'
           "exists=$exists" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Publish test results
-        uses: dorny/test-reporter@v3
+      # Reduce the JUnit report Pester emits to a small JSON summary. Kept compatible
+      # with Windows PowerShell 5.1, since this job runs under both shells.
+      - name: Summarize test results
+        id: summarize
         if: always() && steps.test-results.outputs.exists == 'True'
+        run: |
+          [xml]$doc = Get-Content -LiteralPath 'buildoutput/TestResults.xml' -Raw
+
+          $cases = $doc.SelectNodes('//testcase')
+          $failures = @()
+          $skipped = 0
+          foreach ($case in $cases) {
+            $failure = $case.SelectSingleNode('failure')
+            if ($null -ne $failure) {
+              $failures += [PSCustomObject]@{
+                name    = '{0}.{1}' -f $case.GetAttribute('classname'), $case.GetAttribute('name')
+                message = $failure.GetAttribute('message')
+                details = $failure.InnerText
+              }
+              continue
+            }
+            if ($null -ne $case.SelectSingleNode('skipped')) { $skipped++ }
+          }
+
+          $summary = [PSCustomObject]@{
+            total    = $cases.Count
+            failed   = $failures.Count
+            skipped  = $skipped
+            passed   = $cases.Count - $failures.Count - $skipped
+            failures = @($failures | Select-Object -First 50)
+          }
+
+          $json = $summary | ConvertTo-Json -Depth 5
+          [System.IO.File]::WriteAllText("$PWD/buildoutput/TestSummary.json", $json)
+          Write-Host "Tests: $($summary.passed) passed, $($summary.failed) failed, $($summary.skipped) skipped."
+
+      # dorny/test-reporter is deliberately not used here — v1 and v3 alike. Neither has
+      # a head-sha input, and both resolve the commit as
+      # `payload.pull_request?.head.sha ?? github.sha`. An
+      # issue_comment payload carries `issue.pull_request`, not `pull_request`, so it
+      # falls back to github.sha — the tip of main. Every PR's report landed on the same
+      # main commit under the same check name, so no PR showed its own results and
+      # simultaneous validations were indistinguishable. Create the check ourselves,
+      # against the PR head this run actually validated.
+      - name: Publish test results
+        # Gated on the summarize step rather than on the XML existing: if summarization
+        # failed there is no TestSummary.json, and the reader's ENOENT would bury the
+        # real error.
+        if: always() && steps.summarize.outcome == 'success'
+        uses: actions/github-script@v9
         with:
-          name: Pester Tests (${{ matrix.shell }})
-          path: buildoutput/TestResults.xml
-          reporter: java-junit
+          script: |
+            const fs = require('fs');
+            const raw = fs.readFileSync('buildoutput/TestSummary.json', 'utf8').replace(/^\uFEFF/, '');
+            const result = JSON.parse(raw);
+
+            // ConvertTo-Json collapses a single-element array to a bare object.
+            const failures = Array.isArray(result.failures)
+              ? result.failures
+              : (result.failures ? [result.failures] : []);
+
+            const lines = [
+              `**${result.passed} passed** · **${result.failed} failed** · **${result.skipped} skipped** (${result.total} total)`,
+              '',
+              `Validated \`${{ needs.dispatch.outputs.head_sha }}\` on \`${{ matrix.shell }}\`.`
+            ];
+            for (const failure of failures) {
+              lines.push('', `### ❌ ${failure.name}`, '', '```',
+                `${failure.message || ''}\n${failure.details || ''}`.trim(), '```');
+            }
+            if (result.failed > failures.length) {
+              lines.push('', `_… and ${result.failed - failures.length} more failures._`);
+            }
+            const summary = lines.join('\n').slice(0, 65000);
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Pester Tests (${{ matrix.shell }})',
+              head_sha: '${{ needs.dispatch.outputs.head_sha }}',
+              status: 'completed',
+              conclusion: result.failed > 0 ? 'failure' : 'success',
+              details_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              output: {
+                title: `${result.passed}/${result.total} passed`,
+                summary
+              }
+            });
+
+            await core.summary.addRaw(summary).write();
 
   report-status:
     name: Report status
     needs: [dispatch, validate]
-    if: always() && needs.dispatch.outputs.should_run == 'true'
+    # `!cancelled()` matters: when a newer /validate supersedes this run, the cancelled
+    # run must not overwrite the status the newer run is already writing for the same SHA.
+    if: always() && !cancelled() && needs.dispatch.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Set final commit status
