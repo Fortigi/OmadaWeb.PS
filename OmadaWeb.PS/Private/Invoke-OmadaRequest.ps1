@@ -33,9 +33,30 @@ function Invoke-OmadaRequest {
             $Uri = [System.Uri]::new($BoundParams.Uri)
             if ($null -ne $Uri) {
                 $BaseUrl = $Uri.GetLeftPart([System.UriPartial]::Authority)
+
+                # Update the cached base URL up front - before the suspension probe/abort below.
+                # When the environment is suspended the abort throws before the rest of the process
+                # block runs, so deferring this assignment would leave the global holding the previous
+                # URL and re-probe a suspended environment on every call instead of once. Capture the
+                # previous value first so the probe can still tell whether the base URL actually changed.
+                $PreviousBaseUrl = $Global:OmadaWebPSCurrentBaseUrl
                 "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $BaseUrl | Write-Verbose
                 $Global:OmadaWebPSCurrentBaseUrl = $BaseUrl
                 "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Global:OmadaWebPSCurrentBaseUrl | Write-Verbose
+
+                # Test environment status. The result is cached for the current base URL (only the
+                # single last-used URL is tracked, so alternating between two environments re-probes
+                # each switch) so the probe normally runs once, not on every request. It is
+                # re-evaluated when the base URL changes, when the module is re-imported with -Force
+                # (which resets the module-scoped state), or after a 502 response (flagged on the catch
+                # path below, which is how a suspended environment surfaces once a session is active).
+                if ($BaseUrl -ne $PreviousBaseUrl -or $Script:RecheckEnvironmentSuspended) {
+                    $Script:EnvironmentSuspended = Test-EnvironmentSuspended -Url $BaseUrl -TimeoutSec 5
+                    $Script:RecheckEnvironmentSuspended = $false
+                }
+                if ($Script:EnvironmentSuspended) {
+                    "{0} - Environment is suspended ({1}), aborting request." -f $MyInvocation.MyCommand, $BaseUrl | Write-Error -ErrorAction "Stop"
+                }
             }
             else {
                 "Could not determine the base URL from '{0}', is the URL correct?" -f $BoundParams.Uri | Write-Error -ErrorAction "Stop"
@@ -272,7 +293,28 @@ function Invoke-OmadaRequest {
             }
 
             catch {
-                if (($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and ($_.Exception.Response.StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
+                # Not every exception reaching here is HTTP-based (e.g. the $CustomErrorTrigger
+                # re-auth signal thrown above has no .Response). Resolve the status code once via
+                # PSObject.Properties lookups so a missing .Response/.StatusCode safely evaluates to
+                # $null instead of faulting the catch handler under Set-StrictMode (a bare
+                # $_.Exception.Response.StatusCode read throws on exceptions lacking those members),
+                # and reuse the single value for the 502/401 checks below.
+                $StatusCode = $null
+                $ResponseProperty = $_.Exception.PSObject.Properties['Response']
+                if ($ResponseProperty -and $null -ne $ResponseProperty.Value) {
+                    $StatusCodeProperty = $ResponseProperty.Value.PSObject.Properties['StatusCode']
+                    if ($StatusCodeProperty) {
+                        $StatusCode = $StatusCodeProperty.Value
+                    }
+                }
+                if ($StatusCode -eq 502) {
+                    # A 502 is how a suspended Omada environment surfaces once a session already
+                    # exists; invalidate the cached status so the next request re-probes the
+                    # environment (and can then abort early with the suspended message).
+                    $Script:RecheckEnvironmentSuspended = $true
+                    "{0} - Received HTTP 502; environment suspension will be re-checked on the next request." -f $MyInvocation.MyCommand | Write-Verbose
+                }
+                if (($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and ($StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
 
                     "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
                     $SessionContext.AuthCookie = $null
