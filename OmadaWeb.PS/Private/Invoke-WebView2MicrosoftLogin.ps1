@@ -94,7 +94,7 @@ function Invoke-WebView2MicrosoftLogin {
         return element[property] || element.getAttribute(property);
     }
     return null;
-})();
+})
 "@
 
 
@@ -349,8 +349,8 @@ function Invoke-WebView2MicrosoftLogin {
                                 "Scenario 1: CheckingForError" | Write-Verbose
                                 if ($Script:LoginTask.IsCompleted) {
                                     if (-not $Script:LoginTask.IsFaulted) {
-                                        $errorMessage = $Script:LoginTask.Result -replace '"', ''
-                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage) -and $errorMessage -ne "null") {
+                                        $errorMessage = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
+                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
                                             Write-Warning "Login error detected: $errorMessage"
                                             Write-Warning "Please verify your credentials and try again. Automatic login aborted."
                                             $Script:LoginFailed = $true
@@ -363,7 +363,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         }
                                     }
                                     # No error, proceed to check username field visibility
-                                    $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$isElementVisibleScript('$UserNameElementId')")
+                                    $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$isElementVisibleScript($(ConvertTo-JavaScriptLiteral $UserNameElementId))")
                                     $Script:LoginSubState = "CheckingUsernameField"
                                 }
                                 return $false
@@ -377,7 +377,8 @@ function Invoke-WebView2MicrosoftLogin {
                                         if ($isVisible -eq "true") {
                                             "Matched Scenario 1: Username entry page" | Write-Verbose
                                             "Username field is visible, entering username..." | Write-Verbose
-                                            $usernameScript = "$setElementValueScript('$UserNameElementId', '$($Script:CurrentWebView2Session.Credential.UserName.Trim())')"
+                                            $UserName = $Script:CurrentWebView2Session.Credential.UserName.Trim()
+                                            $usernameScript = "$setElementValueScript($(ConvertTo-JavaScriptLiteral $UserNameElementId), $(ConvertTo-JavaScriptLiteral $UserName))"
                                             $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($usernameScript)
                                             $Script:LoginSubState = "SettingUsername"
                                         }
@@ -404,7 +405,7 @@ function Invoke-WebView2MicrosoftLogin {
                                     if (-not $Script:LoginTask.IsFaulted) {
                                         "Username set, clicking submit..." | Write-Verbose
                                         Start-Sleep -Milliseconds 200
-                                        $clickScript = "$clickElementScript('$SubmitButtonId')"
+                                        $clickScript = "$clickElementScript($(ConvertTo-JavaScriptLiteral $SubmitButtonId))"
                                         $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
                                         $Script:LoginSubState = "ClickingSubmit"
                                     }
@@ -454,8 +455,8 @@ function Invoke-WebView2MicrosoftLogin {
                                 "Scenario 2: CheckingForError" | Write-Verbose
                                 if ($Script:LoginTask.IsCompleted) {
                                     if (-not $Script:LoginTask.IsFaulted) {
-                                        $errorMessage = $Script:LoginTask.Result -replace '"', ''
-                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage) -and $errorMessage -ne "null") {
+                                        $errorMessage = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
+                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
                                             "Login error detected: $errorMessage" | Write-Warning
                                             "Please verify your credentials and try again. Automatic login aborted." | Write-Warning
                                             $Script:LoginFailed = $true
@@ -468,7 +469,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         }
                                     }
                                     # No error, proceed to check password field visibility
-                                    $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$isElementVisibleScript('$PasswordElementId')")
+                                    $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$isElementVisibleScript($(ConvertTo-JavaScriptLiteral $PasswordElementId))")
                                     $Script:LoginSubState = "CheckingPasswordField"
                                 }
                                 return $false
@@ -483,7 +484,7 @@ function Invoke-WebView2MicrosoftLogin {
                                             "Matched Scenario 2: Password entry page" | Write-Verbose
                                             "Password field is visible, entering password..." | Write-Verbose
                                             $password = $Script:CurrentWebView2Session.Credential.GetNetworkCredential().Password
-                                            $passwordScript = "$setElementValueScript('$PasswordElementId', '$password')"
+                                            $passwordScript = "$setElementValueScript($(ConvertTo-JavaScriptLiteral $PasswordElementId), $(ConvertTo-JavaScriptLiteral $password))"
                                             $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($passwordScript)
                                             $Script:LoginSubState = "SettingPassword"
                                         }
@@ -508,7 +509,7 @@ function Invoke-WebView2MicrosoftLogin {
                                     if (-not $Script:LoginTask.IsFaulted) {
                                         "Password set, clicking submit..." | Write-Verbose
                                         Start-Sleep -Milliseconds 200
-                                        $clickScript = "$clickElementScript('$SubmitButtonId')"
+                                        $clickScript = "$clickElementScript($(ConvertTo-JavaScriptLiteral $SubmitButtonId))"
                                         $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
                                         $Script:LoginSubState = "ClickingSubmit"
                                     }
@@ -547,7 +548,7 @@ function Invoke-WebView2MicrosoftLogin {
                             $null {
                                 # Start checking back button text
                                 "Detected 'Stay signed in?' page, checking button labels..." | Write-Verbose
-                                $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$ButtonBackId', 'textContent')")
+                                $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript($(ConvertTo-JavaScriptLiteral $ButtonBackId), $(ConvertTo-JavaScriptLiteral 'textContent'))")
                                 $Script:LoginSubState = "CheckingBackButton"
                                 return $false
                             }
@@ -555,9 +556,9 @@ function Invoke-WebView2MicrosoftLogin {
                                 "Scenario 3: CheckingBackButton" | Write-Verbose
                                 if ($Script:LoginTask.IsCompleted) {
                                     if (-not $Script:LoginTask.IsFaulted) {
-                                        $Script:BackButtonText = $Script:LoginTask.Result -replace '"', ''
+                                        $Script:BackButtonText = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
                                         # Now check submit button
-                                        $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript('$SubmitButtonId', 'textContent')")
+                                        $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript($(ConvertTo-JavaScriptLiteral $SubmitButtonId), $(ConvertTo-JavaScriptLiteral 'textContent'))")
                                         $Script:LoginSubState = "CheckingSubmitButton"
                                     }
                                     else {
@@ -570,10 +571,10 @@ function Invoke-WebView2MicrosoftLogin {
                                 "Scenario 3: CheckingSubmitButton" | Write-Verbose
                                 if ($Script:LoginTask.IsCompleted) {
                                     if (-not $Script:LoginTask.IsFaulted) {
-                                        $submitText = $Script:LoginTask.Result -replace '"', ''
+                                        $submitText = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
                                         if ($Script:BackButtonText -like "*No*" -and $submitText -like "*Yes*") {
                                             "Clicking 'No' to stay signed in prompt..." | Write-Verbose
-                                            $clickScript = "$clickElementScript('$ButtonBackId')"
+                                            $clickScript = "$clickElementScript($(ConvertTo-JavaScriptLiteral $ButtonBackId))"
                                             $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
                                             $Script:LoginSubState = "ClickingNo"
                                         }
@@ -619,7 +620,8 @@ function Invoke-WebView2MicrosoftLogin {
                             $null {
                                 # Try to click account with matching data-test-id
                                 "Attempting to select account..." | Write-Verbose
-                                $clickAccountScript = "$getElementByDataTestIdScript('$($Script:CurrentWebView2Session.Credential.UserName.Trim())')"
+                                $UserName = $Script:CurrentWebView2Session.Credential.UserName.Trim()
+                                $clickAccountScript = "$getElementByDataTestIdScript($(ConvertTo-JavaScriptLiteral $UserName))"
                                 $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickAccountScript)
                                 $Script:LoginSubState = "ClickingAccount"
                                 $Script:AccountSelectionAttempted = $false
