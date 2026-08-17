@@ -93,15 +93,35 @@ try{{
     $Listener.Prefixes.Add($Url)
     $Listener.Start()
     Write-Host "Listening on $Url - Press Ctrl+C to stop"
-    while ($true) {{
-        $Ctx = $Listener.GetContext()
-        $Bytes = [Text.Encoding]::UTF8.GetBytes("OK")
-        $SetCookie = New-SetCookieHeader -Name $Name -Value $Value -Domain $Domain -Path $Path -ExpiresUtc $Expires -HttpOnly:$HttpOnly -Secure:$Secure -SameSite $SameSite
-        $Ctx.Response.Headers.Add("Set-Cookie", $SetCookie)
-        $Ctx.Response.StatusCode = 200
-        $Ctx.Response.OutputStream.Write($Bytes, 0, $Bytes.Length)
-        $Ctx.Response.Close()
+    while ($Listener.IsListening) {{
+        $Ctx = $null
+        try {{
+            $Ctx = $Listener.GetContext()
+            $Bytes = [Text.Encoding]::UTF8.GetBytes("OK")
+            $SetCookie = New-SetCookieHeader -Name $Name -Value $Value -Domain $Domain -Path $Path -ExpiresUtc $Expires -HttpOnly:$HttpOnly -Secure:$Secure -SameSite $SameSite
+            $Ctx.Response.Headers.Add("Set-Cookie", $SetCookie)
+            $Ctx.Response.StatusCode = 200
+            $Ctx.Response.OutputStream.Write($Bytes, 0, $Bytes.Length)
+            $Ctx.Response.Close()
         }}
+        catch {{
+            # A single client that aborted or timed out must never take the listener down.
+            # Only stop serving when the listener itself is gone.
+            if (-not $Listener.IsListening) {{
+                Write-Host "Listener stopped: $($_.Exception.Message)"
+                break
+            }}
+
+            Write-Host "Request failed, continuing to listen: $($_.Exception.Message)"
+            try {{
+                if ($null -ne $Ctx) {{
+                    $Ctx.Response.Abort()
+                }}
+            }}
+            catch {{
+            }}
+        }}
+    }}
 }}
 catch{{
     Throw
@@ -116,25 +136,46 @@ catch{{
 
                 $Arguments = "-NoLogo -NoProfile -ExecutionPolicy Unrestricted -File `"$TempScript`""
                 "Starting web server process: {0} {1}" -f (Get-Command pwsh.exe).Source, $Arguments | Write-Verbose
-                $Global:WebServerPid = (Start-Process (Get-Command pwsh.exe).Source -ArgumentList $Arguments -PassThru -NoNewWindow:$NoNewWindow.IsPresent -RedirectStandardOutput $StdOutLog -RedirectStandardError $StdErrLog).Id
+                $WebServerProcess = Start-Process (Get-Command pwsh.exe).Source -ArgumentList $Arguments -PassThru -NoNewWindow:$NoNewWindow.IsPresent -RedirectStandardOutput $StdOutLog -RedirectStandardError $StdErrLog
+                $Global:WebServerPid = $WebServerProcess.Id
                 "Process started with PID: {0}" -f $Global:WebServerPid | Write-Verbose
 
-                1..30 | ForEach-Object {
-                    try {
-                        "Test web server processes" | Write-Verbose
-                        if ($Null -eq $Result) {
-                            $Result = Invoke-WebRequest $Url  -UseBasicParsing -TimeoutSec 1
-                        }
+                # The script is dot-sourced by the test files, so never trust a leftover $Result.
+                $Result = $null
+                $ProbeDeadline = [TimeSpan]::FromSeconds(60)
+                $ProbeStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+                while ($ProbeStopwatch.Elapsed -lt $ProbeDeadline) {
+                    if ($WebServerProcess.HasExited) {
+                        "Web server process exited with code {0} while probing" -f $WebServerProcess.ExitCode | Write-Verbose
+                        break
+                    }
 
+                    try {
+                        "Probing web server at {0}" -f $Url | Write-Verbose
+                        $Result = Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 5
+                        if ($Result.StatusCode -eq 200) {
+                            break
+                        }
                     }
                     catch {
-                        Start-Sleep 1
+                        "Probe failed: {0}" -f $PSItem.Exception.Message | Write-Verbose
+                        $Result = $null
+                        Start-Sleep -Seconds 1
                     }
                 }
+
+                $ProbeStopwatch.Stop()
                 if ($Result.StatusCode -ne 200) {
                     $StdOutContent = Get-Content $StdOutLog -Raw -ErrorAction SilentlyContinue
                     $StdErrContent = Get-Content $StdErrLog -Raw -ErrorAction SilentlyContinue
-                    throw ("Failed to start web server job. Process stdout:`n{0}`nProcess stderr:`n{1}" -f $StdOutContent, $StdErrContent)
+                    if ($WebServerProcess.HasExited) {
+                        $ProcessState = "exited with code {0}" -f $WebServerProcess.ExitCode
+                    }
+                    else {
+                        $ProcessState = "still running, but did not answer within {0:N0} seconds" -f $ProbeStopwatch.Elapsed.TotalSeconds
+                    }
+
+                    throw ("Failed to start web server job. Process (PID: {0}) {1}. Process stdout:`n{2}`nProcess stderr:`n{3}" -f $Global:WebServerPid, $ProcessState, $StdOutContent, $StdErrContent)
                 }
                 else {
                     "Web server job started: '{0}' (PID: {1})" -f $Url, $Global:WebServerPid | Write-Host
