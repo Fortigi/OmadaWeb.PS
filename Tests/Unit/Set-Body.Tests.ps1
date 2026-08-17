@@ -62,6 +62,47 @@ Describe 'Set-Body' -Tag 'Unit' {
             }
         }
 
+        It 'Should serialize a deeply nested body without truncation' {
+            InModuleScope 'OmadaWeb.PS' {
+                $NestedBody = @{
+                    L1 = @{
+                        L2 = @{
+                            L3 = @{
+                                L4 = @{
+                                    L5 = @{
+                                        Value = 'deep'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                $BoundParams = @{ Method = 'POST'; Headers = @{} ; Body = $NestedBody }
+                Set-Body
+                $BoundParams.Body | Should -Not -Match 'System\.Collections\.Hashtable'
+                ($BoundParams.Body | ConvertFrom-Json).L1.L2.L3.L4.L5.Value | Should -Be 'deep'
+            }
+        }
+
+        It 'Should serialize nested arrays of objects' {
+            InModuleScope 'OmadaWeb.PS' {
+                $NestedBody = @{
+                    IDENTITY = @{
+                        ASSIGNMENTS = @(
+                            @{ Id = 1 ; Resource = @{ Name = 'FirstResource' } }
+                            @{ Id = 2 ; Resource = @{ Name = 'SecondResource' } }
+                        )
+                    }
+                }
+                $BoundParams = @{ Method = 'POST'; Headers = @{} ; Body = $NestedBody }
+                Set-Body
+                $BoundParams.Body | Should -Not -Match 'System\.Collections\.Hashtable'
+                $Result = $BoundParams.Body | ConvertFrom-Json
+                ($Result.IDENTITY.ASSIGNMENTS | Measure-Object).Count | Should -Be 2
+                $Result.IDENTITY.ASSIGNMENTS[1].Resource.Name | Should -Be 'SecondResource'
+            }
+        }
+
         It 'Should leave a raw string body untouched' {
             InModuleScope 'OmadaWeb.PS' {
                 $BoundParams = @{ Method = 'POST'; Headers = @{} ; Body = '<xml>raw</xml>' }

@@ -21,7 +21,10 @@ try {
             return $true
         }
         $ProcessObject = Get-Process | Where-Object { $_.Id -eq $Global:WebServerPid }
-        "ProcessObject: {0}" -f ($ProcessObject | ConvertTo-Json)
+        # Diagnostics only, so it goes to the verbose stream: a bare string here lands on the success
+        # stream and becomes part of this function's return value, which callers evaluate as a boolean.
+        # Process objects have a deep graph, so a shallow depth is enough.
+        "ProcessObject: {0}" -f ($ProcessObject | ConvertTo-Json -Depth 3) | Write-Verbose
         if ($Force -and $null -ne $ProcessObject) {
             $ProcessObject | Stop-Process -ErrorAction Stop
             "Web server process (PID: {0}) stopped" -f $Global:WebServerPid | Write-Host
