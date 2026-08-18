@@ -89,3 +89,40 @@ Describe 'ConvertTo-HashtableDeep' -Tag 'Unit' {
         }
     }
 }
+
+Describe 'Generated module manifest' -Tag 'Unit' {
+    # The corruption was rendered by the manifest serializer in the psake Build task, one step past
+    # ConvertTo-HashtableDeep, so these assertions read the actual build output rather than the
+    # helper's return value. The build runs before the Test task, so the file is there in CI; a
+    # developer running Pester without building first gets a skip instead of a false failure.
+    # -Skip is evaluated during Pester's discovery phase, before any BeforeAll runs, so the
+    # condition has to be resolved here rather than inside one.
+    $GeneratedManifestMissing = -not (Test-Path -Path (Join-Path (Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'buildoutput\OmadaWeb.PS\OmadaWeb.PS.psd1') -PathType Leaf)
+
+    BeforeAll {
+        $Script:GeneratedManifestPath = Join-Path $Script:RepositoryRoot -ChildPath 'buildoutput\OmadaWeb.PS\OmadaWeb.PS.psd1'
+        $Script:SourceManifestPath = Join-Path $Script:RepositoryRoot -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psd1'
+    }
+
+    It 'Should carry the Tags declared in the source manifest' -Skip:$GeneratedManifestMissing {
+        $Generated = Import-PowerShellDataFile -Path $Script:GeneratedManifestPath
+        $Source = Import-PowerShellDataFile -Path $Script:SourceManifestPath
+
+        $Generated.PrivateData.PSData.Tags | Should -Be $Source.PrivateData.PSData.Tags
+    }
+
+    It 'Should not contain a stringified type name anywhere' -Skip:$GeneratedManifestMissing {
+        $Content = Get-Content -Path $Script:GeneratedManifestPath -Raw
+
+        $Content | Should -Not -Match 'System\.Collections\.Hashtable'
+        $Content | Should -Not -Match 'System\.Object\['
+    }
+
+    It 'Should keep the PSData URIs from the source manifest' -Skip:$GeneratedManifestMissing {
+        $Generated = Import-PowerShellDataFile -Path $Script:GeneratedManifestPath
+        $Source = Import-PowerShellDataFile -Path $Script:SourceManifestPath
+
+        $Generated.PrivateData.PSData.ProjectUri | Should -Be $Source.PrivateData.PSData.ProjectUri
+        $Generated.PrivateData.PSData.LicenseUri | Should -Be $Source.PrivateData.PSData.LicenseUri
+    }
+}

@@ -9,19 +9,22 @@ function ConvertTo-HashtableDeep {
         (https://github.com/PowerShell/PowerShell/issues/5922). ConvertFrom-Json returns
         PSCustomObject graphs, and New-ModuleManifest needs hashtables, so this converts them back.
 
-        Comparisons are made against the unwrapped object. Inside a pipeline every value is
-        PSObject-wrapped, and a wrapped string satisfies "-is [PSCustomObject]":
+        The object test is [System.Management.Automation.PSCustomObject], not the [PSCustomObject]
+        accelerator. That distinction is the actual fix. [PSCustomObject] resolves to PSObject, the
+        wrapper the pipeline puts around every value, so a wrapped string matched it:
 
             $Tags[0] -is [PSCustomObject]                       # False, outside a pipeline
             $Tags | ForEach-Object { $_ -is [PSCustomObject] }   # True, inside one
 
-        Without that unwrapping, each string in an array took the PSCustomObject branch and came
-        back as @{ Length = <n> }, which the manifest serializer then rendered as the literal
+        Each string in an array therefore took the object branch, was enumerated into
+        @{ Length = <n> }, and the manifest serializer rendered that as the literal
         "System.Collections.Hashtable". That is how the published module ended up tagged
         "System.Collections.Hashtable" instead of "Omada" and "Windows".
 
-        Note that unwrapping $InputObject itself instead of comparing against a separate variable
-        does not work: it collapses the deserialized PSData object and yields a null PSData.
+        The unwrapping below is a second guard: it keeps the enumerable test and the returned
+        scalar working on the underlying value. Note that reassigning $InputObject itself rather
+        than using a separate variable does not work - property enumeration then loses the
+        deserialized PSData object and yields a null PSData.
 
     .PARAMETER InputObject
         The value to convert. Typically the output of ConvertFrom-Json.
@@ -35,7 +38,8 @@ function ConvertTo-HashtableDeep {
         $InputObject
     )
 
-    # Compare against the unwrapped object; see the note above on PSObject wrapping in pipelines.
+    # Unwrap so the branch tests and the returned scalar see the underlying value rather than the
+    # PSObject wrapper the pipeline adds.
     $BaseObject = $InputObject
     if ($null -ne $InputObject -and $InputObject -is [System.Management.Automation.PSObject]) {
         $BaseObject = $InputObject.PSObject.BaseObject
