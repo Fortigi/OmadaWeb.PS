@@ -136,20 +136,9 @@ Task Build -depends Analyze {
         return $Output.ToArray()
     }
 
-    function ConvertTo-HashtableDeep {
-        param($InputObject)
-        if ($InputObject -is [System.Collections.IEnumerable] -and $InputObject -isnot [string]) {
-            return @($InputObject | ForEach-Object { ConvertTo-HashtableDeep $_ })
-        }
-        elseif ($InputObject -is [PSCustomObject]) {
-            $Hash = @{}
-            foreach ($Property in $InputObject.PSObject.Properties) {
-                $Hash[$Property.Name] = ConvertTo-HashtableDeep $Property.Value
-            }
-            return $Hash
-        }
-        return $InputObject
-    }
+    # Lives in its own file so it can be unit tested; it used to be defined inline here, where a
+    # PSObject-wrapping bug silently corrupted the manifest's Tags.
+    . (Join-Path $ParentPath -ChildPath 'Build\ConvertTo-HashtableDeep.ps1')
 
     #Read Functions
     $Public = @(Get-ChildItem -Path $ModuleSource\Public\*.ps1 -Recurse)
