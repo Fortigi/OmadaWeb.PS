@@ -37,8 +37,10 @@ function ConvertTo-RedactedLogString {
         return ($Redacted | ConvertTo-Json -Depth 20 -WarningAction SilentlyContinue)
     }
     catch {
-        # Failing open would leak the very thing this function exists to hide.
-        return "<redaction failed: {0}>" -f $_.Exception.Message
+        # Failing open would leak the very thing this function exists to hide - and that includes the
+        # exception message, which for a failure mid-walk can quote the value being walked. The
+        # exception type is enough to debug this from and carries nothing.
+        return "<redaction failed: {0}>" -f $_.Exception.GetType().Name
     }
 }
 
@@ -98,6 +100,11 @@ function ConvertTo-RedactedLogValue {
         return "CookieCollection(Count={0})" -f $Value.Count
     }
 
+    if ($Value -is [System.Net.Cookie]) {
+        # A cookie's value IS the session secret. Its name and domain are what you need to see.
+        return "Cookie(Name={0}, Domain={1})" -f $Value.Name, $Value.Domain
+    }
+
     if ($Value -is [Microsoft.PowerShell.Commands.WebRequestSession]) {
         # $BoundParams.WebSession carries the authentication cookie, and the member name "WebSession"
         # matches none of the patterns above - so this needs a type rule rather than a name rule.
@@ -154,9 +161,19 @@ function ConvertTo-RedactedLogValue {
     $Visited.Add($Value)
 
     if ($Value -is [System.Collections.IDictionary]) {
+        # See the note further down on name/value pairs - a cookie or header can arrive as a
+        # hashtable just as easily as an object, and the same reasoning applies.
+        $Keys = @($Value.Keys)
+        $KeyNames = @($Keys | ForEach-Object { [string]$_ })
+        $DictionaryPatterns = $SensitiveNamePatterns
+        # -contains is case-insensitive for strings, so this catches name/value as well as Name/Value.
+        if ($KeyNames -contains "name" -and $KeyNames -contains "value") {
+            $DictionaryPatterns = $SensitiveNamePatterns + "value"
+        }
+
         $Result = [ordered]@{}
-        foreach ($Key in @($Value.Keys)) {
-            $Result[[string]$Key] = Get-RedactedMemberValue -Name ([string]$Key) -MemberValue $Value[$Key] -Depth $Depth -MaxDepth $MaxDepth -MaxStringLength $MaxStringLength -Visited $Visited -MaskValues $MaskValues -SensitiveNamePatterns $SensitiveNamePatterns -RedactedToken $RedactedToken
+        foreach ($Key in $Keys) {
+            $Result[[string]$Key] = Get-RedactedMemberValue -Name ([string]$Key) -MemberValue $Value[$Key] -Depth $Depth -MaxDepth $MaxDepth -MaxStringLength $MaxStringLength -Visited $Visited -MaskValues $MaskValues -SensitiveNamePatterns $DictionaryPatterns -RedactedToken $RedactedToken
         }
 
         return $Result
@@ -183,12 +200,23 @@ function ConvertTo-RedactedLogValue {
         return $Result
     }
 
+    # An object exposing both a Name and a Value member is a name/value pair, and in this module that
+    # is almost always a cookie or a header: $SessionContext.AuthCookie is a PSCustomObject with
+    # lowercase name/value/domain members (see Get-WebView2Cookie), so no type rule reaches it and
+    # "value" names nothing secret on its own. Within such an object, though, the value is the secret -
+    # so mask it there and nowhere else. The rest of the members (domain, path, expiry, httpOnly) are
+    # the diagnostics worth keeping.
+    $MemberSensitiveNamePatterns = $SensitiveNamePatterns
+    if ($null -ne $Value.PSObject.Properties['Name'] -and $null -ne $Value.PSObject.Properties['Value']) {
+        $MemberSensitiveNamePatterns = $SensitiveNamePatterns + "value"
+    }
+
     # Anything else: walk its properties, tolerating members that throw when read.
     $Result = [ordered]@{}
     try {
         foreach ($Property in $Value.PSObject.Properties) {
             try {
-                $Result[$Property.Name] = Get-RedactedMemberValue -Name $Property.Name -MemberValue $Property.Value -Depth $Depth -MaxDepth $MaxDepth -MaxStringLength $MaxStringLength -Visited $Visited -MaskValues $MaskValues -SensitiveNamePatterns $SensitiveNamePatterns -RedactedToken $RedactedToken
+                $Result[$Property.Name] = Get-RedactedMemberValue -Name $Property.Name -MemberValue $Property.Value -Depth $Depth -MaxDepth $MaxDepth -MaxStringLength $MaxStringLength -Visited $Visited -MaskValues $MaskValues -SensitiveNamePatterns $MemberSensitiveNamePatterns -RedactedToken $RedactedToken
             }
             catch {
                 $Result[$Property.Name] = "<unreadable>"

@@ -78,6 +78,53 @@ Describe 'ConvertTo-RedactedLogString' -Tag 'Unit' {
             }
         }
 
+        It 'Should mask the value of an OmadaWebAuthCookie-shaped object while keeping its diagnostics' {
+            InModuleScope 'OmadaWeb.PS' {
+                # This is the exact shape Get-WebView2Cookie builds and Invoke-OmadaRequest logs from
+                # $SessionContext.AuthCookie. No type rule reaches it and "value" names nothing secret
+                # on its own, so without the name/value-pair rule the session token would be logged.
+                $AuthCookie = [pscustomobject]@{
+                    name     = 'oisauthtoken'
+                    value    = 'cookie-secret-value'
+                    domain   = 'tenant.omada.cloud'
+                    path     = '/'
+                    expires  = $null
+                    httpOnly = $true
+                    secure   = $true
+                    sameSite = 'Lax'
+                }
+                $Result = ConvertTo-RedactedLogString -InputObject $AuthCookie
+                $Result | Should -Not -Match 'cookie-secret-value'
+                $Result | Should -Match 'oisauthtoken'
+                $Result | Should -Match 'tenant\.omada\.cloud'
+            }
+        }
+
+        It 'Should mask the value of a name/value pair arriving as a hashtable too' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = ConvertTo-RedactedLogString -InputObject @{ name = 'oisauthtoken'; value = 'cookie-secret-value' }
+                $Result | Should -Not -Match 'cookie-secret-value'
+                $Result | Should -Match 'oisauthtoken'
+            }
+        }
+
+        It 'Should keep a Value member that is not part of a name/value pair' {
+            InModuleScope 'OmadaWeb.PS' {
+                # The rule has to stay narrow: "Value" on its own is an ordinary member name.
+                $Result = ConvertTo-RedactedLogString -InputObject ([pscustomobject]@{ Value = 42; Unit = 'seconds' })
+                $Result | Should -Match '42'
+            }
+        }
+
+        It 'Should reduce a System.Net.Cookie to its name and domain' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Cookie = New-Object System.Net.Cookie('oisauthtoken', 'cookie-secret-value', '/', 'tenant.omada.cloud')
+                $Result = ConvertTo-RedactedLogString -InputObject $Cookie
+                $Result | Should -Not -Match 'cookie-secret-value'
+                $Result | Should -Match 'Cookie\(Name=oisauthtoken, Domain=tenant\.omada\.cloud\)'
+            }
+        }
+
         It 'Should mask a token carried in a Uri query string' {
             InModuleScope 'OmadaWeb.PS' {
                 $Result = ConvertTo-RedactedLogString -InputObject ([System.Uri]::new('https://login.microsoftonline.com/common/callback?id_token=header.payload.signature'))
@@ -157,11 +204,14 @@ Describe 'ConvertTo-RedactedLogString' -Tag 'Unit' {
             }
         }
 
-        It 'Should report a failure instead of returning the unredacted object' {
+        It 'Should report a failure by exception type, never by exception message' {
             InModuleScope 'OmadaWeb.PS' {
-                Mock ConvertTo-RedactedLogValue { throw 'walker exploded' }
+                # A failure mid-walk can raise a message quoting the value being walked, so the
+                # message is exactly as untrustworthy as the object. The type is enough to debug from.
+                Mock ConvertTo-RedactedLogValue { throw 'walker exploded on Sup3rSecret!' }
                 $Result = ConvertTo-RedactedLogString -InputObject @{ Password = 'Sup3rSecret!' }
                 $Result | Should -Not -Match 'Sup3rSecret'
+                $Result | Should -Not -Match 'walker exploded'
                 $Result | Should -Match 'redaction failed'
             }
         }
