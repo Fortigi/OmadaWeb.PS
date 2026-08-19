@@ -27,8 +27,9 @@
     }
 
     "Parameters" | Write-Verbose
-    # Diagnostics only: the parameter set holds rich objects (credential, session, body), so the
-    # depth stays deliberately low - this string is built on every request, even without -Verbose.
-    $Parameters | ConvertTo-Json -Depth 5 | Write-Verbose
+    # Diagnostics only: the parameter set is what goes on the wire - Authorization header, credential,
+    # session and body - so it only reaches the verbose stream through the redaction walker. The string
+    # is built on every request, even without -Verbose, which is why the depth cap matters too.
+    ConvertTo-RedactedLogString -InputObject $Parameters | Write-Verbose
     return $Parameters
 }

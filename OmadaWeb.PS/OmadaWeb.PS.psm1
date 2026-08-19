@@ -113,10 +113,6 @@ try {
 }
 catch {}
 
-# Diagnostics only: an explicit shallow depth keeps the log readable and avoids walking deep
-# object graphs, which happens on every load because the string is built before Write-Verbose.
-"PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json -Depth 5) | Write-Verbose
-
 # Initialize script-level variables
 $Global:OmadaWebPSCurrentBaseUrl = $null
 [bool]$Script:EnvironmentSuspended = $false
@@ -310,6 +306,12 @@ foreach ($Import in @($Public + $Private)) {
 # Export all the functions
 Export-ModuleMember -Function $Public.Basename -Alias *
 #endregion
+
+# Import-Module -ArgumentList can carry an OmadaWebAuthCookie, so this goes through the redaction
+# walker like every other object that reaches the verbose stream. It has to be logged from here
+# rather than from where the parameters are processed further up: the walker is one of the functions
+# the loop above dot-sources, so it does not exist yet at that point.
+"PsBoundParameters = {0}" -f (ConvertTo-RedactedLogString -InputObject $PsBoundParameters) | Write-Verbose
 
 "Validate version" | Write-Verbose
 try {

@@ -118,6 +118,27 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
             $Result | Should -Be "OK"
         }
 
+        It 'Should not write the credential, the Basic header or the session cookie to the verbose stream' {
+            # The acceptance criterion of Fortigi/OmadaWeb.PS#43, end to end: consumers of this module
+            # capture the verbose stream into logs they export and attach to support tickets, so a
+            # full request has to be able to run at maximum verbosity without emitting anything secret.
+            $Password = "Pa55word-{0}" -f (New-Guid).Guid
+            $Credential = (New-Object System.Management.Automation.PSCredential("svc_sql", (ConvertTo-SecureString $Password -AsPlainText -Force)))
+            $BasicBlob = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f "svc_sql", $Password)))
+
+            # Keep the verbose records only, so the response object itself cannot satisfy or spoil
+            # an assertion about what was logged.
+            $VerboseOutput = ((Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Basic -Credential $Credential @AllowUnencryptedAuthParams -Verbose 4>&1) | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] }) | Out-String
+
+            $VerboseOutput | Should -Not -BeNullOrEmpty
+            $VerboseOutput | Should -Not -Match ([regex]::Escape($Password))
+            $VerboseOutput | Should -Not -Match ([regex]::Escape($BasicBlob))
+
+            # Still useful: which account, which endpoint.
+            $VerboseOutput | Should -Match 'svc_sql'
+            $VerboseOutput | Should -Match ([regex]::Escape($Uri))
+        }
+
         It 'Should return result from Invoke-(Test)OmadaRestMethod using Windows Authentication' {
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
             $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType Windows -Credential $Credential @AllowUnencryptedAuthParams
