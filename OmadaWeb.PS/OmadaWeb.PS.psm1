@@ -113,11 +113,21 @@ try {
 }
 catch {}
 
-# Diagnostics only: an explicit shallow depth keeps the log readable and avoids walking deep
-# object graphs, which happens on every load because the string is built before Write-Verbose.
-"PsBoundParameters = {0}" -f ($PsBoundParameters | ConvertTo-Json -Depth 5) | Write-Verbose
-
 # Initialize script-level variables
+# Redaction constants for ConvertTo-RedactedLogString. They live here, initialized once per import,
+# because the walker recurses once per property of every object logged and builds its string on every
+# request whether or not -Verbose is on - rebuilding a 16-element array per recursive call is exactly
+# the kind of cost that does not belong on that path. The patterns are matched as case-insensitive
+# substrings, so composites such as X-CSRF-Token, RefreshToken and SessionCookie are covered too.
+$Script:RedactedLogToken = "***REDACTED***"
+$Script:SensitiveLogNamePatterns = @(
+    "authorization", "cookie", "credential", "password", "pwd", "secret", "token",
+    "apikey", "api_key", "clientsecret", "sessionkey", "bearer", "csrf", "assertion",
+    "privatekey", "connectionstring"
+)
+# Used only inside an object that pairs a Name member with a Value member - a cookie or a header,
+# where the value is the secret. Precomputed for the same reason as the list above.
+$Script:SensitiveLogNamePatternsWithValue = $Script:SensitiveLogNamePatterns + "value"
 $Global:OmadaWebPSCurrentBaseUrl = $null
 [bool]$Script:EnvironmentSuspended = $false
 # The suspended status is cached in $Script:EnvironmentSuspended for the current base URL only
@@ -310,6 +320,12 @@ foreach ($Import in @($Public + $Private)) {
 # Export all the functions
 Export-ModuleMember -Function $Public.Basename -Alias *
 #endregion
+
+# Import-Module -ArgumentList can carry an OmadaWebAuthCookie, so this goes through the redaction
+# walker like every other object that reaches the verbose stream. It has to be logged from here
+# rather than from where the parameters are processed further up: the walker is one of the functions
+# the loop above dot-sources, so it does not exist yet at that point.
+"PsBoundParameters = {0}" -f (ConvertTo-RedactedLogString -InputObject $PsBoundParameters) | Write-Verbose
 
 "Validate version" | Write-Verbose
 try {

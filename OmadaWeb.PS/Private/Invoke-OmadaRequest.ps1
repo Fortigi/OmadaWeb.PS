@@ -96,9 +96,10 @@ function Invoke-OmadaRequest {
                 else {
                     try {
                         $SessionContext.AuthCookie = (Import-Clixml $CookiePath).OmadaWebAuthCookie
-                        # Diagnostics only: depth is kept shallow on purpose so a verbose log does not
-                        # expand the whole cookie object graph.
-                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json -Depth 3) | Write-Verbose
+                        # Diagnostics only: the cookie's own value is the session secret, so this goes
+                        # through the redaction walker. Depth is kept shallow on purpose so a verbose
+                        # log does not expand the whole cookie object graph.
+                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $SessionContext.AuthCookie -MaxDepth 3) | Write-Verbose
                     }
                     catch {
                         $SessionContext.AuthCookie = $null
@@ -114,9 +115,10 @@ function Invoke-OmadaRequest {
                         $SessionContext.AuthCookie = ([System.Management.Automation.PSSerializer]::Deserialize([System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
                                     [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml $SessionContext.CookieCacheFilePath))
                                 ))).OmadaWebAuthCookie
-                        # Diagnostics only: depth is kept shallow on purpose so a verbose log does not
-                        # expand the whole cookie object graph.
-                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, ($SessionContext.AuthCookie | ConvertTo-Json -Depth 3) | Write-Verbose
+                        # Diagnostics only: the cookie's own value is the session secret, so this goes
+                        # through the redaction walker. Depth is kept shallow on purpose so a verbose
+                        # log does not expand the whole cookie object graph.
+                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $SessionContext.AuthCookie -MaxDepth 3) | Write-Verbose
                     }
                     catch {
                         "Failure loading cookie, try to create a new one." | Write-Verbose
@@ -179,9 +181,11 @@ function Invoke-OmadaRequest {
                 $Paged = $true
             }
 
-            # Diagnostics only: $BoundParams holds rich objects (credential, session, cookie), and this
-            # string is built on every request even without -Verbose, so the depth stays deliberately low.
-            "{0} - {1}" -f $MyInvocation.MyCommand, ($BoundParams | ConvertTo-Json -Depth 5) | Write-Verbose
+            # Diagnostics only: $BoundParams holds the Authorization header, the credential and the
+            # session carrying the auth cookie, so it only ever reaches the verbose stream through the
+            # redaction walker. The string is built on every request even without -Verbose, which is
+            # why the walker's depth cap matters as much as its masking.
+            "{0} - {1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $BoundParams) | Write-Verbose
             try {
                 $CustomErrorTrigger = "Login failed - {0}" -f (New-Guid).Guid.ToString()
                 $FullyQualifiedModule = @{
@@ -193,8 +197,10 @@ function Invoke-OmadaRequest {
                     $FullyQualifiedModule.ModuleVersion = [Version]"3.1.0.0"
                 }
 
-                # Diagnostics only: the hashtable above is flat, depth 5 is ample.
-                "{0} - Using Microsoft.PowerShell.Utility module: {1}" -f $MyInvocation.MyCommand, ($FullyQualifiedModule | ConvertTo-Json -Depth 5) | Write-Verbose
+                # The hashtable above holds no secrets, but it goes through the walker anyway so that
+                # "no ConvertTo-Json reaches Write-Verbose in this module" stays true as a rule - a
+                # rule is what survives future edits; a per-site judgement is not.
+                "{0} - Using Microsoft.PowerShell.Utility module: {1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $FullyQualifiedModule) | Write-Verbose
 
                 switch ($Script:FunctionName) {
                     "Invoke-RestMethod" {
@@ -316,7 +322,10 @@ function Invoke-OmadaRequest {
                 }
                 if (($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and ($StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
 
-                    "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
+                    # The exception comes from Invoke-RestMethod/Invoke-WebRequest or the browser stack
+                    # and routinely quotes the request that failed, headers included. There is no
+                    # object left to walk here, so the regex safety net is what applies.
+                    "{0} - Re-Authentication - Error message: {1}" -f $MyInvocation.MyCommand, (Protect-LogMessage -Message $_.Exception.Message) | Write-Verbose
                     $SessionContext.AuthCookie = $null
                     if (![string]::IsNullOrWhiteSpace($SessionContext.CookieCacheFilePath) -and (Test-Path $SessionContext.CookieCacheFilePath -PathType Leaf)) {
                         $SessionContext.CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue

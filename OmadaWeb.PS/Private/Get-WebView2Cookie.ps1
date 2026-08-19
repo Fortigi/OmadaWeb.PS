@@ -4,9 +4,10 @@ function Get-WebView2Cookie {
     try {
 
         if ( $Script:LastCheckedHost -ne $Script:WebView2.Source.Host) {
-            # Diagnostics only: a shallow depth is enough for the Uri and avoids walking the
-            # WebView2 object graph.
-            "{0} - {1}" -f $MyInvocation.MyCommand, ($Script:WebView2.Source | ConvertTo-Json -Depth 5) | Write-Verbose
+            # Diagnostics only: a login redirect URI can carry a token in its query string, so this
+            # goes through the redaction walker. A shallow depth is enough for the Uri and avoids
+            # walking the WebView2 object graph.
+            "{0} - {1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $Script:WebView2.Source -MaxDepth 3) | Write-Verbose
         }
 
         if ($null -eq $Script:WebView2.CoreWebView2.CookieManager) {

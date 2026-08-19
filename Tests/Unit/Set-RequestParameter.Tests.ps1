@@ -67,6 +67,39 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
             }
         }
     }
+
+    Context 'Verbose output' {
+        It 'Should log the parameter set without the Basic header, the session cookie or the password' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+                $Session.Cookies.Add((New-Object System.Net.Cookie('oisauthtoken', 'cookie-secret-value', '/', 'example.omada.cloud')))
+                $BoundParams = @{
+                    Uri        = 'https://example.omada.cloud/OData'
+                    Method     = 'POST'
+                    Headers    = @{ Authorization = 'Basic dXNlcjpTdXAzclNlY3JldCE=' }
+                    WebSession = $Session
+                    Credential = New-Object System.Management.Automation.PSCredential('omada\svc_sql', (ConvertTo-SecureString 'Sup3rSecret!' -AsPlainText -Force))
+                    Body       = '{"C_QUERY":"SELECT * FROM dbo.Person"}'
+                }
+
+                # Keep the verbose records only. The function also returns the parameter hashtable,
+                # and formatting that for comparison would print the very values under test - a
+                # property of this test, not of the log line it is checking.
+                $VerboseOutput = ((Set-RequestParameter -Verbose 4>&1) | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] }) | Out-String
+
+                # Nothing secret.
+                $VerboseOutput | Should -Not -Match 'dXNlcjpTdXAzclNlY3JldCE'
+                $VerboseOutput | Should -Not -Match 'cookie-secret-value'
+                $VerboseOutput | Should -Not -Match 'Sup3rSecret'
+                $VerboseOutput | Should -Not -Match 'dbo\.Person'
+
+                # Still useful: which account, which endpoint, which method.
+                $VerboseOutput | Should -Match 'svc_sql'
+                $VerboseOutput | Should -Match 'example\.omada\.cloud'
+                $VerboseOutput | Should -Match 'POST'
+            }
+        }
+    }
 }
 
 AfterAll {
