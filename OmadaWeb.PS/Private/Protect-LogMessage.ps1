@@ -41,7 +41,9 @@ function Protect-LogMessage {
         # question you ask of a 401. Without it the safety net would undo that upstream decision.
         $Result = $Result -replace '(?i)("[^"]*(?:authorization|cookie|credential|password|pwd|secret|token|apikey|api_key|clientsecret|sessionkey|csrf|assertion|privatekey|connectionstring)[^"]*"\s*:\s*)"(?!(?:PS|Network)Credential\(UserName=)[^"]*"', ('$1"{0}"' -f $Redacted)
 
-        # Query-string, form and cookie style pairs, e.g. password=..., oisauthtoken=...
+        # Query-string, form and cookie style pairs: the key names the secret and the value follows an
+        # "=" up to the next separator. Matches "client_secret=abc123", "oisauthtoken=abc123" and
+        # "X-CSRF-Token=abc123"; leaves "grant_type=client_credentials" alone.
         $Result = $Result -replace '(?i)\b([\w.\-]*(?:password|pwd|secret|token|apikey|api_key|sessionid|sessionkey|auth|csrf)[\w.\-]*)\s*=\s*([^\s;,&"'']+)', ('$1={0}' -f $Redacted)
 
         # Any Set-Cookie header, whatever the cookie is called.
