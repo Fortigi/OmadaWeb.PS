@@ -60,15 +60,12 @@ function ConvertTo-RedactedLogValue {
         [bool]$MaskValues
     )
 
-    $RedactedToken = "***REDACTED***"
-
-    # Property names that identify secret material. Matched as a case-insensitive substring so
-    # composites such as X-CSRF-Token, RefreshToken and SessionCookie are covered too.
-    $SensitiveNamePatterns = @(
-        "authorization", "cookie", "credential", "password", "pwd", "secret", "token",
-        "apikey", "api_key", "clientsecret", "sessionkey", "bearer", "csrf", "assertion",
-        "privatekey", "connectionstring"
-    )
+    # Read from module scope rather than rebuilt here: this function recurses once per property of
+    # every object logged, and the string it feeds is built on every request whether or not -Verbose
+    # is on, so a per-call array allocation is not free. The pattern list and its name/value variant
+    # are defined in OmadaWeb.PS.psm1 alongside the module's other script state.
+    $RedactedToken = $Script:RedactedLogToken
+    $SensitiveNamePatterns = $Script:SensitiveLogNamePatterns
 
     if ($null -eq $Value) {
         return $null
@@ -168,7 +165,7 @@ function ConvertTo-RedactedLogValue {
         $DictionaryPatterns = $SensitiveNamePatterns
         # -contains is case-insensitive for strings, so this catches name/value as well as Name/Value.
         if ($KeyNames -contains "name" -and $KeyNames -contains "value") {
-            $DictionaryPatterns = $SensitiveNamePatterns + "value"
+            $DictionaryPatterns = $Script:SensitiveLogNamePatternsWithValue
         }
 
         $Result = [ordered]@{}
@@ -208,7 +205,7 @@ function ConvertTo-RedactedLogValue {
     # the diagnostics worth keeping.
     $MemberSensitiveNamePatterns = $SensitiveNamePatterns
     if ($null -ne $Value.PSObject.Properties['Name'] -and $null -ne $Value.PSObject.Properties['Value']) {
-        $MemberSensitiveNamePatterns = $SensitiveNamePatterns + "value"
+        $MemberSensitiveNamePatterns = $Script:SensitiveLogNamePatternsWithValue
     }
 
     # Anything else: walk its properties, tolerating members that throw when read.

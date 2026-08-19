@@ -114,6 +114,20 @@ try {
 catch {}
 
 # Initialize script-level variables
+# Redaction constants for ConvertTo-RedactedLogString. They live here, initialized once per import,
+# because the walker recurses once per property of every object logged and builds its string on every
+# request whether or not -Verbose is on - rebuilding a 16-element array per recursive call is exactly
+# the kind of cost that does not belong on that path. The patterns are matched as case-insensitive
+# substrings, so composites such as X-CSRF-Token, RefreshToken and SessionCookie are covered too.
+$Script:RedactedLogToken = "***REDACTED***"
+$Script:SensitiveLogNamePatterns = @(
+    "authorization", "cookie", "credential", "password", "pwd", "secret", "token",
+    "apikey", "api_key", "clientsecret", "sessionkey", "bearer", "csrf", "assertion",
+    "privatekey", "connectionstring"
+)
+# Used only inside an object that pairs a Name member with a Value member - a cookie or a header,
+# where the value is the secret. Precomputed for the same reason as the list above.
+$Script:SensitiveLogNamePatternsWithValue = $Script:SensitiveLogNamePatterns + "value"
 $Global:OmadaWebPSCurrentBaseUrl = $null
 [bool]$Script:EnvironmentSuspended = $false
 # The suspended status is cached in $Script:EnvironmentSuspended for the current base URL only
