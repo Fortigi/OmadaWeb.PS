@@ -236,6 +236,9 @@ function Invoke-WebView2MicrosoftLogin {
             $Script:LoginFailed = $false
             $Script:CurrentScenario = $null
             $Script:PreviousScenario = $null
+            $Script:ManualLoginFallbackActive = $false
+            $Script:UnmatchedPageSignature = $null
+            $Script:UnmatchedPageSince = $null
             return $false
         }
 
@@ -273,6 +276,13 @@ function Invoke-WebView2MicrosoftLogin {
 
                         if ($null -eq $Script:IdAttributes -or $Script:IdAttributes.Count -eq 0) {
                             "No element IDs found on page, retrying..." | Write-Verbose
+                            # A sign-in page carrying none of the known IDs at all is the loudest
+                            # form of a selector break, and retrying it would otherwise never end.
+                            if (Test-LoginAutomationStalled -ElementId @()) {
+                                Switch-ToManualLogin -State "GettingIds" -Url $Script:WebView2.Source.AbsoluteUri -Reason "The page carries none of the element IDs this module looks for." | Out-Null
+                                return $false
+                            }
+
                             $Script:LoginState = "GettingIds"
                             $Script:LoginTask = $null
                             return $false
@@ -328,6 +338,25 @@ function Invoke-WebView2MicrosoftLogin {
                     "SubmitButton exists: $( $SubmitButtonId -in $Script:IdAttributes.id)" | Write-Verbose
                     "ButtonBack exists: $( $ButtonBackId -in $Script:IdAttributes.id)" | Write-Verbose
                     "MfaElementIds exists: $( $MfaElementId1 -in $Script:IdAttributes.id -or   $MfaElementId2 -in $Script:IdAttributes.id)" | Write-Verbose
+
+                    # Every scenario below recognizes the page by the element IDs above. When
+                    # Microsoft changes that markup, either no scenario matches or the one that does
+                    # can no longer act, and the timer keeps re-evaluating the same page forever.
+                    # Detect that and let the user sign in by hand instead - the window is open and
+                    # for a tenant that is not on Entra typing the credentials there is the normal
+                    # path anyway (issue #32).
+                    $WaitingForApproval = $Script:MfaRequestDisplayed -and ($MfaElementId1 -in $Script:IdAttributes.id -or $MfaElementId2 -in $Script:IdAttributes.id)
+                    if (Test-LoginAutomationStalled -ElementId $Script:IdAttributes.id -WaitingForApproval:$WaitingForApproval) {
+                        $KnownElementId = @($UserNameElementId, $PasswordElementId, $SubmitButtonId, $ButtonBackId, $CantAccessAccountId, $MfaElementId1, $MfaElementId2, $MfaRetryId1, $MfaRetryId2, $KeepMeSignedInId)
+                        $MissingElementId = @($KnownElementId | Where-Object { $_ -notin $Script:IdAttributes.id })
+                        $ScenarioName = "NoMatchingScenario"
+                        if (-not [string]::IsNullOrWhiteSpace($Script:CurrentScenario)) {
+                            $ScenarioName = $Script:CurrentScenario
+                        }
+
+                        Switch-ToManualLogin -State ("ProcessingScenarios/{0}" -f $ScenarioName) -MissingElementId $MissingElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri | Out-Null
+                        return $false
+                    }
 
                     # Scenario 1: Username entry page
                     # Check if username field exists - we'll verify visibility in the sub-state
@@ -390,11 +419,9 @@ function Invoke-WebView2MicrosoftLogin {
                                         }
                                     }
                                     else {
-                                        # Task faulted, reset
-                                        "Username field check faulted: $($Script:LoginTask.Exception.Message)" | Write-Verbose
-                                        $Script:LoginSubState = $null
-                                        $Script:MicrosoftOnlineLogin = $false
-
+                                        # The visibility check could not run at all, so autofill is
+                                        # over for this sign-in. Say so instead of going quiet.
+                                        Switch-ToManualLogin -State "Scenario1/CheckingUsernameField" -MissingElementId $UserNameElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
                                     }
                                 }
                                 return $false
@@ -410,10 +437,9 @@ function Invoke-WebView2MicrosoftLogin {
                                         $Script:LoginSubState = "ClickingSubmit"
                                     }
                                     else {
-                                        # Failed to set username, reset
-                                        "Failed to set username: $($Script:LoginTask.Exception.Message)" | Write-Verbose
-                                        $Script:LoginSubState = $null
-                                        $Script:MicrosoftOnlineLogin = $false
+                                        # The username could not be written into the field, so the
+                                        # user has to type it. Tell them, rather than stopping mute.
+                                        Switch-ToManualLogin -State "Scenario1/SettingUsername" -MissingElementId $UserNameElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
                                     }
                                 }
                                 return $false
@@ -423,6 +449,10 @@ function Invoke-WebView2MicrosoftLogin {
                                 if ($Script:LoginTask.IsCompleted) {
                                     "Clicked submit, waiting for page change..." | Write-Verbose
                                     # Reset state to detect next page
+                                    # Clicking counts as progress, so restart the stall clock. The
+                                    # username and password pages carry the same element IDs, so
+                                    # without this the clock would keep running across the step.
+                                    $Script:UnmatchedPageSince = $null
                                     $Script:LoginState = "GettingIds"
                                     $Script:LoginSubState = $null
                                     $Script:IdAttributes = $null
@@ -496,9 +526,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         }
                                     }
                                     else {
-                                        # Task faulted, reset
-                                        "Password field check faulted: $($Script:LoginTask.Exception.Message)" | Write-Verbose
-                                        $Script:LoginSubState = $null
+                                        Switch-ToManualLogin -State "Scenario2/CheckingPasswordField" -MissingElementId $PasswordElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
                                     }
                                 }
                                 return $false
@@ -514,9 +542,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         $Script:LoginSubState = "ClickingSubmit"
                                     }
                                     else {
-                                        # Failed to set password, reset
-                                        "Failed to set password: $($Script:LoginTask.Exception.Message)" | Write-Verbose
-                                        $Script:LoginSubState = $null
+                                        Switch-ToManualLogin -State "Scenario2/SettingPassword" -MissingElementId $PasswordElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
                                     }
                                 }
                                 return $false
@@ -526,6 +552,7 @@ function Invoke-WebView2MicrosoftLogin {
                                 if ($Script:LoginTask.IsCompleted) {
                                     "Clicked submit, waiting for page change..." | Write-Verbose
                                     # Reset state to detect next page
+                                    $Script:UnmatchedPageSince = $null
                                     $Script:LoginState = "GettingIds"
                                     $Script:LoginSubState = $null
                                     $Script:IdAttributes = $null
@@ -596,6 +623,7 @@ function Invoke-WebView2MicrosoftLogin {
                                 if ($Script:LoginTask.IsCompleted) {
                                     "Clicked No, waiting for page change..." | Write-Verbose
                                     # Reset state to detect next page
+                                    $Script:UnmatchedPageSince = $null
                                     $Script:LoginState = "GettingIds"
                                     $Script:LoginSubState = $null
                                     $Script:IdAttributes = $null
@@ -635,6 +663,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         if ($result -eq "true") {
                                             "Selected logged-in account" | Write-Verbose
                                             # Reset state to detect next page
+                                            $Script:UnmatchedPageSince = $null
                                             $Script:LoginState = "GettingIds"
                                             $Script:LoginSubState = $null
                                             $Script:IdAttributes = $null
@@ -674,6 +703,7 @@ function Invoke-WebView2MicrosoftLogin {
                                         if ($result -eq "true") {
                                             "Clicked 'Use another account', going to username entry..." | Write-Verbose
                                             # Reset state to detect username page
+                                            $Script:UnmatchedPageSince = $null
                                             $Script:LoginState = "GettingIds"
                                             $Script:LoginSubState = $null
                                             $Script:IdAttributes = $null
@@ -762,12 +792,19 @@ function Invoke-WebView2MicrosoftLogin {
                         "`nMFA failed! Please retry!" | Write-Warning
                         $Script:MfaRequestDisplayed = $false
                         # Reset state to detect next page
+                        $Script:UnmatchedPageSince = $null
                         $Script:LoginState = "GettingIds"
                         $Script:IdAttributes = $null
                         return $true
                     }
 
-                    # No scenario matched, stay in this state and wait for next timer tick
+                    # No scenario matched. Re-read the page on the next tick rather than
+                    # re-evaluating attributes that are already stale, so that a page which is only
+                    # mid-navigation is picked up as soon as it settles. The stall check above ends
+                    # this loop when the same page keeps not matching.
+                    $Script:LoginState = "GettingIds"
+                    $Script:LoginTask = $null
+                    $Script:IdAttributes = $null
                     return $false
 
                 }

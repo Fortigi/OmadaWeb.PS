@@ -27,6 +27,11 @@ function Get-DataFromWebDriver {
         $LoginMessageShown = $false
         $MfaRequestDisplayed = $false
         $PhoneLinkActive = $false
+
+        # A new sign-in gets a fresh attempt at autofill, whatever happened during the previous one.
+        $Script:ManualLoginFallbackActive = $false
+        $Script:UnmatchedPageSignature = $null
+        $Script:UnmatchedPageSince = $null
         if ((Get-Process | Where-Object { $_.ProcessName -eq "PhoneExperienceHost" } | Measure-Object).Count -gt 0) {
             $PhoneLinkActive = $true
         }
@@ -42,7 +47,7 @@ function Get-DataFromWebDriver {
             Write-Host "." -NoNewline -ForegroundColor Yellow
             Start-Sleep -Milliseconds 500
 
-            if ($SessionContext.Credential -and ![string]::IsNullOrWhiteSpace($SessionContext.Credential.UserName.Trim())) {
+            if ($SessionContext.Credential -and ![string]::IsNullOrWhiteSpace($SessionContext.Credential.UserName.Trim()) -and -not $Script:ManualLoginFallbackActive) {
 
                 if ($EdgeDriver.url -like "https://login.microsoftonline.com/*") {
                     try {
@@ -76,6 +81,8 @@ function Get-DataFromWebDriver {
                             # ConvertTo-JavaScriptLiteral if a value ever has to cross into JavaScript.
                             $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($UserNameElementId))[0].SendKeys($SessionContext.Credential.UserName.Trim())
                             $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
+                            # Acting on the page is progress - restart the stall clock.
+                            $Script:UnmatchedPageSince = $null
                         }
 
                         if ($IdAttributes -notcontains $UserNameElementId `
@@ -88,6 +95,7 @@ function Get-DataFromWebDriver {
                             # See the note above: SendKeys transports the password out of band, no escaping needed.
                             $EdgeDriver.FindElements([OpenQA.Selenium.By]::Id($PasswordElementId))[0].SendKeys($SessionContext.Credential.GetNetworkCredential().Password)
                             $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($SubmitButton)).Click()
+                            $Script:UnmatchedPageSince = $null
                         }
 
                         if ($IdAttributes -notcontains $UserNameElementId `
@@ -110,6 +118,7 @@ function Get-DataFromWebDriver {
                         ) {
                             "Decline Stay signed in? " | Write-Verbose
                             $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonBackId)).Click()
+                            $Script:UnmatchedPageSince = $null
                         }
 
                         if ($IdAttributes -notcontains $UserNameElementId `
@@ -121,6 +130,7 @@ function Get-DataFromWebDriver {
                             $EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@data-test-id]")) | ForEach-Object {
                                 if ($_.GetAttribute("data-test-id") -eq $SessionContext.Credential.UserName.Trim()) {
                                     $_.Click()
+                                    $Script:UnmatchedPageSince = $null
                                 }
                             }
                         }
@@ -158,9 +168,33 @@ function Get-DataFromWebDriver {
                             "`nMFA failed! Please retry!" | Write-Warning
                             $MfaRequestDisplayed = $false
                             $LoginMessageShown = $false
+                            $Script:UnmatchedPageSince = $null
+                        }
+
+                        # Every branch above recognizes the page by hardcoded Entra element IDs.
+                        # When Microsoft changes that markup none of them fire and this loop keeps
+                        # polling a page it can no longer drive. Hand the sign-in back to the user
+                        # instead - the browser window is open and waiting (issue #32).
+                        $WaitingForApproval = $MfaRequestDisplayed -and $IdAttributes -contains $MfaElementId
+                        if (Test-LoginAutomationStalled -ElementId $IdAttributes -WaitingForApproval:$WaitingForApproval) {
+                            $KnownElementId = @($UserNameElementId, $PasswordElementId, $ButtonSubmitId, $ButtonBackId, $CantAccessAccountId, $MfaElementId, $MfaRetryId1, $MfaRetryId2)
+                            $MissingElementId = @($KnownElementId | Where-Object { $_ -notin $IdAttributes })
+
+                            Switch-ToManualLogin -State "EdgeDriverLoginScenarios" -MissingElementId $MissingElementId -FoundElementId $IdAttributes -Url $EdgeDriver.url | Out-Null
                         }
                     }
-                    catch {}
+                    catch {
+                        # The sign-in page changes between polls, so a stale element reference here
+                        # is expected and the next iteration re-reads the page. Logged rather than
+                        # swallowed so that a genuine failure is visible with -Verbose - and so that
+                        # a failure which keeps repeating ends in a manual sign-in rather than in an
+                        # endless poll.
+                        "Login scenario evaluation failed: {0}" -f (Protect-LogMessage -Message $_.Exception.Message) | Write-Verbose
+
+                        if (Test-LoginAutomationStalled -ElementId @("<scenario evaluation failed>")) {
+                            Switch-ToManualLogin -State "EdgeDriverLoginScenarios" -Url $EdgeDriver.url -Reason $_.Exception.Message | Out-Null
+                        }
+                    }
                 }
             }
 
