@@ -1,11 +1,19 @@
-# Dependabot keeps the pinned action versions used by the workflows in .github/workflows up to date.
+# Dependabot keeps the pinned action versions used by the workflows in .github/workflows up to date,
+# and - since the runtime downloads became pinned - the binaries the module loads as well.
 #
 # The module's runtime dependencies (Selenium's WebDriver.dll, Newtonsoft.Json.dll,
-# System.Text.Json.dll, System.Runtime.dll, the Microsoft WebView2 assemblies and msedgedriver.exe)
-# are downloaded to %LOCALAPPDATA%\OmadaWeb.PS\Bin at runtime instead of being restored from a
-# package manifest, so there is no NuGet ecosystem here for Dependabot to read. Those components are
-# inventoried in Build/Dependencies.psd1 and published as a CycloneDX SBOM with every release
-# (see SECURITY.md). Add a "nuget" entry below once those downloads are driven by a real manifest.
+# System.Text.Json.dll and its closure, System.Runtime.dll and the Microsoft WebView2 assemblies) are
+# downloaded to %LOCALAPPDATA%\OmadaWeb.PS\Bin at runtime rather than restored from a package
+# manifest. They are pinned by version and SHA-256 in OmadaWeb.PS/DependencyLock.psd1 and declared as
+# PackageReference items in Build/Dependencies, which is what puts them in this repository's
+# dependency graph: advisories against a pinned version raise an alert and a security-update PR.
+#
+# msedgedriver.exe is deliberately absent. Its version has to match the Microsoft Edge build
+# installed on the user's machine, so it cannot be pinned; it is verified by Authenticode signature
+# on every download instead.
+#
+# After Dependabot bumps a version in Build/Dependencies, .github/workflows/dependency-lock-sync.yml
+# refreshes the matching SHA-256 in the lock file. PR validation fails while the two disagree.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -22,3 +30,37 @@ updates:
       github-actions:
         patterns:
           - "*"
+
+  - package-ecosystem: "nuget"
+    directory: "/Build/Dependencies"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+    ignore:
+      # System.Text.Json 9 and later drop the net462 target Windows PowerShell 5.1 needs, so a major
+      # bump is not something this module can take. Minor and patch updates - which is how the 8.x
+      # line receives security fixes - still come through.
+      - dependency-name: "System.Text.Json"
+        update-types:
+          - "version-update:semver-major"
+
+  - package-ecosystem: "nuget"
+    directory: "/Build/Dependencies/Legacy"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+    ignore:
+      # Selenium 4.12.0 and later cannot be loaded by Windows PowerShell 5.1 at all, so no version
+      # update here is actionable. The entry exists for the dependency graph and its alerts, which
+      # are not suppressed by this ignore rule.
+      - dependency-name: "Selenium.WebDriver"

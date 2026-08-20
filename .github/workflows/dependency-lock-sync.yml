@@ -1,0 +1,58 @@
+name: Dependency Lock Sync
+
+# Keeps OmadaWeb.PS/DependencyLock.psd1 in step with the Dependabot manifests under
+# Build/Dependencies.
+#
+# The module verifies every binary it downloads against the SHA-256 pinned in the lock file, so a
+# version bump is only half an update: the hash has to be recomputed from the newly published
+# package. PR Validation fails while the two disagree, which would leave every Dependabot pull
+# request red and waiting for a manual step. This workflow does that step, pushing the refreshed
+# lock onto the Dependabot branch.
+#
+# Deliberately limited to Dependabot's own pull requests and to that one path. A bump proposed by
+# anyone else is not auto-blessed here - it goes through review with the same drift gate applied.
+
+on:
+  pull_request:
+    paths:
+      - 'Build/Dependencies/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dependency-lock-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Refresh pinned hashes
+    if: github.actor == 'dependabot[bot]'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout the pull request branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Refresh the dependency lock
+        shell: pwsh
+        run: ./Build/Update-DependencyLock.ps1 -Refresh
+
+      - name: Commit the refreshed lock
+        shell: pwsh
+        run: |
+          git config user.email "devops@fortigi.nl"
+          git config user.name "GitHub Actions"
+
+          $changed = git status --porcelain -- OmadaWeb.PS/DependencyLock.psd1
+          if ([string]::IsNullOrWhiteSpace($changed)) {
+            Write-Host "Lock file already matches the manifest; nothing to commit."
+            exit 0
+          }
+
+          git add OmadaWeb.PS/DependencyLock.psd1
+          git commit -m "deps: refresh pinned SHA-256 hashes for the bumped package"
+          git push
