@@ -71,6 +71,68 @@ Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data"
 Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -AuthenticationType "Browser"
 ```
 
+### Deprecations
+
+The module carries its own deprecation schedule and warns you at runtime, once per PowerShell
+session, when a feature you are using is on it. Nothing switches over silently on a date - each
+change lands in the **first release published after** the date below, not on the date itself.
+
+#### Phase 1 - the Selenium browser engine
+
+| | |
+|---|---|
+| **Deprecated** | The Selenium/EdgeDriver engine currently behind `-AuthenticationType Browser` |
+| **Announced** | 19 August 2026 |
+| **Replacement** | WebView2 - which `Browser` will itself run on after the switch |
+| **Supported until** | **1 March 2027** |
+| **New features** | WebView2 only, effective immediately |
+
+Until 1 March 2027 the Selenium engine keeps working and keeps receiving bug fixes. It receives no
+new capability - all new work lands in WebView2.
+
+**Windows PowerShell 5.1 support is not affected.** It remains fully supported; only the Selenium
+engine is going away.
+
+#### What you need to do
+
+**If you use `-AuthenticationType Browser`: nothing, ever.** `Browser` is the long-term correct
+value. Today it runs Selenium; after the switch the same value runs WebView2.
+
+If you would like WebView2 sooner, simply omit the parameter - WebView2 is today's default:
+
+```powershell
+Invoke-OmadaRestMethod -Uri $Uri                    # WebView2 today, and after the switch too
+```
+
+> [!IMPORTANT]
+> Do **not** migrate `Browser` -> `WebView2` to get ahead of this deprecation. `WebView2` is itself
+> deprecated (phase 2, see below), so that migration would have to be undone. If you want to name
+> the value explicitly, `Browser` is the one to write.
+
+#### Where this is heading
+
+One browser-based login, named for **what** it does rather than **which engine** does it:
+
+```powershell
+Invoke-OmadaRestMethod -Uri $Uri -AuthenticationType Browser   # browser login, runs on WebView2
+```
+
+| | Today | First release after 1 Mar 2027 | First release after 1 Sep 2027 |
+|---|---|---|---|
+| Default `-AuthenticationType` | `WebView2` | `Browser` | `Browser` |
+| `Browser` runs on | Selenium | **WebView2** | WebView2 |
+| `WebView2` runs on | WebView2 | WebView2 *(deprecated)* | - *removed* |
+| `-UseWebView2` | redundant, warns | redundant, warns | - *removed* |
+
+Phase 1 (the Selenium engine) is tracked in
+[#50](https://github.com/Fortigi/OmadaWeb.PS/issues/50); phase 2 (`WebView2` and `-UseWebView2`) in
+[#51](https://github.com/Fortigi/OmadaWeb.PS/issues/51). Nothing in phase 2 breaks before
+1 September 2027.
+
+If your environment depends on the Selenium engine and WebView2 is not a viable replacement for you,
+say so in [#50](https://github.com/Fortigi/OmadaWeb.PS/issues/50). The timeline can be reconsidered
+on evidence; it cannot be reconsidered on silence.
+
 ### Local data footprint
 
 Everything the module stores lives under one root: `%LOCALAPPDATA%\OmadaWeb.PS`. This is what ends up there, and why:
@@ -354,7 +416,7 @@ These are added on top of the parameters of the wrapped cmdlet and are the same 
 The type of authentication to use for the request. Default is `WebView2`. The acceptable values for this parameter are:
 - `None`: No explicit authentication is used.
 - `Basic`: Requires **Credential**. The credentials are sent as an RFC 7617 Basic Authentication `Authorization: basic` header in the format of `base64(user:password)`.
-- `Browser`: Uses Selenium for authentication with Omada. It automatically installs and updates to the desired webdriver version based on the currently installed Microsoft Edge browser.
+- `Browser`: Browser-based interactive sign-in. Today this runs on Selenium, which automatically installs and updates to the desired webdriver version based on the currently installed Microsoft Edge browser. The Selenium engine is deprecated and supported until 1 March 2027; in the first release published after that date, `Browser` runs on WebView2 instead. `Browser` itself is not going away, so no script change is needed at any point - do not migrate to `WebView2` to get ahead of this, because that value is deprecated as well. See https://github.com/Fortigi/OmadaWeb.PS/issues/50.
 - `Integrated`: Uses Windows Integrated Authentication.
 - `OAuth`: Requires **Credential**. OAuth2 authentication with Entra ID by default, other IDPs are possible using additional OAuth parameters.
 - `WebView2`: For environments where Selenium is restricted, you can use the [Microsoft WebView2](https://developer.microsoft.com/en-us/Microsoft-edge/webview2) [NuGet](https://www.nuget.org/packages/microsoft.web.webview2) package instead. WebView2 does not use the developer tools of the Edge browser and should work when developer options is not allowed. Binaries will be placed in %LOCALAPPDATA%\OmadaWeb.PS\Bin and downloaded automatically when not present. WebView2 uses a dedicated Edge user profile per session (base URL, authentication type and, when known, user), located under %LOCALAPPDATA%\OmadaWeb.PS\Edge User Data.
