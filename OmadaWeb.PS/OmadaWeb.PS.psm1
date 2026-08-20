@@ -157,6 +157,12 @@ $Script:OmadaSessions = @{}
 # Invoke-OmadaRequest call stack) to the session context driving the current interactive login.
 $Script:CurrentWebView2Session = $null
 $Script:AccountSelectionAttempted = $false
+# Deprecation warnings are shown once per session rather than once per request - see
+# Write-OmadaDeprecationWarning.ps1. Module scope means Import-Module -Force resets the set.
+$Script:DeprecationWarningsShown = @{}
+# Test-only override for "now" in the deprecation date comparison, so the date-gated branches can be
+# exercised on both sides of every boundary today. $null means "use the real clock".
+$Script:DeprecationUtcNow = $null
 $Script:DebugWebView2 = $false
 $Script:CurrentScenario = $null
 $Script:FunctionName = $null
