@@ -8,6 +8,9 @@ function Initialize-WebView2 {
         "{0} - Initializing WebView2" -f $MyInvocation.MyCommand | Write-Verbose
         Write-Host "`r`nWebView2 opened, please login! Waiting for login." -NoNewline -ForegroundColor Yellow
         $Script:MicrosoftOnlineLogin = $true
+        # This window gets its own attempt at autofill, and its own diagnostic if that attempt ends
+        # in a manual sign-in.
+        Reset-LoginAutomationState
 
         $Script:WebView2.add_CoreWebView2InitializationCompleted({
                 param($sender, $e)

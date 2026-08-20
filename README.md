@@ -71,6 +71,26 @@ Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data"
 Invoke-OmadaWebRequest -Uri "https://your-omada-instance.com/api/data" -AuthenticationType "Browser"
 ```
 
+### Signing in, and what happens when Microsoft changes the sign-in page
+
+Every browser-based authentication type signs in the same way a person does: a browser window opens on your Omada instance, and you complete the sign-in there. Passing a `-Credential` for an Entra tenant adds one convenience on top of that - the module recognizes the Microsoft sign-in pages and fills the fields in for you.
+
+That recognition rests on element IDs Microsoft can change at any time, and does. When a page no longer matches what the module knows, the module stops filling fields in and hands the window back to you with a warning such as:
+
+```text
+WARNING: Automated Microsoft sign-in could not continue - handing control back to you.
+  State            : ProcessingScenarios/NoMatchingScenario
+  Missing elements : i0116, idSIButton9
+  Elements present : signInName
+  Page URL         : https://login.microsoftonline.com/common/oauth2/authorize
+```
+
+**A change to the sign-in page degrades autofill, not login.** The window is open and the request continues as soon as you have signed in yourself, exactly as it does for every tenant that is not on Entra - there, signing in by hand at your own identity provider is the normal path anyway.
+
+The warning names the state, the elements that were expected but absent, and the page the browser was on. That is what a fix needs, so please include it when reporting the change at [GitHub Issues](https://github.com/Fortigi/OmadaWeb.PS/issues). No query string is printed, since sign-in URLs carry request identifiers.
+
+The module waits 60 seconds without progress before it gives up on autofill, so a slow round trip to Microsoft is not mistaken for a changed page. Waiting for you to approve a sign-in request in your authenticator app does not count against that.
+
 ### Deprecations
 
 The module carries its own deprecation schedule and warns you at runtime, once per PowerShell
