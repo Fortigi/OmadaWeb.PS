@@ -364,6 +364,38 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
         }
     }
 
+    It 'Does not report a scenario the previous page was in' {
+        InModuleScope 'OmadaWeb.PS' {
+            # The username page matched a scenario, then the sign-in moved to a page nothing
+            # recognizes. Naming UsernameEntry in the diagnostic would send a reader looking at the
+            # wrong code.
+            #
+            # A page with only the back button reaches the "no scenario matched" branch: the
+            # stay-signed-in scenario needs a submit button too, and account selection needs the
+            # back button to be absent.
+            $BackButtonOnlyPage = @(
+                [PSCustomObject]@{ id = 'idBtn_Back'; outerHTML = '<input id="idBtn_Back">' }
+            )
+
+            $Script:CurrentScenario = 'UsernameEntry'
+            $Script:IdAttributes = $BackButtonOnlyPage
+            $Script:PreviousAttributes = $BackButtonOnlyPage
+
+            Invoke-WebView2MicrosoftLogin -WarningAction SilentlyContinue | Out-Null
+
+            $Script:CurrentScenario | Should -BeNullOrEmpty -Because 'no scenario is acting on this page'
+
+            $Script:LoginState = 'ProcessingScenarios'
+            $Script:IdAttributes = $BackButtonOnlyPage
+            $Warnings = @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+
+            $Warning = $Warnings -join "`n"
+
+            $Warning | Should -Not -BeLike '*UsernameEntry*'
+            $Warning | Should -BeLike '*ProcessingScenarios/NoMatchingScenario*'
+        }
+    }
+
     It 'Names every known selector when the page carries none of them' {
         InModuleScope 'OmadaWeb.PS' {
             # getAllIds found nothing at all - the loudest form of a selector break. The diagnostic

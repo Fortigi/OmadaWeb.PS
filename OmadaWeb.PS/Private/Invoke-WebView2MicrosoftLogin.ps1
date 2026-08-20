@@ -807,6 +807,11 @@ function Invoke-WebView2MicrosoftLogin {
                     # re-evaluating attributes that are already stale, so that a page which is only
                     # mid-navigation is picked up as soon as it settles. The stall check above ends
                     # this loop when the same page keeps not matching.
+                    # Nothing on this page is being acted on, so the scenario the previous page was
+                    # in no longer describes anything - keep it for the verbose trail, but do not
+                    # let the stall diagnostic report it as the current state.
+                    $Script:PreviousScenario = $Script:CurrentScenario
+                    $Script:CurrentScenario = $null
                     $Script:LoginState = "GettingIds"
                     $Script:LoginTask = $null
                     $Script:IdAttributes = $null
