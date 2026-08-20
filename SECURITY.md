@@ -116,8 +116,11 @@ manifest.
 The flow after a bump — whether Dependabot proposes it or a maintainer does — is:
 
 1. the version changes in `Build/Dependencies`;
-2. [`.github/workflows/dependency-lock-sync.yml`](.github/workflows/dependency-lock-sync.yml)
-   re-downloads the package and writes the new SHA-256 into the lock file;
+2. the pinned hash is refreshed on that branch — either by running
+   [`.github/workflows/dependency-lock-sync.yml`](.github/workflows/dependency-lock-sync.yml) from
+   the Actions tab against it, or locally with the command below. It is not automatic: workflows
+   triggered by Dependabot get a read-only token, and the alternative that works around that would
+   hand a write-scoped token to code from the branch being reviewed;
 3. PR Validation runs `Build/Update-DependencyLock.ps1 -Check`, which fails while the lock file and
    the manifests disagree, or while a pinned hash no longer matches what the URL serves.
 
