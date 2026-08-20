@@ -52,7 +52,13 @@ function Write-OmadaDeprecationWarning {
 
     $Entry = $Schedule[$Feature]
 
-    if ($Now -lt $Entry.WarnFrom) {
+    # Both schedule dates are calendar dates, not instants, and are stored at midnight. Comparing
+    # the date components rather than the raw values keeps a whole day on the side it belongs to:
+    # the feature is supported for all of its RemovedAfter day, not just its first second, and the
+    # warning starts at the beginning of the WarnFrom day.
+    $Today = $Now.Date
+
+    if ($Today -lt $Entry.WarnFrom.Date) {
         "{0} - Deprecation '{1}' is not announced yet, staying silent until {2:yyyy-MM-dd}" -f $MyInvocation.MyCommand, $Feature, $Entry.WarnFrom | Write-Verbose
         return
     }
@@ -64,7 +70,7 @@ function Write-OmadaDeprecationWarning {
 
     $Script:DeprecationWarningsShown[$Feature] = $true
 
-    if ($Now -gt $Entry.RemovedAfter) {
+    if ($Today -gt $Entry.RemovedAfter.Date) {
         $Message = "{0} has been removed in newer releases of OmadaWeb.PS. This version still supports it. Use {1}. See {2}" -f $Entry.DisplayName, $Entry.Replacement, $Entry.Reference
     }
     else {

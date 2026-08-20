@@ -73,28 +73,34 @@ Describe 'Write-OmadaDeprecationWarning' -Tag 'Unit' {
 
         It 'Should announce the coming removal from WarnFrom onwards for <Feature>' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Feature = $Feature; WarnFrom = $WarnFrom; RemovedAfter = $RemovedAfter } {
-                $Script:DeprecationWarningsShown = @{}
-                Write-OmadaDeprecationWarning -Feature $Feature -UtcNow $WarnFrom -WarningVariable Captured -WarningAction SilentlyContinue
-                @($Captured).Count | Should -Be 1
-                $Captured[0].Message | Should -BeLike ('*will be removed after {0:yyyy-MM-dd}*' -f $RemovedAfter)
+                foreach ($Moment in @($WarnFrom, $WarnFrom.AddHours(12))) {
+                    $Script:DeprecationWarningsShown = @{}
+                    Write-OmadaDeprecationWarning -Feature $Feature -UtcNow $Moment -WarningVariable Captured -WarningAction SilentlyContinue
+                    @($Captured).Count | Should -Be 1 -Because ("{0:yyyy-MM-dd HH:mm:ss} is on or after the announcement day" -f $Moment)
+                    $Captured[0].Message | Should -BeLike ('*will be removed after {0:yyyy-MM-dd}*' -f $RemovedAfter)
+                }
             }
         }
 
-        It 'Should still announce the coming removal exactly on RemovedAfter for <Feature>' {
-            # RemovedAfter is the last supported date, not the first unsupported one: the feature
-            # goes in the first release published after it, which is not necessarily that day.
+        It 'Should still announce the coming removal throughout the whole RemovedAfter day for <Feature>' {
+            # RemovedAfter is the last supported *date*, not the first unsupported instant: the
+            # feature goes in the first release published after it, which is not necessarily that
+            # day. Both ends of the day are pinned - midnight alone would not have caught the
+            # message flipping to "has been removed" at midday.
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Feature = $Feature; RemovedAfter = $RemovedAfter } {
-                $Script:DeprecationWarningsShown = @{}
-                Write-OmadaDeprecationWarning -Feature $Feature -UtcNow $RemovedAfter -WarningVariable Captured -WarningAction SilentlyContinue
-                @($Captured).Count | Should -Be 1
-                $Captured[0].Message | Should -BeLike '*will be removed after*'
+                foreach ($Moment in @($RemovedAfter, $RemovedAfter.AddHours(12), $RemovedAfter.AddDays(1).AddTicks(-1))) {
+                    $Script:DeprecationWarningsShown = @{}
+                    Write-OmadaDeprecationWarning -Feature $Feature -UtcNow $Moment -WarningVariable Captured -WarningAction SilentlyContinue
+                    @($Captured).Count | Should -Be 1 -Because ("{0:yyyy-MM-dd HH:mm:ss} is still within the supported day" -f $Moment)
+                    $Captured[0].Message | Should -BeLike '*will be removed after*'
+                }
             }
         }
 
-        It 'Should report the removal as already shipped after RemovedAfter for <Feature>' {
+        It 'Should report the removal as already shipped from the day after RemovedAfter for <Feature>' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Feature = $Feature; RemovedAfter = $RemovedAfter } {
                 $Script:DeprecationWarningsShown = @{}
-                Write-OmadaDeprecationWarning -Feature $Feature -UtcNow $RemovedAfter.AddSeconds(1) -WarningVariable Captured -WarningAction SilentlyContinue
+                Write-OmadaDeprecationWarning -Feature $Feature -UtcNow $RemovedAfter.AddDays(1) -WarningVariable Captured -WarningAction SilentlyContinue
                 @($Captured).Count | Should -Be 1
                 $Captured[0].Message | Should -BeLike '*has been removed in newer releases*'
                 $Captured[0].Message | Should -BeLike '*This version still supports it*'

@@ -10,8 +10,11 @@ function Get-OmadaDeprecationSchedule {
                        warning is driven by the calendar, not by shipping something on the day.
         - RemovedAfter the last date on which the feature is supported. It is removed in the first
                        release published after this date, which is not necessarily on the date
-                       itself, so both the message wording and the comparisons below treat it as
-                       inclusive.
+                       itself, so both the message wording and the comparisons in
+                       Write-OmadaDeprecationWarning treat it as inclusive.
+
+        Both dates are calendar dates stored at midnight and compared as calendar dates, so the
+        whole of the RemovedAfter day counts as supported - not just its first second.
         - Replacement  what to use instead, phrased so it can be dropped into a sentence.
         - Reference    the issue carrying the full announcement.
 
