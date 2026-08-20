@@ -240,9 +240,7 @@ function Invoke-WebView2MicrosoftLogin {
             $Script:LoginFailed = $false
             $Script:CurrentScenario = $null
             $Script:PreviousScenario = $null
-            $Script:ManualLoginFallbackActive = $false
-            $Script:UnmatchedPageSignature = $null
-            $Script:UnmatchedPageSince = $null
+            Reset-LoginAutomationState
             return $false
         }
 
