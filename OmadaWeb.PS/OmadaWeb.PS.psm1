@@ -169,6 +169,13 @@ $Script:LoginFailed = $false
 $Script:LoginState = $null
 $Script:LoginSubState = $null
 $Script:LoginTask = $null
+# Seconds the sign-in automation may sit on the same page without making progress before it stops
+# filling in credentials and lets the user sign in manually - see Switch-ToManualLogin.ps1. Generous
+# on purpose: a slow round trip to Entra must not be mistaken for a changed sign-in page.
+$Script:LoginAutomationFallbackTimeout = 60
+$Script:ManualLoginFallbackActive = $false
+$Script:UnmatchedPageSignature = $null
+$Script:UnmatchedPageSince = $null
 $Script:MaxLoginRetries = 3
 $Script:MfaRequestDisplayed = $false
 $Script:MicrosoftOnlineLogin = $false
