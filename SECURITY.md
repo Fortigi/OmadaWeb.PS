@@ -79,16 +79,82 @@ Out of scope:
 | Private vulnerability reporting | Repository settings — *Settings > Advanced Security > Private vulnerability reporting* |
 | Secret scanning and push protection | Repository settings — *Settings > Advanced Security* |
 | Dependabot version and security updates | [.github/dependabot.yml](.github/dependabot.yml) |
+| Integrity verification of runtime-downloaded binaries | [OmadaWeb.PS/DependencyLock.psd1](OmadaWeb.PS/DependencyLock.psd1), see below |
 | Software Bill of Materials (CycloneDX) | Generated per release, see below |
+
+## Runtime dependency verification
+
+The module ships no binaries. Selenium's `WebDriver.dll`, `Newtonsoft.Json.dll`,
+`System.Text.Json.dll` and the dependencies it needs on .NET Framework, `System.Runtime.dll`, the
+Microsoft WebView2 assemblies and `msedgedriver.exe` are downloaded to
+`%LOCALAPPDATA%\OmadaWeb.PS\Bin` the first time they are needed, and then loaded into the PowerShell
+session with `Add-Type` / `Assembly.LoadFrom`, or executed.
+
+That makes those downloads the module's entire binary supply chain, so each one is verified before it
+is expanded, copied into `Bin` or loaded:
+
+- **Pinned and hash-verified.** Every downloadable artefact has a pinned version, an exact download
+  URL and an expected SHA-256 in [`OmadaWeb.PS/DependencyLock.psd1`](OmadaWeb.PS/DependencyLock.psd1),
+  which ships with the module. `Invoke-DownloadFile` checks the downloaded bytes against that hash
+  and, on a mismatch, deletes the file and aborts with an error naming the artefact and both hashes.
+- **Fail closed.** An artefact with no entry in the lock file is not downloaded at all, and a
+  hash-pinned artefact cannot be fetched from any URL other than its pinned one. A missing or
+  unreadable lock file stops every download rather than allowing an unverified one.
+- **`msedgedriver.exe` is verified by signature.** Its version has to match the Microsoft Edge build
+  installed on the machine, so it cannot be pinned or hashed ahead of time. Its Authenticode
+  signature is checked instead — the signature must be valid *and* issued to
+  `O=Microsoft Corporation` — before the executable is moved into place.
+
+### Keeping the pins current
+
+Pinning would be a liability if nobody noticed a pin going stale or turning vulnerable, so the pinned
+packages are declared as `PackageReference` items in [`Build/Dependencies`](Build/Dependencies). That
+puts them in this repository's dependency graph, which is what makes Dependabot alerts and
+security-update pull requests possible for components that are never restored from a package
+manifest.
+
+The flow after a bump — whether Dependabot proposes it or a maintainer does — is:
+
+1. the version changes in `Build/Dependencies`;
+2. [`.github/workflows/dependency-lock-sync.yml`](.github/workflows/dependency-lock-sync.yml)
+   re-downloads the package and writes the new SHA-256 into the lock file;
+3. PR Validation runs `Build/Update-DependencyLock.ps1 -Check`, which fails while the lock file and
+   the manifests disagree, or while a pinned hash no longer matches what the URL serves.
+
+To do it by hand:
+
+```powershell
+./Build/Update-DependencyLock.ps1 -Refresh   # repin versions and hashes from Build/Dependencies
+./Build/Update-DependencyLock.ps1 -Check     # verify without changing anything
+```
+
+Two pins are deliberately held back, both recorded with a `PinReason` in the lock file:
+`Selenium.WebDriver` for Windows PowerShell 5.1 stays at 4.11.0, the last release that still ships a
+`net4*` build, and `System.Text.Json` stays on the 8.x line, the last one that still targets
+`net462`. Both still receive advisories — the frozen Selenium pin has its own manifest under
+`Build/Dependencies/Legacy` for exactly that reason — but an advisory against either needs a human
+decision rather than an automatic bump.
+
+### Why the binaries are still downloaded at runtime
+
+Packaging the binaries into the module at build time was considered as an alternative to verifying
+them at download time, and rejected:
+
+- `msedgedriver.exe` has to match the Microsoft Edge build on the user's machine, so it cannot be
+  packaged at all. The download-and-verify path has to exist regardless, and packaging would add a
+  second mechanism without retiring the first.
+- It would add tens of megabytes of third-party binaries to a Gallery module that deliberately ships
+  none, on every release, for every user — including those who never use
+  `-AuthenticationType Browser`.
+- Pinning plus verification closes the same hole for a few kilobytes of text, and keeps the module's
+  own package free of code it does not own.
 
 ## Software Bill of Materials
 
-The module ships no binaries of its own: Selenium's `WebDriver.dll`, `Newtonsoft.Json.dll`,
-`System.Text.Json.dll`, `System.Runtime.dll`, the Microsoft WebView2 assemblies and `msedgedriver.exe`
-are downloaded to `%LOCALAPPDATA%\OmadaWeb.PS\Bin` on first use. Those components live outside any
-package manifest, so Dependabot cannot see them.
+The components described under [Runtime dependency verification](#runtime-dependency-verification)
+live outside the module's own package, so they need to be enumerated separately to be auditable.
 
-To make them auditable, every release has a CycloneDX SBOM (`OmadaWeb.PS-<version>.cdx.json`)
+To that end, every release has a CycloneDX SBOM (`OmadaWeb.PS-<version>.cdx.json`)
 attached as a release asset. It covers the module itself and every runtime-downloaded component,
 including source URL, license and — for components resolved during the release build — the resolved
 version and SHA-256 hash.

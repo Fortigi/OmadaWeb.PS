@@ -623,6 +623,8 @@ Please see Microsoft documentation for all other available options.
 
 Found a security problem? Please report it privately through [GitHub Security Advisories](https://github.com/Fortigi/OmadaWeb.PS/security/advisories/new) instead of opening an issue. See [SECURITY.md](SECURITY.md) for supported versions, response targets and scope.
 
+The binaries the module downloads on first use are pinned to an exact version and SHA-256 in [`OmadaWeb.PS/DependencyLock.psd1`](OmadaWeb.PS/DependencyLock.psd1), which ships with the module. Each download is verified against that hash before it is unpacked or loaded, and anything that does not match is deleted and refused. `msedgedriver.exe` has to match your installed Edge version so it cannot be pinned; its Authenticode signature is verified instead. See [Runtime dependency verification](SECURITY.md#runtime-dependency-verification).
+
 Every release has a CycloneDX Software Bill of Materials (`OmadaWeb.PS-<version>.cdx.json`) attached as a release asset, covering the module and the components it downloads at runtime. The inventory it is generated from is [`Build/Dependencies.psd1`](Build/Dependencies.psd1).
 
 ## CONTRIBUTING
