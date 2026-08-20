@@ -65,6 +65,7 @@ function Invoke-BrowserAuthentication {
         }
         else {
             "{0} - Using Selenium WebDriver for authentication" -f $MyInvocation.MyCommand | Write-Verbose
+            Write-OmadaDeprecationWarning -Feature "SeleniumBrowserEngine"
             $BrowserData = Get-DataFromWebDriver -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
         }
 
