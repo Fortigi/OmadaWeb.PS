@@ -234,10 +234,13 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
 
     BeforeEach {
         InModuleScope 'OmadaWeb.PS' {
-            # A page that carries none of the element IDs the scenarios look for - what a Microsoft
-            # sign-in redesign looks like from here.
+            # A page that carries none of the element IDs any scenario acts on - what a Microsoft
+            # sign-in redesign looks like from here. getAllIdsScript only ever reports IDs from its
+            # own list, so an unrecognized page reaches ProcessingScenarios either empty or carrying
+            # one of the IDs that list looks for but no scenario handles. i0281 is such an ID, and
+            # using it keeps this fixture the shape the state machine really receives.
             $Script:UnknownPageAttributes = @(
-                [PSCustomObject]@{ id = 'signInName'; tagName = 'INPUT'; outerHTML = '<input id="signInName">' }
+                [PSCustomObject]@{ id = 'i0281'; tagName = 'DIV'; outerHTML = '<div id="i0281"></div>' }
             )
 
             $Script:WebView2 = [PSCustomObject]@{
@@ -312,7 +315,7 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
             $Warning | Should -BeLike '*i0116*'
             $Warning | Should -BeLike '*i0118*'
             $Warning | Should -BeLike '*idSIButton9*'
-            $Warning | Should -BeLike '*signInName*'
+            $Warning | Should -BeLike '*Elements present : i0281*'
             $Warning | Should -BeLike '*https://login.microsoftonline.com/common/oauth2/authorize*'
         }
     }
