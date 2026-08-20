@@ -10,12 +10,19 @@ function Install-NewtonSoftJson {
         break
     }
 
-    "'{0}' needs to be downloaded. Downloading from GitHub" -f $DllFileName | Write-Host
+    "'{0}' needs to be downloaded. Downloading from NuGet" -f $DllFileName | Write-Host
     $null = New-Item (Split-Path $Script:NewtonsoftJsonPath) -ItemType Directory -Force
-    $TempZipPath = Get-GitHubRelease -Org "JamesNK" -Repo "Newtonsoft.Json" -TagFilter "13**" -AssetFilter "Json130.*.zip"
+
+    $Artifact = Get-LockedArtifact -Id "Newtonsoft.Json"
+    "Retrieving '{0}' version {1}" -f $Artifact.PackageId, $Artifact.Version | Write-Host
+
+    $TempFile = Invoke-DownloadFile -ArtifactId "Newtonsoft.Json"
+    $TempZipPath = Expand-DownloadFile -FilePath $TempFile
+
+    $LibraryFolder = Get-NuGetLibraryFolder -PackagePath $($TempZipPath.FullName) -TargetFramework $Artifact.TargetFramework
 
     try {
-        Get-ChildItem ((Get-ChildItem (Join-Path $($TempZipPath.FullName) -ChildPath "bin") -Filter "netstandard2.0" | Select-Object -Last 1)).FullName -Filter $DllFileName | Copy-Item -Destination (Split-Path $Script:WebDriverPath) -Force
+        Get-ChildItem $($LibraryFolder.FullName) -Filter $DllFileName | Copy-Item -Destination (Split-Path $Script:WebDriverPath) -Force
     }
     catch {
         if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {

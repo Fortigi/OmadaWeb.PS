@@ -25,7 +25,10 @@ function Install-EdgeDriver {
         $TempFile = [System.IO.Path]::GetTempFileName()
         "Invoke-WebEdgeDriverFramework: {0}" -f $$ | Write-Verbose
 
-        $TempFile = Invoke-DownloadFile -DownloadUrl $EdgeWebdriverDownloadUrl
+        # The only artefact that carries no pinned hash: its version has to match the Edge build
+        # installed on this machine, so the lock file declares it Authenticode-verified instead and
+        # the signature is checked below, before the executable is moved into place.
+        $TempFile = Invoke-DownloadFile -ArtifactId "msedgedriver" -DownloadUrl $EdgeWebdriverDownloadUrl
 
         $TempZipPath = Expand-DownloadFile -FilePath $TempFile
 
@@ -39,8 +42,14 @@ function Install-EdgeDriver {
         }
     }
 
+    $ExtractedEdgeDriverPath = Join-Path $TempZipPath -ChildPath $EdgeDriverFileName
+    $Artifact = Get-LockedArtifact -Id "msedgedriver"
+    # Deletes the file and throws when the signature is missing, broken or from another publisher,
+    # so an unverified msedgedriver.exe never reaches the folder the module executes it from.
+    Confirm-AuthenticodeTrust -Path $ExtractedEdgeDriverPath -ExpectedSubject $Artifact.SubjectPattern -ArtifactName $EdgeDriverFileName
+
     try {
-        Get-Item (Join-Path $TempZipPath -ChildPath $EdgeDriverFileName ) | Move-Item -Destination (Split-Path $Script:EdgeDriverPath) -Force
+        Get-Item $ExtractedEdgeDriverPath | Move-Item -Destination (Split-Path $Script:EdgeDriverPath) -Force
     }
     catch {
         if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {

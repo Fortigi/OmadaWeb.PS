@@ -23,10 +23,11 @@ function Install-WebView2 {
         ) {
             "'Microsoft.Web.WebView2' needs to be downloaded. Downloading from NuGet" | Write-Host
 
-            #TODO: Troubleshoot why Get-NuGetPackage does not work here as expected
-            #$NuGetResults = Get-NuGetPackage -PackageName "Microsoft.Web.WebView2"
-
-            $PackageUrl = "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/{0}" -f $Script:WebView2LatestVersion
+            # Version and URL both come from the lock file, so the bytes can be hash-verified before
+            # any of these assemblies is loaded into the session.
+            $Artifact = Get-LockedArtifact -Id "Microsoft.Web.WebView2"
+            $PackageUrl = $Artifact.Url
+            "Retrieving '{0}' version {1}" -f $Artifact.PackageId, $Artifact.Version | Write-Host
 
             $DirectoryName = "net462"
             $NuGetDirectoryPath = ".\lib\net462"
@@ -40,7 +41,7 @@ function Install-WebView2 {
             }
 
             try {
-                $TempFile = Invoke-DownloadFile -DownloadUrl $PackageUrl
+                $TempFile = Invoke-DownloadFile -ArtifactId "Microsoft.Web.WebView2"
 
                 $TempZipPath = Expand-DownloadFile -FilePath $TempFile
 

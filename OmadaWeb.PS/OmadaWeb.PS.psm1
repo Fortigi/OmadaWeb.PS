@@ -190,6 +190,9 @@ $Script:UserAgentParameterUsed = $false
 $Script:WebView2UpdateChecked = $false
 $Script:WebView2WpfPath = $null
 $Script:WebView2LatestVersion = $null
+# Pinned versions and expected SHA-256 hashes of every binary the module downloads, cached by
+# Get-DependencyLock on first use. Nothing is downloaded that is not listed there.
+$Script:DependencyLock = $null
 
 if ($PsBoundParameters.ContainsKey("CheckForUpdates") -and $PsBoundParameters["CheckForUpdates"] -eq $false) {
     "Skipping update check based on provided parameter" | Write-Verbose
@@ -197,6 +200,11 @@ if ($PsBoundParameters.ContainsKey("CheckForUpdates") -and $PsBoundParameters["C
 }
 
 "{0} - Set paths" -f $MyInvocation.MyCommand | Write-Verbose
+#Dependency lock location. Ships next to this file, both in the source tree and in the built module,
+#so $PSScriptRoot resolves it in either layout.
+$Script:DependencyLockPath = [System.IO.Path]::Combine($PSScriptRoot, "DependencyLock.psd1")
+"{0} - {1}" -f $MyInvocation.MyCommand, $Script:DependencyLockPath | Write-Verbose
+
 #EdgeDriver Location
 $Script:EdgeDriverPath = [System.IO.Path]::Combine($WebBinBasePath, "msedgedriver.exe")
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:EdgeDriverPath | Write-Verbose
