@@ -58,6 +58,31 @@ Describe 'Switch-ToManualLogin' -Tag 'Unit' {
         }
     }
 
+    It 'Says the missing selector is unknown when the caller cannot name one' {
+        InModuleScope 'OmadaWeb.PS' {
+            # A script exception carries a reason but no element. Claiming the page matched no known
+            # step would be a different, and wrong, statement.
+            Switch-ToManualLogin -State 'EdgeDriverLoginScenarios' -Reason 'stale element reference' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+            $Warning = $Warnings -join "`n"
+
+            $Warning | Should -BeLike '*Missing elements : unknown*'
+            $Warning | Should -Not -BeLike '*matched none of the known sign-in steps*'
+        }
+    }
+
+    It 'Leaves empty entries out of the element lists' {
+        InModuleScope 'OmadaWeb.PS' {
+            Switch-ToManualLogin -State 'ProcessingScenarios' -MissingElementId @('i0116', '', $null) -FoundElementId @('', $null) -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+            $Warning = $Warnings -join "`n"
+
+            $Warning | Should -BeLike '*Missing elements : i0116*'
+            $Warning | Should -Not -BeLike '*i0116,*'
+            $Warning | Should -Not -BeLike '*Elements present*'
+        }
+    }
+
     It 'Reports once per sign-in, not once per poll' {
         InModuleScope 'OmadaWeb.PS' {
             $First = Switch-ToManualLogin -State 'ProcessingScenarios' -WarningAction SilentlyContinue
@@ -293,6 +318,28 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
 
             $Script:MicrosoftOnlineLogin | Should -BeTrue
             ($Warnings | Measure-Object).Count | Should -Be 0
+        }
+    }
+
+    It 'Names every known selector when the page carries none of them' {
+        InModuleScope 'OmadaWeb.PS' {
+            # getAllIds found nothing at all - the loudest form of a selector break. The diagnostic
+            # has to list what was looked for, since the page itself offers nothing to report.
+            $Script:LoginState = 'GettingIds'
+            $Script:LoginTask = [PSCustomObject]@{ IsCompleted = $true; IsFaulted = $false; Result = '"[]"' }
+
+            Invoke-WebView2MicrosoftLogin -WarningAction SilentlyContinue | Out-Null
+
+            $Script:LoginState = 'GettingIds'
+            $Script:LoginTask = [PSCustomObject]@{ IsCompleted = $true; IsFaulted = $false; Result = '"[]"' }
+            $Warnings = @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+
+            $Warning = $Warnings -join "`n"
+
+            $Warning | Should -BeLike '*i0116*'
+            $Warning | Should -BeLike '*KmsiCheckboxField*'
+            $Warning | Should -Not -BeLike '*Missing elements : unknown*'
+            $Warning | Should -Not -BeLike '*Elements present*'
         }
     }
 

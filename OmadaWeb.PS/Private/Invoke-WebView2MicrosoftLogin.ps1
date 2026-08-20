@@ -30,6 +30,10 @@ function Invoke-WebView2MicrosoftLogin {
         $ButtonBackId = "idBtn_Back"
         $KeepMeSignedInId = "KmsiCheckboxField"
 
+        # Everything the scenarios below recognize a page by, and so everything a diagnostic has to
+        # be able to report as absent.
+        $KnownElementId = @($UserNameElementId, $PasswordElementId, $SubmitButtonId, $ButtonBackId, $CantAccessAccountId, $MfaElementId1, $MfaElementId2, $MfaRetryId1, $MfaRetryId2, $KeepMeSignedInId)
+
         # JavaScript to get all element details on the page
         $getAllIdsScript = @"
 (function() {
@@ -279,7 +283,9 @@ function Invoke-WebView2MicrosoftLogin {
                             # A sign-in page carrying none of the known IDs at all is the loudest
                             # form of a selector break, and retrying it would otherwise never end.
                             if (Test-LoginAutomationStalled -ElementId @()) {
-                                Switch-ToManualLogin -State "GettingIds" -Url $Script:WebView2.Source.AbsoluteUri -Reason "The page carries none of the element IDs this module looks for." | Out-Null
+                                # Every known selector is missing here, so name them all rather than
+                                # leaving the diagnostic without a single selector in it.
+                                Switch-ToManualLogin -State "GettingIds" -MissingElementId $KnownElementId -FoundElementId @() -Url $Script:WebView2.Source.AbsoluteUri -Reason "The page carries none of the element IDs this module looks for." | Out-Null
                                 return $false
                             }
 
@@ -347,7 +353,6 @@ function Invoke-WebView2MicrosoftLogin {
                     # path anyway (issue #32).
                     $WaitingForApproval = $Script:MfaRequestDisplayed -and ($MfaElementId1 -in $Script:IdAttributes.id -or $MfaElementId2 -in $Script:IdAttributes.id)
                     if (Test-LoginAutomationStalled -ElementId $Script:IdAttributes.id -WaitingForApproval:$WaitingForApproval) {
-                        $KnownElementId = @($UserNameElementId, $PasswordElementId, $SubmitButtonId, $ButtonBackId, $CantAccessAccountId, $MfaElementId1, $MfaElementId2, $MfaRetryId1, $MfaRetryId2, $KeepMeSignedInId)
                         $MissingElementId = @($KnownElementId | Where-Object { $_ -notin $Script:IdAttributes.id })
                         $ScenarioName = "NoMatchingScenario"
                         if (-not [string]::IsNullOrWhiteSpace($Script:CurrentScenario)) {

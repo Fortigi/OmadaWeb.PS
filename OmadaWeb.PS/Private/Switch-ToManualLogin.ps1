@@ -59,17 +59,21 @@ function Switch-ToManualLogin {
         }
     }
 
-    $MissingText = "none - the page matched none of the known sign-in steps"
-    if (($MissingElementId | Measure-Object).Count -gt 0) {
-        $MissingText = $MissingElementId -join ", "
+    # Not every caller knows which selector is to blame - a script exception carries a reason but no
+    # element - so the default has to say "unknown", not something the reader would act on.
+    $MissingText = "unknown"
+    $NamedMissingElementId = @($MissingElementId | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($NamedMissingElementId.Count -gt 0) {
+        $MissingText = $NamedMissingElementId -join ", "
     }
 
     $Lines = [System.Collections.Generic.List[string]]::new()
     $Lines.Add("Automated Microsoft sign-in could not continue - handing control back to you.")
     $Lines.Add("  State            : {0}" -f $State)
     $Lines.Add("  Missing elements : {0}" -f $MissingText)
-    if (($FoundElementId | Measure-Object).Count -gt 0) {
-        $Lines.Add("  Elements present : {0}" -f ($FoundElementId -join ", "))
+    $NamedFoundElementId = @($FoundElementId | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($NamedFoundElementId.Count -gt 0) {
+        $Lines.Add("  Elements present : {0}" -f ($NamedFoundElementId -join ", "))
     }
 
     $Lines.Add("  Page URL         : {0}" -f $PageAddress)
