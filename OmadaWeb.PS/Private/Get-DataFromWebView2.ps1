@@ -21,9 +21,8 @@ function Get-DataFromWebView2 {
         $Script:CurrentWebView2Session.LoginRetryCount = 0
 
         # A new sign-in gets a fresh attempt at autofill, whatever happened during the previous one.
-        $Script:ManualLoginFallbackActive = $false
-        $Script:UnmatchedPageSignature = $null
-        $Script:UnmatchedPageSince = $null
+        # Every window opened from here resets it again - see Initialize-WebView2.
+        Reset-LoginAutomationState
 
         Add-ReflectionAssembly -Object $Script:WebView2CorePath
         Add-ReflectionAssembly -Object $Script:WebView2WinFormsPath

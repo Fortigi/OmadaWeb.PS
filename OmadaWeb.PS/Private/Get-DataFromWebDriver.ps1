@@ -28,10 +28,8 @@ function Get-DataFromWebDriver {
         $MfaRequestDisplayed = $false
         $PhoneLinkActive = $false
 
-        # A new sign-in gets a fresh attempt at autofill, whatever happened during the previous one.
-        $Script:ManualLoginFallbackActive = $false
-        $Script:UnmatchedPageSignature = $null
-        $Script:UnmatchedPageSince = $null
+        # A new browser gets a fresh attempt at autofill, whatever happened during the previous one.
+        Reset-LoginAutomationState
         if ((Get-Process | Where-Object { $_.ProcessName -eq "PhoneExperienceHost" } | Measure-Object).Count -gt 0) {
             $PhoneLinkActive = $true
         }

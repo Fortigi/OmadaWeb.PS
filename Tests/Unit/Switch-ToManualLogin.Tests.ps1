@@ -107,6 +107,46 @@ Describe 'Switch-ToManualLogin' -Tag 'Unit' {
     }
 }
 
+Describe 'Reset-LoginAutomationState' -Tag 'Unit' {
+
+    It 'Lets a new browser window report a fallback of its own' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Script:MicrosoftOnlineLogin = $true
+            Switch-ToManualLogin -State 'ProcessingScenarios' -WarningAction SilentlyContinue | Out-Null
+
+            # What Initialize-WebView2 and Get-DataFromWebDriver do for every new window. Without it
+            # the guard inside Switch-ToManualLogin would keep the next window's diagnostic silent.
+            Reset-LoginAutomationState
+            $Script:MicrosoftOnlineLogin = $true
+
+            Switch-ToManualLogin -State 'ProcessingScenarios' -WarningAction SilentlyContinue | Should -BeTrue
+        }
+    }
+
+    It 'Clears the stall clock' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Script:UnmatchedPageSignature = 'i0116'
+            $Script:UnmatchedPageSince = [DateTime]::Now
+
+            Reset-LoginAutomationState
+
+            $Script:UnmatchedPageSignature | Should -BeNullOrEmpty
+            $Script:UnmatchedPageSince | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'Is called by Initialize-WebView2 before the sign-in timer starts' {
+        InModuleScope 'OmadaWeb.PS' {
+            # Initialize-WebView2 needs a real WinForms WebView2 to run, so assert on the call site
+            # instead: this is the only place a WebView2 window arms autofill again.
+            $Definition = (Get-Command Initialize-WebView2).Definition
+
+            $Definition | Should -BeLike '*$Script:MicrosoftOnlineLogin = $true*'
+            $Definition | Should -BeLike '*Reset-LoginAutomationState*'
+        }
+    }
+}
+
 Describe 'Test-LoginAutomationStalled' -Tag 'Unit' {
 
     BeforeEach {
