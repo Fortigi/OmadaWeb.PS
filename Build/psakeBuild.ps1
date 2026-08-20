@@ -277,6 +277,11 @@ Task Build -depends Analyze {
     "Copy nuspec file" | Write-Host -ForegroundColor Magenta
     Copy-Item -Path "$ParentPath\OmadaWeb.PS.nuspec" -Destination "$OutputDir" -Force
 
+    # The lock file has to sit next to the .psm1 in the built module: the module resolves it through
+    # $PSScriptRoot, and without it every runtime download fails closed.
+    "Copy dependency lock file" | Write-Host -ForegroundColor Magenta
+    Copy-Item -Path "$ModuleSource\DependencyLock.psd1" -Destination "$OutputDir" -Force
+
 }
 
 Task ImportModule -depends Build {
