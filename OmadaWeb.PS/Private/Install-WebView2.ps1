@@ -8,6 +8,25 @@ function Install-WebView2 {
     try {
         "{0}" -f $MyInvocation.MyCommand | Write-Verbose
 
+        if ($Script:WebView2Bundled) {
+            # The assemblies ship with the module, fetched from the pinned URL and verified against
+            # the pinned SHA-256 at build time. There is nothing to download, nothing to update
+            # against - the pinned version is the bundled version, so Test-WebView2RuntimeVersion
+            # would only compare the bundle against itself - and nowhere to write: the module may be
+            # installed under Program Files, and the bundle is treated as read-only either way.
+            # -Force has nothing to force here for the same reason.
+            if ($IncludeWpf.IsPresent) {
+                # Deliberately not bundled: nothing in the module hosts WebView2 in WPF. Falling
+                # through to the download path is not an option, because the script-scope paths point
+                # into the package and installing there would write into the module directory.
+                "'Microsoft.Web.WebView2.Wpf.dll' is not part of the WebView2 assemblies bundled with the module. Import the module with -UpdateDependencies to install the full package into '{0}' instead." -f $Script:BinPath | Write-Error
+                return $false
+            }
+
+            "Using the bundled 'Microsoft.Web.WebView2' assemblies from '{0}'" -f (Split-Path $Script:WebView2CorePath) | Write-Verbose
+            return $true
+        }
+
         $UpdateNeeded = Test-WebView2RuntimeVersion -IncludeWpf:$IncludeWpf.IsPresent
 
         if (

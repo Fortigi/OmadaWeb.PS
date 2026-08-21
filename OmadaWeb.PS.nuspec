@@ -14,5 +14,11 @@
         <!-- Pinned versions and SHA-256 hashes of the binaries the module downloads at runtime.
              Without it every download fails closed, so it has to ship with the module. -->
         <file src="buildoutput\OmadaWeb.PS\DependencyLock.psd1" target="" />
+        <!-- The WebView2 SDK assemblies, fetched and hash-verified at build time by
+             Build\Get-BundledDependency.ps1. Shipping them is what lets the default
+             -AuthenticationType WebView2 work without egress to nuget.org, and keeps them out of a
+             user-writable directory. -->
+        <file src="buildoutput\OmadaWeb.PS\lib\**" target="lib" />
+        <file src="buildoutput\OmadaWeb.PS\ThirdPartyNotices.txt" target="" />
     </files>
 </package>

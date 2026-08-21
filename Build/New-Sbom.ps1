@@ -4,20 +4,21 @@
 .SYNOPSIS
     Generates a CycloneDX 1.5 Software Bill of Materials for OmadaWeb.PS.
 .DESCRIPTION
-    OmadaWeb.PS ships no binaries of its own - Selenium, Newtonsoft.Json, System.Text.Json,
-    System.Runtime, the Microsoft WebView2 assemblies and msedgedriver.exe are all downloaded to
-    %LOCALAPPDATA%\OmadaWeb.PS\Bin the first time they are needed. Those components never pass
-    through a package manifest, so nothing else in the toolchain can enumerate them.
+    The WebView2 assemblies ship inside the module, fetched and hash-verified at build time.
+    Selenium, Newtonsoft.Json, System.Text.Json, System.Runtime and msedgedriver.exe are downloaded
+    to %LOCALAPPDATA%\OmadaWeb.PS\Bin the first time they are needed. Neither set passes through a
+    package manifest, so nothing else in the toolchain can enumerate them.
 
     This script reads the declared inventory in Build/Dependencies.psd1 and emits a CycloneDX 1.5
     JSON document describing the module plus each of those components, including source URL and
     license.
 
-    When the components are actually present on disk (-BinPath, which the release pipeline warms up
-    before packaging), each installed file is recorded with its resolved version and SHA-256 hash, so
-    the SBOM states what was really loaded and not just what was declared. Components whose files are
-    absent are still emitted, carrying their VersionStrategy so a reader can see how the version is
-    resolved at runtime.
+    When the components are actually present on disk - in the built package (-PackagePath) or under
+    the Bin folder the release pipeline warms up before packaging (-BinPath) - each file is recorded
+    with its resolved version and SHA-256 hash, so the SBOM states what was really shipped or loaded
+    and not just what was declared. The package is searched first, so a bundled component's hashes
+    come from the bytes in the release. Components whose files are absent are still emitted, carrying
+    their VersionStrategy so a reader can see how the version is resolved at runtime.
 .PARAMETER ModuleVersion
     Version recorded for the OmadaWeb.PS component itself. Defaults to the ModuleVersion in the
     module manifest.
@@ -26,6 +27,10 @@
 .PARAMETER BinPath
     Root folder to look for the downloaded binaries in. Defaults to %LOCALAPPDATA%\OmadaWeb.PS\Bin,
     which is where the module puts them.
+.PARAMETER PackagePath
+    Built module folder to look for bundled binaries in, searched ahead of -BinPath. Pass
+    buildoutput\OmadaWeb.PS during a release so the SBOM records the hashes of the assemblies that
+    release actually ships. Empty by default, which leaves only -BinPath.
 .PARAMETER SerialNumber
     Overrides the generated "urn:uuid:..." BOM serial number. Only useful for reproducible tests.
 .PARAMETER Timestamp
@@ -45,6 +50,7 @@ param(
     [string]$ModuleVersion,
     [string]$OutputPath,
     [string]$BinPath,
+    [string]$PackagePath,
     [string]$DependencyManifestPath = (Join-Path $PSScriptRoot "Dependencies.psd1"),
     [string]$ModuleManifestPath = (Join-Path $PSScriptRoot ".." | Join-Path -ChildPath "OmadaWeb.PS" | Join-Path -ChildPath "OmadaWeb.PS.psd1"),
     [string]$SerialNumber,
@@ -86,32 +92,58 @@ function Get-FileHashSha256 {
 function Get-InstalledComponentFile {
     param(
         [string[]]$FileNames,
-        [string]$SearchRoot
+        [string[]]$SearchRoot
     )
 
     $Found = @()
-    if ([string]::IsNullOrWhiteSpace($SearchRoot) -or -not (Test-Path $SearchRoot -PathType Container)) {
+    # Roots are searched in order, so a bundled file in the package wins over a copy an earlier
+    # session happened to download into Bin.
+    $Root = @($SearchRoot | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_ -PathType Container) })
+    if ($Root.Count -eq 0) {
         return $Found
     }
 
     foreach ($FileName in $FileNames) {
-        # A component's file can appear more than once under the Bin root (per edition and per
-        # architecture); the newest one is the one a fresh session would load.
-        $Item = Get-ChildItem -Path $SearchRoot -Filter $FileName -Recurse -File -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTimeUtc -Descending |
-            Select-Object -First 1
-        if ($null -eq $Item) {
+        # A component's file appears once per edition and per architecture - the bundled package
+        # holds four copies of each managed assembly and one native loader per architecture, and the
+        # Bin folder can hold a set per edition too. Every copy is recorded, because they are not
+        # interchangeable: the loaders differ per architecture and the managed assemblies per target
+        # framework, so hashing whichever one happened to be picked would describe the release only
+        # partly, and differently from build to build.
+        $Item = @()
+        $MatchedRoot = $null
+        foreach ($CurrentRoot in $Root) {
+            # Ordered by path so the SBOM is byte-for-byte reproducible from the same inputs.
+            $Item = @(Get-ChildItem -Path $CurrentRoot -Filter $FileName -Recurse -File -ErrorAction SilentlyContinue | Sort-Object FullName)
+            if ($Item.Count -gt 0) {
+                $MatchedRoot = (Convert-Path $CurrentRoot)
+                break
+            }
+        }
+        if ($Item.Count -eq 0) {
             continue
         }
-        $Version = $Item.VersionInfo.ProductVersion
-        if ([string]::IsNullOrWhiteSpace($Version)) {
-            $Version = $Item.VersionInfo.FileVersion
-        }
-        $Found += [pscustomobject]@{
-            Name    = $Item.Name
-            Path    = $Item.FullName
-            Version = if ([string]::IsNullOrWhiteSpace($Version)) { "" } else { $Version.Trim() }
-            Sha256  = Get-FileHashSha256 -Path $Item.FullName
+
+        foreach ($CurrentItem in $Item) {
+            $Version = $CurrentItem.VersionInfo.ProductVersion
+            if ([string]::IsNullOrWhiteSpace($Version)) {
+                $Version = $CurrentItem.VersionInfo.FileVersion
+            }
+
+            # One copy keeps the bare file name; several are told apart by where they sit, which is
+            # what identifies them - lib\Desktop\win-x86\WebView2Loader.dll is a different binary
+            # from lib\Desktop\win-x64\WebView2Loader.dll.
+            $Name = $CurrentItem.Name
+            if ($Item.Count -gt 1 -and $CurrentItem.FullName.StartsWith($MatchedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $Name = $CurrentItem.FullName.Substring($MatchedRoot.Length).TrimStart([char]"\", [char]"/")
+            }
+
+            $Found += [pscustomobject]@{
+                Name    = $Name
+                Path    = $CurrentItem.FullName
+                Version = if ([string]::IsNullOrWhiteSpace($Version)) { "" } else { $Version.Trim() }
+                Sha256  = Get-FileHashSha256 -Path $CurrentItem.FullName
+            }
         }
     }
     return $Found
@@ -173,7 +205,7 @@ foreach ($Declared in $Inventory.Components) {
         }
     }
 
-    $Installed = @(Get-InstalledComponentFile -FileNames $Declared.Files -SearchRoot $BinPath)
+    $Installed = @(Get-InstalledComponentFile -FileNames $Declared.Files -SearchRoot @($PackagePath, $BinPath))
 
     # Precedence: what is actually on disk beats the declared pin, which beats "unresolved".
     $ResolvedVersion = ($Installed | Where-Object { -not [string]::IsNullOrWhiteSpace($_.Version) } | Select-Object -First 1).Version
@@ -185,7 +217,8 @@ foreach ($Declared in $Inventory.Components) {
     if ([string]::IsNullOrWhiteSpace($ResolvedVersion)) {
         $ResolvedVersion = ""
         $VersionSource = "resolved-at-runtime"
-        "Component '{0}' has no pinned version and no version could be read from '{1}'; emitting it without a version." -f $Declared.Name, $BinPath | Write-Verbose
+        $SearchedRoot = (@($PackagePath, $BinPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join "', '"
+        "Component '{0}' has no pinned version and no version could be read from '{1}'; emitting it without a version." -f $Declared.Name, $SearchedRoot | Write-Verbose
     }
     else {
         "Component '{0}' version '{1}' ({2})." -f $Declared.Name, $ResolvedVersion, $VersionSource | Write-Verbose
@@ -239,7 +272,14 @@ foreach ($Declared in $Inventory.Components) {
     }
 
     $Properties = [System.Collections.Generic.List[object]]::new()
-    $Properties.Add((New-Property -Name "omadaweb:acquisition" -Value "runtime-download"))
+    # How the component reaches the user - bundled inside the module, downloaded on first use, or
+    # placed there by an administrator - comes from the inventory, because it differs per component
+    # since the WebView2 assemblies started shipping in the package.
+    $Acquisition = $Declared.Acquisition
+    if ([string]::IsNullOrWhiteSpace($Acquisition)) {
+        $Acquisition = "runtime-download"
+    }
+    $Properties.Add((New-Property -Name "omadaweb:acquisition" -Value $Acquisition))
     $Properties.Add((New-Property -Name "omadaweb:versionSource" -Value $VersionSource))
     if (-not [string]::IsNullOrWhiteSpace($Declared.VersionStrategy)) {
         $Properties.Add((New-Property -Name "omadaweb:versionStrategy" -Value $Declared.VersionStrategy))
