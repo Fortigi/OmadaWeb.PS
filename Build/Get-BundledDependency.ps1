@@ -109,16 +109,21 @@ function Copy-PackageFile {
         [string]$DestinationFolder
     )
 
+    # Sorted before the first match is taken: Get-ChildItem does not promise an enumeration order, so
+    # a package that ever grew a second matching folder could otherwise bundle a different binary
+    # from one build to the next, for no visible reason.
     if ($PSCmdlet.ParameterSetName -eq "DirectoryName") {
         $Criterion = $DirectoryName
         $Source = Get-ChildItem -Path $SourceRoot -Filter $FileName -Recurse -File |
             Where-Object { $_.Directory.Name -eq $DirectoryName } |
+            Sort-Object FullName |
             Select-Object -First 1
     }
     else {
         $Criterion = $DirectoryPathLike
         $Source = Get-ChildItem -Path $SourceRoot -Filter $FileName -Recurse -File |
             Where-Object { $_.Directory.FullName -like $DirectoryPathLike } |
+            Sort-Object FullName |
             Select-Object -First 1
     }
 
@@ -143,7 +148,7 @@ function Copy-PackageText {
         [string]$FileName
     )
 
-    $Source = Get-ChildItem -Path $SourceRoot -Filter $FileName -Recurse -File | Select-Object -First 1
+    $Source = Get-ChildItem -Path $SourceRoot -Filter $FileName -Recurse -File | Sort-Object FullName | Select-Object -First 1
     if ($null -eq $Source) {
         "The '{0}' package does not contain '{1}', so the redistribution notice cannot be reproduced." -f $ArtifactId, $FileName | Write-Error -ErrorAction Stop
     }
