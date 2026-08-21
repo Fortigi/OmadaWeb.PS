@@ -24,6 +24,10 @@ function Get-DataFromWebView2 {
         # Every window opened from here resets it again - see Initialize-WebView2.
         Reset-LoginAutomationState
 
+        # Cleared here rather than in Reset-LoginAutomationState: a refused sign-in closes its own
+        # window, and this has to outlive that or the loop below would open the next one.
+        $Script:LoginAbortReason = $null
+
         Add-ReflectionAssembly -Object $Script:WebView2CorePath
         Add-ReflectionAssembly -Object $Script:WebView2WinFormsPath
         Add-ReflectionAssembly -Object "System.Drawing" -Type LoadWithPartialName
@@ -33,6 +37,15 @@ function Get-DataFromWebView2 {
                 $Script:CurrentWebView2Session.LoginRetryCount++
 
                 if ($Script:StopError) {
+                    $Script:CurrentWebView2Session.LoginRetryCount = 0
+                    break
+                }
+
+                # The previous window closed because the sign-in was refused - by the identity
+                # provider, or by Omada itself - and not because it timed out. Another window would
+                # travel the same redirect chain and land on the same error page, so stop here and
+                # report what that page said.
+                if ($null -ne $Script:LoginAbortReason) {
                     $Script:CurrentWebView2Session.LoginRetryCount = 0
                     break
                 }
@@ -76,6 +89,15 @@ function Get-DataFromWebView2 {
 
         if ($null -ne $Script:CurrentWebView2Session.AuthCookie -and ($Script:CurrentWebView2Session.AuthCookie -is [PSCustomObject] -and ($Script:CurrentWebView2Session.AuthCookie.PsObject.Properties | Measure-Object).Count -gt 0)) {
             $Script:CurrentWebView2Session.LoginRetryCount = 0
+        }
+        elseif ($null -ne $Script:LoginAbortReason) {
+            # "Could not authenticate" is true but useless here: the page named the account, the
+            # tenant and the error code, and that is what the user needs to act on.
+            $AbortMessage = "Could not authenticate to '{0}': {1}" -f $Script:CurrentWebView2Session.BaseUrl, $Script:LoginAbortReason.Message
+            if (-not [string]::IsNullOrWhiteSpace($Script:LoginAbortReason.Reason)) {
+                $AbortMessage = "{0} ({1})" -f $AbortMessage, $Script:LoginAbortReason.Reason
+            }
+            $AbortMessage | Write-Error -ErrorAction "Stop" -Category AuthenticationError
         }
         else {
             "Could not authenticate to '{0}'" -f $Script:CurrentWebView2Session.BaseUrl | Write-Error -ErrorAction "Stop"

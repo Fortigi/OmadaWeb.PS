@@ -182,6 +182,20 @@ $Script:LoginAutomationFallbackTimeout = 60
 $Script:ManualLoginFallbackActive = $false
 $Script:UnmatchedPageSignature = $null
 $Script:UnmatchedPageSince = $null
+# Set by Stop-OmadaLogin when a sign-in has been refused in a way that retrying cannot change - an
+# identity-provider error rendered on Omada's own logon page, for instance. Both login drivers check
+# this instead of opening another browser window, and report it instead of "Could not authenticate".
+# It is cleared once per sign-in rather than once per window: surviving the window closing is exactly
+# what lets the driver see why the window closed.
+$Script:LoginAbortReason = $null
+# State of the logon-page scrape in Get-WebView2LogonPageError. Per browser window, so it is cleared
+# by Reset-LoginAutomationState along with the rest of the per-window automation state.
+$Script:LogonPageErrorTask = $null
+$Script:LogonPageErrorLastCheck = $null
+$Script:LogonPageErrorReported = $null
+# Milliseconds between two reads of the logon page. The WebView2 timer ticks every 150 ms, and a page
+# that is still loading gains nothing from being read seven times a second.
+$Script:LogonPageErrorInterval = 1000
 $Script:MaxLoginRetries = 3
 $Script:MfaRequestDisplayed = $false
 $Script:MicrosoftOnlineLogin = $false

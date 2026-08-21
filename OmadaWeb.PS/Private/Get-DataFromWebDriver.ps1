@@ -14,6 +14,10 @@ function Get-DataFromWebDriver {
 
     "Opening Edge to retrieve authentication cookie" | Write-Host
     try {
+        # Cleared once per sign-in rather than per browser: a refused sign-in has to stay refused
+        # across the re-open path in the exception handler below.
+        $Script:LoginAbortReason = $null
+
         $SessionContext.LoginRetryCount++
         "`n{0} - Login try {1} of max {2}" -f $MyInvocation.MyCommand, $SessionContext.LoginRetryCount, $Script:MaxLoginRetries | Write-Verbose
 
@@ -211,8 +215,17 @@ function Get-DataFromWebDriver {
                 }
             }
             else {
-                "{0} - Logged in to Omada Web" -f $MyInvocation.MyCommand | Write-Verbose
                 $AuthCookie = $EdgeDriver.Manage().Cookies.AllCookies | Where-Object { $_.Name -eq 'oisauthtoken' }
+                if ($null -ne $AuthCookie) {
+                    "{0} - Logged in to Omada Web" -f $MyInvocation.MyCommand | Write-Verbose
+                }
+                else {
+                    # Back on the Omada host without a cookie: the sign-in did not complete. A failed
+                    # federated sign-in ends exactly here - the identity provider handed the browser
+                    # back and Omada rendered the failure on its logon page - so read that page
+                    # rather than reporting only that no cookie was found.
+                    Get-WebDriverLogonPageError -EdgeDriver $EdgeDriver | Out-Null
+                }
                 break
             }
         }
@@ -225,6 +238,13 @@ function Get-DataFromWebDriver {
             $SessionContext.LoginRetryCount = 0
             return $AuthCookie, $AgentString
         }
+        elseif ($null -ne $Script:LoginAbortReason) {
+            $AbortMessage = "Could not authenticate to '{0}': {1}" -f $SessionContext.BaseUrl, $Script:LoginAbortReason.Message
+            if (-not [string]::IsNullOrWhiteSpace($Script:LoginAbortReason.Reason)) {
+                $AbortMessage = "{0} ({1})" -f $AbortMessage, $Script:LoginAbortReason.Reason
+            }
+            $AbortMessage | Write-Error -ErrorAction "Stop" -Category AuthenticationError
+        }
         else {
             "Could not authenticate to '{0}'" -f $SessionContext.BaseUrl | Write-Error -ErrorAction "Stop"
         }
@@ -233,10 +253,15 @@ function Get-DataFromWebDriver {
         "invalid session id: session deleted as the browser has closed the connection" -match "as the browser has closed the connection"
 
         if (
-            $_.Exception.Message -like '*Exception calling "ExecuteScript" with "*" argument(s): "no such window: target window already closed*"' -or
-            $_.Exception.Message -like '*Exception calling "Window" with "*" argument(s): "no such window*' -or
-            $_.Exception.Message -like "*EdgeDriver window is closed*" -or
-            $_.Exception.Message -like 'Exception calling "Window" with "*" argument(s): *invalid session id*'
+            (
+                $_.Exception.Message -like '*Exception calling "ExecuteScript" with "*" argument(s): "no such window: target window already closed*"' -or
+                $_.Exception.Message -like '*Exception calling "Window" with "*" argument(s): "no such window*' -or
+                $_.Exception.Message -like "*EdgeDriver window is closed*" -or
+                $_.Exception.Message -like 'Exception calling "Window" with "*" argument(s): *invalid session id*'
+            ) -and
+            # A window that closed after the sign-in was refused is not a window that needs
+            # re-opening: the next browser would travel the same redirect chain to the same error.
+            $null -eq $Script:LoginAbortReason
         ) {
             if ($SessionContext.LoginRetryCount -ge $Script:MaxLoginRetries) {
                 Close-EdgeDriver

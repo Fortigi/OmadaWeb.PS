@@ -21,4 +21,12 @@ function Reset-LoginAutomationState {
     $Script:ManualLoginFallbackActive = $false
     $Script:UnmatchedPageSignature = $null
     $Script:UnmatchedPageSince = $null
+
+    # Scrape state of Get-WebView2LogonPageError. It belongs to a browser window - a pending script
+    # task cannot outlive the CoreWebView2 that was asked to run it - so it is cleared here with the
+    # rest of the per-window state. $Script:LoginAbortReason deliberately is not: a refused sign-in
+    # closes its window, and the reason has to survive that or the driver would just open another one.
+    $Script:LogonPageErrorTask = $null
+    $Script:LogonPageErrorLastCheck = $null
+    $Script:LogonPageErrorReported = $null
 }
