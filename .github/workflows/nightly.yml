@@ -107,7 +107,7 @@ jobs:
             -SystemDefaultWorkingDirectory '${{ github.workspace }}' `
             -PsGalleryKey '${{ secrets.PSGALLERY_API_KEY }}' `
             -BuildPath 'OmadaWeb.PS' `
-            -Prerelease 'nightly${{ github.run_number }}'
+            -Prerelease 'nightly${{ github.run_number }}.${{ github.run_attempt }}'
 
       - name: Pack NuGet package
         shell: pwsh
