@@ -84,11 +84,13 @@ Out of scope:
 
 ## Runtime dependency verification
 
-The module ships no binaries. Selenium's `WebDriver.dll`, `Newtonsoft.Json.dll`,
-`System.Text.Json.dll` and the dependencies it needs on .NET Framework, `System.Runtime.dll`, the
-Microsoft WebView2 assemblies and `msedgedriver.exe` are downloaded to
+The Microsoft WebView2 assemblies ship inside the module, under
+`lib\<edition>\<architecture>` — see [Why the WebView2 assemblies are bundled](#why-the-webview2-assemblies-are-bundled).
+Selenium's `WebDriver.dll`, `Newtonsoft.Json.dll`, `System.Text.Json.dll` and the dependencies it
+needs on .NET Framework, `System.Runtime.dll` and `msedgedriver.exe` are downloaded to
 `%LOCALAPPDATA%\OmadaWeb.PS\Bin` the first time they are needed, and then loaded into the PowerShell
-session with `Add-Type` / `Assembly.LoadFrom`, or executed.
+session with `Add-Type` / `Assembly.LoadFrom`, or executed. A module built or installed without its
+bundle downloads the WebView2 assemblies the same way.
 
 That makes those downloads the module's entire binary supply chain, so each one is verified before it
 is expanded, copied into `Bin` or loaded:
@@ -138,29 +140,53 @@ Two pins are deliberately held back, both recorded with a `PinReason` in the loc
 `Build/Dependencies/Legacy` for exactly that reason — but an advisory against either needs a human
 decision rather than an automatic bump.
 
-### Why the binaries are still downloaded at runtime
+### Why the WebView2 assemblies are bundled
 
-Packaging the binaries into the module at build time was considered as an alternative to verifying
-them at download time, and rejected:
+`-AuthenticationType WebView2` is the default, so every user hits the WebView2 assemblies. Fetching
+them at runtime had two costs that pinning does not address:
+
+- **It fails outright without egress to nuget.org**, which is the normal state of a locked-down
+  corporate machine, and there was no supported way to pre-stage the files.
+- **Verification and loading were separated in time and place.** The bytes were checked at download
+  time and then loaded much later, with `Assembly.LoadFrom`, out of a user-writable directory that
+  nothing re-checked. Anything running as that user could swap a DLL in between, and executing from a
+  user-writable path is what WDAC and AppLocker policies commonly block.
+
+So they are fetched and hash-verified during the build instead, by
+[`Build/Get-BundledDependency.ps1`](Build/Get-BundledDependency.ps1), which reuses the module's own
+`Invoke-DownloadFile` and the same pin in `DependencyLock.psd1` — one verification implementation, not
+two. The result ships in the package as
+`lib\<Core|Desktop>\<win-x64|win-x86>\`, alongside `ThirdPartyNotices.txt` reproduced from the
+package that was bundled, and loads from the module's install directory, which is usually read-only.
+The binaries are not committed to this repository; the build downloads them on the runner.
+
+The runtime download path is unchanged and still there. A module without a complete bundle — built
+from source, trimmed, or imported with `-UpdateDependencies` — downloads and verifies exactly as
+before. Nothing is ever copied out of the bundle into `Bin`, and the bundle itself is never written
+to.
+
+Everything else stays on the download path, deliberately:
 
 - `msedgedriver.exe` has to match the Microsoft Edge build on the user's machine, so it cannot be
-  packaged at all. The download-and-verify path has to exist regardless, and packaging would add a
-  second mechanism without retiring the first.
-- It would add tens of megabytes of third-party binaries to a Gallery module that deliberately ships
-  none, on every release, for every user — including those who never use
-  `-AuthenticationType Browser`.
-- Pinning plus verification closes the same hole for a few kilobytes of text, and keeps the module's
-  own package free of code it does not own.
+  packaged at all. It stays on the download-and-Authenticode-verify path permanently.
+- Selenium and its dependency closure — 13 of the 14 locked artefacts — are retired by the
+  deprecation schedule in `OmadaWeb.PS/Private/Get-OmadaDeprecationSchedule.ps1` after 2027-03-01, so
+  bundling them now would be shipping payload that is about to be deleted.
+
+The cost is package size: roughly 30 KB before, about 3.4 MB after, for every user including those
+who only use `-AuthenticationType Browser`. The build prints the measured size so this stays visible.
 
 ## Software Bill of Materials
 
 The components described under [Runtime dependency verification](#runtime-dependency-verification)
-live outside the module's own package, so they need to be enumerated separately to be auditable.
+never pass through a package manifest — most are downloaded at runtime, and the bundled WebView2
+assemblies are fetched by the build — so they need to be enumerated separately to be auditable.
 
 To that end, every release has a CycloneDX SBOM (`OmadaWeb.PS-<version>.cdx.json`)
-attached as a release asset. It covers the module itself and every runtime-downloaded component,
-including source URL, license and — for components resolved during the release build — the resolved
-version and SHA-256 hash.
+attached as a release asset. It covers the module itself, the bundled WebView2 assemblies and every
+runtime-downloaded component, including source URL, license, how the component reaches the user
+(`omadaweb:acquisition`, `bundled` or `runtime-download`) and — for components resolved during the
+release build — the resolved version and SHA-256 hash of each file.
 
 The inventory the SBOM is generated from is [`Build/Dependencies.psd1`](Build/Dependencies.psd1), and
 it can be regenerated locally:
