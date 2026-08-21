@@ -14,10 +14,20 @@ BeforeAll {
     $null = New-Item -Path $Script:WorkFolder -ItemType Directory -Force
 
     function New-TestSbom {
-        param([string]$BinPath, [string]$Name = 'test.cdx.json')
+        param([string]$BinPath, [string]$PackagePath, [string]$Name = 'test.cdx.json')
 
         $OutputPath = Join-Path $Script:WorkFolder -ChildPath $Name
-        & $Script:SbomScript -ModuleVersion '9.9.9.9' -OutputPath $OutputPath -BinPath $BinPath -SerialNumber 'urn:uuid:00000000-0000-0000-0000-000000000000' -Timestamp '2026-01-01T00:00:00Z' | Out-Null
+        $Parameter = @{
+            ModuleVersion = '9.9.9.9'
+            OutputPath    = $OutputPath
+            BinPath       = $BinPath
+            SerialNumber  = 'urn:uuid:00000000-0000-0000-0000-000000000000'
+            Timestamp     = '2026-01-01T00:00:00Z'
+        }
+        if (-not [string]::IsNullOrWhiteSpace($PackagePath)) {
+            $Parameter["PackagePath"] = $PackagePath
+        }
+        & $Script:SbomScript @Parameter | Out-Null
         return (Get-Content -Path $OutputPath -Raw | ConvertFrom-Json)
     }
 }
@@ -27,13 +37,25 @@ Describe 'Build/Dependencies.psd1' -Tag 'Unit' {
         $Inventory = Import-PowerShellDataFile -Path $Script:DependencyManifest
         $Inventory.Components.Count | Should -BeGreaterThan 0
         foreach ($Component in $Inventory.Components) {
-            foreach ($Key in @('Name', 'Type', 'Publisher', 'Purl', 'Version', 'VersionStrategy', 'Source', 'Website', 'LicenseId', 'LicenseName', 'LicenseUrl', 'Files', 'InstalledBy', 'Description')) {
+            foreach ($Key in @('Name', 'Type', 'Acquisition', 'Publisher', 'Purl', 'Version', 'VersionStrategy', 'Source', 'Website', 'LicenseId', 'LicenseName', 'LicenseUrl', 'Files', 'InstalledBy', 'Description')) {
                 $Component.Keys | Should -Contain $Key -Because "component '$($Component.Name)' must declare '$Key'"
             }
             $Component.Files.Count | Should -BeGreaterThan 0 -Because "component '$($Component.Name)' must list the files it installs"
             ([string]::IsNullOrWhiteSpace($Component.LicenseId) -and [string]::IsNullOrWhiteSpace($Component.LicenseName)) |
                 Should -BeFalse -Because "component '$($Component.Name)' must carry a license id or name"
         }
+    }
+
+    It 'Should say how every component reaches the user, using a value the SBOM generator knows' {
+        # "bundled" is what makes the difference visible to a consumer reading the SBOM: those files
+        # are inside the package and were verified at build time, the rest are fetched on first use.
+        $Inventory = Import-PowerShellDataFile -Path $Script:DependencyManifest
+        foreach ($Component in $Inventory.Components) {
+            $Component.Acquisition | Should -BeIn @('bundled', 'runtime-download', 'user-provided') -Because "component '$($Component.Name)' must declare how it is acquired"
+        }
+
+        $WebView2 = $Inventory.Components | Where-Object { $_.Name -eq 'Microsoft.Web.WebView2' }
+        $WebView2.Acquisition | Should -Be 'bundled'
     }
 
     It 'Should reference an Install-* function that exists in the module' {
@@ -152,6 +174,48 @@ Describe 'New-Sbom.ps1' -Tag 'Unit' {
         It 'Should not hash components whose files are absent' {
             $Absent = $Script:Sbom.components | Where-Object { $_.name -eq 'msedgedriver' }
             $Absent.hashes | Should -BeNullOrEmpty
+        }
+
+        It 'Should state how each component reaches the user' {
+            $WebView2 = $Script:Sbom.components | Where-Object { $_.name -eq 'Microsoft.Web.WebView2' }
+            ($WebView2.properties | Where-Object { $_.name -eq 'omadaweb:acquisition' }).value | Should -Be 'bundled'
+
+            $Selenium = $Script:Sbom.components | Where-Object { $_.name -eq 'Selenium.WebDriver' }
+            ($Selenium.properties | Where-Object { $_.name -eq 'omadaweb:acquisition' }).value | Should -Be 'runtime-download'
+        }
+    }
+
+    Context 'With a built package holding the bundled assemblies' {
+        BeforeAll {
+            # The release SBOM has to describe the bytes that shipped, so the package is searched
+            # ahead of the Bin folder a warm-up step may also have filled.
+            $Script:Package = Join-Path $Script:WorkFolder -ChildPath 'package'
+            $null = New-Item -Path (Join-Path $Script:Package -ChildPath 'lib\Desktop\win-x64') -ItemType Directory -Force
+            Set-Content -Path (Join-Path $Script:Package -ChildPath 'lib\Desktop\win-x64\Microsoft.Web.WebView2.Core.dll') -Value 'bundled-core' -NoNewline
+            Set-Content -Path (Join-Path $Script:Package -ChildPath 'lib\Desktop\win-x64\WebView2Loader.dll') -Value 'bundled-loader' -NoNewline
+
+            $Script:StaleBin = Join-Path $Script:WorkFolder -ChildPath 'stale-bin'
+            $null = New-Item -Path (Join-Path $Script:StaleBin -ChildPath 'Core\win-x64') -ItemType Directory -Force
+            Set-Content -Path (Join-Path $Script:StaleBin -ChildPath 'Core\win-x64\WebView2Loader.dll') -Value 'downloaded-loader' -NoNewline
+
+            $Script:Sbom = New-TestSbom -BinPath $Script:StaleBin -PackagePath $Script:Package -Name 'bundled.cdx.json'
+        }
+
+        It 'Should hash the bundled files rather than a copy left in the Bin folder' {
+            $WebView2 = $Script:Sbom.components | Where-Object { $_.name -eq 'Microsoft.Web.WebView2' }
+            $Loader = @($WebView2.properties | Where-Object { $_.name -eq 'omadaweb:installedFile:WebView2Loader.dll' })
+            $Loader.Count | Should -Be 1
+
+            # SHA-256 of "bundled-loader"; the copy under Bin hashes to something else entirely.
+            $Expected = (Get-FileHash -Path (Join-Path $Script:Package -ChildPath 'lib\Desktop\win-x64\WebView2Loader.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+            $Loader[0].value | Should -BeLike ('*sha256={0}*' -f $Expected)
+        }
+
+        It 'Should record every bundled file of the component' {
+            $WebView2 = $Script:Sbom.components | Where-Object { $_.name -eq 'Microsoft.Web.WebView2' }
+            $Files = @($WebView2.properties | Where-Object { $_.name -like 'omadaweb:installedFile:*' })
+            $Files.Count | Should -Be 2
+            ($Files | ForEach-Object { $_.name }) | Should -Contain 'omadaweb:installedFile:Microsoft.Web.WebView2.Core.dll'
         }
     }
 }

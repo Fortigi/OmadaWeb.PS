@@ -70,14 +70,16 @@ jobs:
           path: buildoutput/TestResults.xml
           reporter: java-junit
 
-      # Runs after the build so it can pick up the binaries the warm-up step downloaded, recording
-      # the versions and SHA-256 hashes of the components this release actually loads.
+      # Runs after the build so it can pick up both the WebView2 assemblies bundled into the package
+      # and the binaries the warm-up step downloaded, recording the versions and SHA-256 hashes of
+      # the components this release actually ships and loads.
       - name: Generate CycloneDX SBOM
         shell: pwsh
         run: |
           ./Build/New-Sbom.ps1 `
             -ModuleVersion '${{ steps.versioning.outputs.build_version }}' `
             -OutputPath 'buildoutput/OmadaWeb.PS-${{ steps.versioning.outputs.build_version }}.cdx.json' `
+            -PackagePath 'buildoutput/OmadaWeb.PS' `
             -Verbose
 
       - name: Upload build output

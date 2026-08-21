@@ -1,8 +1,11 @@
 <#
     Inventory of everything OmadaWeb.PS loads at runtime.
 
-    The module ships no binaries of its own - every component below is downloaded to
-    %LOCALAPPDATA%\OmadaWeb.PS\Bin the first time it is needed (see OmadaWeb.PS/Private/Install-*.ps1).
+    The WebView2 SDK assemblies ship inside the module, under lib\<edition>\<architecture>, fetched
+    from their pinned URL and verified against their pinned SHA-256 at build time by
+    Build/Get-BundledDependency.ps1. Every other component below is downloaded to
+    %LOCALAPPDATA%\OmadaWeb.PS\Bin the first time it is needed (see OmadaWeb.PS/Private/Install-*.ps1),
+    which is also what happens to WebView2 when a module is built or installed without its bundle.
     This file records what is loaded, where it comes from and under which license.
 
     Two other files sit next to it and must agree with it:
@@ -26,6 +29,10 @@
     Keys per component:
       Name             - component name, matching the upstream package name where there is one
       Type             - CycloneDX component type ("library", "application", ...)
+      Acquisition      - how the component reaches the user: "bundled" (shipped inside the module,
+                         fetched at build time), "runtime-download" (fetched on first use) or
+                         "user-provided" (only present when an administrator placed it there).
+                         Emitted as the omadaweb:acquisition property of the SBOM component.
       Publisher        - the party that publishes the component
       Purl             - package URL identifying the component, without a version qualifier
       Version          - pinned version, or "" when it is resolved at runtime
@@ -46,6 +53,7 @@
         @{
             Name            = "Selenium.WebDriver"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Software Freedom Conservancy"
             Purl            = "pkg:nuget/Selenium.WebDriver"
             Version         = "4.47.0"
@@ -63,6 +71,7 @@
         @{
             Name            = "msedgedriver"
             Type            = "application"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:generic/msedgedriver"
             Version         = ""
@@ -80,10 +89,11 @@
         @{
             Name            = "Microsoft.Web.WebView2"
             Type            = "library"
+            Acquisition     = "bundled"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/Microsoft.Web.WebView2"
             Version         = "1.0.4129.50"
-            VersionStrategy = "Pinned in OmadaWeb.PS/DependencyLock.psd1 and verified by SHA-256 before loading. Test-WebView2RuntimeVersion compares the installed assemblies against that pin, so a newer WebView2 arrives with a module update."
+            VersionStrategy = "Pinned in OmadaWeb.PS/DependencyLock.psd1. Build/Get-BundledDependency.ps1 fetches that exact package during the build, verifies it against the pinned SHA-256 and lays the assemblies out under lib\<edition>\<architecture> inside the module, so a newer WebView2 arrives with a module update. A module without that bundle falls back to downloading and verifying the same package on first use, where Test-WebView2RuntimeVersion compares the installed assemblies against the pin."
             LockId          = "Microsoft.Web.WebView2"
             Source          = "https://www.nuget.org/packages/Microsoft.Web.WebView2"
             Website         = "https://developer.microsoft.com/microsoft-edge/webview2"
@@ -97,6 +107,7 @@
         @{
             Name            = "Newtonsoft.Json"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "James Newton-King"
             Purl            = "pkg:nuget/Newtonsoft.Json"
             Version         = "13.0.4"
@@ -114,6 +125,7 @@
         @{
             Name            = "System.Text.Json"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/System.Text.Json"
             Version         = "8.0.5"
@@ -131,6 +143,7 @@
         @{
             Name            = "Microsoft.Bcl.AsyncInterfaces"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/Microsoft.Bcl.AsyncInterfaces"
             Version         = "8.0.0"
@@ -148,6 +161,7 @@
         @{
             Name            = "System.Text.Encodings.Web"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/System.Text.Encodings.Web"
             Version         = "8.0.0"
@@ -165,6 +179,7 @@
         @{
             Name            = "System.Threading.Tasks.Extensions"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/System.Threading.Tasks.Extensions"
             Version         = "4.5.4"
@@ -182,6 +197,7 @@
         @{
             Name            = "System.Runtime.CompilerServices.Unsafe"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/System.Runtime.CompilerServices.Unsafe"
             Version         = "4.5.3"
@@ -199,6 +215,7 @@
         @{
             Name            = "System.Buffers"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/System.Buffers"
             Version         = "4.5.1"
@@ -216,6 +233,7 @@
         @{
             Name            = "System.Memory"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/System.Memory"
             Version         = "4.5.5"
@@ -233,6 +251,7 @@
         @{
             Name            = "System.ValueTuple"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/System.ValueTuple"
             Version         = "4.5.0"
@@ -250,6 +269,7 @@
         @{
             Name            = "System.Runtime"
             Type            = "library"
+            Acquisition     = "runtime-download"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/System.Runtime"
             Version         = "4.3.1"
@@ -267,6 +287,7 @@
         @{
             Name            = "Microsoft Edge WebView2 Runtime (fixed version)"
             Type            = "application"
+            Acquisition     = "user-provided"
             Publisher       = "Microsoft"
             Purl            = "pkg:generic/microsoft-edge-webview2-runtime"
             Version         = ""
