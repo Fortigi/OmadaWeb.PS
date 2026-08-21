@@ -1,11 +1,15 @@
 <#
     Inventory of everything OmadaWeb.PS loads at runtime.
 
-    The WebView2 SDK assemblies ship inside the module, under lib\<edition>\<architecture>, fetched
-    from their pinned URL and verified against their pinned SHA-256 at build time by
-    Build/Get-BundledDependency.ps1. Every other component below is downloaded to
-    %LOCALAPPDATA%\OmadaWeb.PS\Bin the first time it is needed (see OmadaWeb.PS/Private/Install-*.ps1),
-    which is also what happens to WebView2 when a module is built or installed without its bundle.
+    Each component records how it reaches the user in its Acquisition key. The WebView2 SDK
+    assemblies ("bundled") ship inside the module, under lib\<edition>\<architecture>, fetched from
+    their pinned URL and verified against their pinned SHA-256 at build time by
+    Build/Get-BundledDependency.ps1. Most of the rest ("runtime-download") are fetched into
+    %LOCALAPPDATA%\OmadaWeb.PS\Bin the first time they are needed (see
+    OmadaWeb.PS/Private/Install-*.ps1), which is also what happens to WebView2 when a module is built
+    or installed without its bundle. One component ("user-provided") is never fetched by the module
+    at all and is only present when an administrator put it there.
+
     This file records what is loaded, where it comes from and under which license.
 
     Two other files sit next to it and must agree with it:

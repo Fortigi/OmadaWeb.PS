@@ -104,29 +104,46 @@ function Get-InstalledComponentFile {
     }
 
     foreach ($FileName in $FileNames) {
-        # A component's file can appear more than once under a root (per edition and per
-        # architecture); the newest one is the one a fresh session would load.
-        $Item = $null
+        # A component's file appears once per edition and per architecture - the bundled package
+        # holds four copies of each managed assembly and one native loader per architecture, and the
+        # Bin folder can hold a set per edition too. Every copy is recorded, because they are not
+        # interchangeable: the loaders differ per architecture and the managed assemblies per target
+        # framework, so hashing whichever one happened to be picked would describe the release only
+        # partly, and differently from build to build.
+        $Item = @()
+        $MatchedRoot = $null
         foreach ($CurrentRoot in $Root) {
-            $Item = Get-ChildItem -Path $CurrentRoot -Filter $FileName -Recurse -File -ErrorAction SilentlyContinue |
-                Sort-Object LastWriteTimeUtc -Descending |
-                Select-Object -First 1
-            if ($null -ne $Item) {
+            # Ordered by path so the SBOM is byte-for-byte reproducible from the same inputs.
+            $Item = @(Get-ChildItem -Path $CurrentRoot -Filter $FileName -Recurse -File -ErrorAction SilentlyContinue | Sort-Object FullName)
+            if ($Item.Count -gt 0) {
+                $MatchedRoot = (Convert-Path $CurrentRoot)
                 break
             }
         }
-        if ($null -eq $Item) {
+        if ($Item.Count -eq 0) {
             continue
         }
-        $Version = $Item.VersionInfo.ProductVersion
-        if ([string]::IsNullOrWhiteSpace($Version)) {
-            $Version = $Item.VersionInfo.FileVersion
-        }
-        $Found += [pscustomobject]@{
-            Name    = $Item.Name
-            Path    = $Item.FullName
-            Version = if ([string]::IsNullOrWhiteSpace($Version)) { "" } else { $Version.Trim() }
-            Sha256  = Get-FileHashSha256 -Path $Item.FullName
+
+        foreach ($CurrentItem in $Item) {
+            $Version = $CurrentItem.VersionInfo.ProductVersion
+            if ([string]::IsNullOrWhiteSpace($Version)) {
+                $Version = $CurrentItem.VersionInfo.FileVersion
+            }
+
+            # One copy keeps the bare file name; several are told apart by where they sit, which is
+            # what identifies them - lib\Desktop\win-x86\WebView2Loader.dll is a different binary
+            # from lib\Desktop\win-x64\WebView2Loader.dll.
+            $Name = $CurrentItem.Name
+            if ($Item.Count -gt 1 -and $CurrentItem.FullName.StartsWith($MatchedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $Name = $CurrentItem.FullName.Substring($MatchedRoot.Length).TrimStart([char]"\", [char]"/")
+            }
+
+            $Found += [pscustomobject]@{
+                Name    = $Name
+                Path    = $CurrentItem.FullName
+                Version = if ([string]::IsNullOrWhiteSpace($Version)) { "" } else { $Version.Trim() }
+                Sha256  = Get-FileHashSha256 -Path $CurrentItem.FullName
+            }
         }
     }
     return $Found

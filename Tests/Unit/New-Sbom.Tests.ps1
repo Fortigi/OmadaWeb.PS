@@ -218,6 +218,52 @@ Describe 'New-Sbom.ps1' -Tag 'Unit' {
             ($Files | ForEach-Object { $_.name }) | Should -Contain 'omadaweb:installedFile:Microsoft.Web.WebView2.Core.dll'
         }
     }
+
+    Context 'With the same file bundled once per edition and architecture' {
+        BeforeAll {
+            # What a real package looks like: four copies of each managed assembly and one native
+            # loader per architecture, all extracted from the same archive, so their timestamps tie.
+            # They are different binaries, so recording only one of them - and a different one on the
+            # next build - would describe the release neither completely nor reproducibly.
+            $Script:MultiPackage = Join-Path $Script:WorkFolder -ChildPath 'multi-package'
+            foreach ($Edition in @('Core', 'Desktop')) {
+                foreach ($Architecture in @('win-x64', 'win-x86')) {
+                    $Folder = Join-Path $Script:MultiPackage -ChildPath ('lib\{0}\{1}' -f $Edition, $Architecture)
+                    $null = New-Item -Path $Folder -ItemType Directory -Force
+                    Set-Content -Path (Join-Path $Folder 'WebView2Loader.dll') -Value ('loader-{0}' -f $Architecture) -NoNewline
+                }
+            }
+            $Script:Sbom = New-TestSbom -BinPath '' -PackagePath $Script:MultiPackage -Name 'multi.cdx.json'
+            $Script:WebView2 = $Script:Sbom.components | Where-Object { $_.name -eq 'Microsoft.Web.WebView2' }
+        }
+
+        It 'Should record every copy, told apart by where it sits' {
+            $Files = @($Script:WebView2.properties | Where-Object { $_.name -like 'omadaweb:installedFile:*' })
+            $Files.Count | Should -Be 4
+            ($Files | ForEach-Object { $_.name }) | Should -Contain 'omadaweb:installedFile:lib\Desktop\win-x64\WebView2Loader.dll'
+            ($Files | ForEach-Object { $_.name }) | Should -Contain 'omadaweb:installedFile:lib\Core\win-x86\WebView2Loader.dll'
+        }
+
+        It 'Should hash each copy separately, so a per-architecture difference is visible' {
+            $Files = @($Script:WebView2.properties | Where-Object { $_.name -like 'omadaweb:installedFile:*' })
+            $X64 = ($Files | Where-Object { $_.name -like '*win-x64*' } | ForEach-Object { $_.value }) | Sort-Object -Unique
+            $X86 = ($Files | Where-Object { $_.name -like '*win-x86*' } | ForEach-Object { $_.value }) | Sort-Object -Unique
+
+            @($X64).Count | Should -Be 1 -Because 'the two x64 copies are the same binary'
+            @($X86).Count | Should -Be 1 -Because 'the two x86 copies are the same binary'
+            $X64 | Should -Not -Be $X86
+        }
+
+        It 'Should list the copies in a stable order' {
+            # Two runs over the same inputs must produce the same document, so a diff of two release
+            # SBOMs shows real changes only.
+            $Again = New-TestSbom -BinPath '' -PackagePath $Script:MultiPackage -Name 'multi-again.cdx.json'
+            $AgainWebView2 = $Again.components | Where-Object { $_.name -eq 'Microsoft.Web.WebView2' }
+
+            ($AgainWebView2.properties | ForEach-Object { $_.name }) -join '|' |
+                Should -Be (($Script:WebView2.properties | ForEach-Object { $_.name }) -join '|')
+        }
+    }
 }
 
 AfterAll {
