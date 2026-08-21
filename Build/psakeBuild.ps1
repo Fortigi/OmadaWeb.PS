@@ -10,9 +10,9 @@ Properties {
 }
 
 
-Task default -depends Analyze, Build, ImportModule, TestHelp, Test
-Task DeployOnly -depends Build, Deploy
-Task TestBuildOnly -depends Analyze, Build, ImportModule, TestHelp, Test
+Task default -depends Analyze, Build, BundleDependencies, ImportModule, TestHelp, Test
+Task DeployOnly -depends Build, BundleDependencies, Deploy
+Task TestBuildOnly -depends Analyze, Build, BundleDependencies, ImportModule, TestHelp, Test
 
 Task Analyze {
 
@@ -284,7 +284,18 @@ Task Build -depends Analyze {
 
 }
 
-Task ImportModule -depends Build {
+# Puts the WebView2 assemblies inside the package, fetched from the pinned URL and verified against
+# the pinned SHA-256 by the module's own download code. It runs between Build and ImportModule so
+# every workflow that builds - release, PR validation and nightly - bundles without a workflow edit,
+# and so the tests below see the same layout a user installs.
+#
+# A failure here fails the build on purpose. A package that quietly shipped without these assemblies
+# would look healthy and then break the first sign-in of every user without egress to nuget.org.
+Task BundleDependencies -depends Build {
+    & (Join-Path $PSScriptRoot -ChildPath "Get-BundledDependency.ps1") -PackagePath $OutputDir -RepositoryRoot $ParentPath
+}
+
+Task ImportModule -depends Build, BundleDependencies {
 
     try {
         $ScriptBlock = {
