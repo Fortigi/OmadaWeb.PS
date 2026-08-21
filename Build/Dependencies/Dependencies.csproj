@@ -48,7 +48,7 @@
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.3" />
     <PackageReference Include="System.Buffers" Version="4.5.1" />
     <PackageReference Include="System.Memory" Version="4.5.5" />
-    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+    <PackageReference Include="System.ValueTuple" Version="4.6.2" />
 
     <!-- Dependency of the netstandard2.0 Selenium bindings on Windows PowerShell 5.1 (Install-SystemRunTime). -->
     <PackageReference Include="System.Runtime" Version="4.3.1" />
