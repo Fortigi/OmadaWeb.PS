@@ -11,5 +11,8 @@
         <file src="buildoutput\OmadaWeb.PS\OmadaWeb.PS.psd1" target="" />
         <file src="buildoutput\OmadaWeb.PS\OmadaWeb.PS.psm1" target="" />
         <file src="buildoutput\OmadaWeb.PS\OmadaWeb.PS.nuspec" target="" />
+        <!-- Pinned versions and SHA-256 hashes of the binaries the module downloads at runtime.
+             Without it every download fails closed, so it has to ship with the module. -->
+        <file src="buildoutput\OmadaWeb.PS\DependencyLock.psd1" target="" />
     </files>
 </package>

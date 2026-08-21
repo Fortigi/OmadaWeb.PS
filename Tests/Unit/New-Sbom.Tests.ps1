@@ -83,10 +83,20 @@ Describe 'New-Sbom.ps1' -Tag 'Unit' {
         }
 
         It 'Should still list runtime-resolved components, carrying their version strategy' {
+            # msedgedriver is the one component that cannot be pinned - its version has to match the
+            # Edge build on the machine - so it is what "resolved at runtime" looks like now that
+            # everything else carries a pin from OmadaWeb.PS/DependencyLock.psd1.
+            $EdgeDriver = $Script:Sbom.components | Where-Object { $_.name -eq 'msedgedriver' }
+            $EdgeDriver | Should -Not -BeNullOrEmpty
+            $EdgeDriver.version | Should -BeNullOrEmpty
+            ($EdgeDriver.properties | Where-Object { $_.name -eq 'omadaweb:versionStrategy' }).value | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should record the pinned version for components that are hash-verified' {
             $Selenium = $Script:Sbom.components | Where-Object { $_.name -eq 'Selenium.WebDriver' }
             $Selenium | Should -Not -BeNullOrEmpty
-            $Selenium.version | Should -BeNullOrEmpty
-            ($Selenium.properties | Where-Object { $_.name -eq 'omadaweb:versionStrategy' }).value | Should -Not -BeNullOrEmpty
+            $Selenium.version | Should -Not -BeNullOrEmpty -Because 'Selenium is pinned in the dependency lock so the SBOM can state which version is loaded'
+            ($Selenium.properties | Where-Object { $_.name -eq 'omadaweb:versionSource' }).value | Should -Be 'declared-pin'
         }
 
         It 'Should use the declared pin when a component version is fixed in the module' {

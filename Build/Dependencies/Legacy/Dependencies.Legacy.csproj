@@ -1,0 +1,26 @@
+<!--
+  Frozen dependency manifest. NOT a buildable project and never compiled.
+
+  Selenium's .NET bindings went netstandard2.0-only from selenium-4.12.0, which Windows PowerShell
+  5.1 cannot load. 4.11.0 is the last release that still ships a net4* build, so Install-Selenium
+  pins it for the Desktop edition and it must not be bumped - a newer version would simply stop
+  working there.
+
+  It is listed here anyway, in its own directory, so the frozen version still enters the repository's
+  dependency graph and still raises a Dependabot alert if an advisory is ever published against it.
+  .github/dependabot.yml ignores version updates for this directory precisely because the bump
+  Dependabot would propose is not one we can take; an alert against it needs a human decision, not an
+  automatic pull request.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <EnableDefaultItems>false</EnableDefaultItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Selenium.WebDriver" Version="4.11.0" />
+  </ItemGroup>
+
+</Project>

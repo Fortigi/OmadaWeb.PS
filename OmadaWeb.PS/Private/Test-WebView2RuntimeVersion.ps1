@@ -6,15 +6,15 @@ function Test-WebView2RuntimeVersion {
     try {
         try {
             if ($null -eq $Script:WebView2LatestVersion) {
-                $Uri = "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/index.json"
-                $Versions = Invoke-RestMethod -Uri $Uri -UseBasicParsing
-                [System.Version[]]$Versions = $Versions.versions | Where-Object { $_ -notlike "*-prerelease" } | Sort-Object { [version]$_ } -Descending
-                [System.Version]$Script:WebView2LatestVersion = $Versions | Select-Object -First 1
+                # The expected version is the one pinned in the lock file, not whatever nuget.org
+                # currently calls latest: an unpinned version could not be hash-verified before being
+                # loaded. A newer WebView2 therefore arrives with a module update.
+                [System.Version]$Script:WebView2LatestVersion = (Get-LockedArtifact -Id "Microsoft.Web.WebView2").Version
             }
-            "Latest WebView2 version on NuGet is {0}" -f $Script:WebView2LatestVersion | Write-Verbose
+            "Pinned WebView2 version is {0}" -f $Script:WebView2LatestVersion | Write-Verbose
         }
         catch {
-            "Could not check for latest WebView2 version on NuGet ({0}) because of an error: {1}" -f $Uri, $_ | Write-Warning
+            "Could not determine the pinned WebView2 version because of an error: {0}" -f $_ | Write-Warning
             $Script:WebView2UpdateChecked = $true
         }
 
@@ -51,7 +51,7 @@ function Test-WebView2RuntimeVersion {
                 }
             }
             catch {
-                "Unable to check WebView2 versions against NuGet repository. Please ensure you have an active internet connection so the module can check for updates. An update check will be attempted again when the module is reloaded." | Write-Warning
+                "Unable to compare the installed WebView2 assemblies against the pinned version. An update check will be attempted again when the module is reloaded." | Write-Warning
                 $ReturnValue = $false
             }
         }

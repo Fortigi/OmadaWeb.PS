@@ -29,6 +29,10 @@ jobs:
         shell: pwsh
         run: ./Build/InstallModules.ps1
 
+      - name: Verify dependency lock
+        shell: pwsh
+        run: ./Build/Update-DependencyLock.ps1 -Check
+
       - name: Warm up Selenium/Edge WebDriver
         shell: pwsh
         run: |
