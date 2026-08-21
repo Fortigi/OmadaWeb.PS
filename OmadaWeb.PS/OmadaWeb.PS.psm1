@@ -244,7 +244,6 @@ if ($Env:PROCESSOR_ARCHITECTURE -eq "AMD64") {
     $WebView2ArchitectureFolder = "win-x64"
 }
 $WebView2BasePath = [System.IO.Path]::Combine($WebBinBasePath, $WebView2ArchitectureFolder)
-New-Item -ItemType Directory -Path $WebView2BasePath -Force | Out-Null
 
 #WebView2 assemblies bundled with the module, laid out by Build\Get-BundledDependency.ps1 as
 #lib\<edition>\<architecture>. They are fetched and hash-verified at build time, which is what makes
@@ -275,6 +274,13 @@ if (-not $UpdateDependencies) {
     else {
         "{0} - No complete WebView2 bundle at '{1}'; falling back to downloading into '{2}'" -f $MyInvocation.MyCommand, $BundledWebView2BasePath, $WebView2BasePath | Write-Verbose
     }
+}
+
+#Only the download path writes here, so the folder is created only when that path is the one in use.
+#Creating it while running from the bundle would leave an empty folder behind for a download that is
+#never going to happen.
+if (!$Script:WebView2Bundled) {
+    New-Item -ItemType Directory -Path $WebView2BasePath -Force | Out-Null
 }
 
 #WebView2 Core Location
