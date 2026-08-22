@@ -111,7 +111,11 @@ function Get-OmadaLogonErrorScript {
         if (!isVisible(candidate)) { continue; }
 
         var message = readText(candidate);
-        if (!message || message.length > 4000) { continue; }
+        if (!message) { continue; }
+        // A banner that dumps a stack trace is still a refusal. Cap it rather than dropping it,
+        // so an over-long message never reads as 'no error at all'. The classifier truncates
+        // again for display; this cap only keeps the payload out of the megabyte range.
+        if (message.length > 4000) { message = message.substring(0, 4000); }
         if (messages.indexOf(message) !== -1) { continue; }
 
         messages.push(message);

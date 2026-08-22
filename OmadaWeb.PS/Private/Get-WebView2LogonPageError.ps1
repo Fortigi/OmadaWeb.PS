@@ -116,8 +116,11 @@ function Get-WebView2LogonPageError {
     $Script:ProgressCounter = 0
     $Script:LastFiredSecond = -1
 
-    if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.FindForm()) {
-        $Script:WebView2.FindForm().Close()
+    if ($null -ne $Script:WebView2) {
+        $LoginForm = $Script:WebView2.FindForm()
+        if ($null -ne $LoginForm) {
+            $LoginForm.Close()
+        }
     }
 
     return $true

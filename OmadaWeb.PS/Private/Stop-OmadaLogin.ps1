@@ -78,7 +78,10 @@ function Stop-OmadaLogin {
             $PageAddress = ([System.Uri]::New($Url)).GetLeftPart([System.UriPartial]::Path)
         }
         catch {
-            $PageAddress = Protect-LogMessage -Message $Url
+            # Not a parsable URI, so there is no path to ask for. Cut the string at the first '?'
+            # or '#' by hand: whatever follows is query or fragment, and that is exactly the part
+            # that carries tokens and must never reach the warning.
+            $PageAddress = Protect-LogMessage -Message ($Url -split '[?#]')[0]
         }
     }
 
