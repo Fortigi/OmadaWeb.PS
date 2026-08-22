@@ -253,13 +253,49 @@ $Script:WebDriverPath = [System.IO.Path]::Combine($WebBinBasePath, "WebDriver.dl
 "{0} - {1}" -f $MyInvocation.MyCommand, $Script:WebDriverPath | Write-Verbose
 
 #WebView2 Base Path
+$WebView2ArchitectureFolder = "win-x86"
 if ($Env:PROCESSOR_ARCHITECTURE -eq "AMD64") {
-    $WebView2BasePath = [System.IO.Path]::Combine($WebBinBasePath, "win-x64")
+    $WebView2ArchitectureFolder = "win-x64"
 }
-else {
-    $WebView2BasePath = [System.IO.Path]::Combine($WebBinBasePath, "win-x86")
+$WebView2BasePath = [System.IO.Path]::Combine($WebBinBasePath, $WebView2ArchitectureFolder)
+
+#WebView2 assemblies bundled with the module, laid out by Build\Get-BundledDependency.ps1 as
+#lib\<edition>\<architecture>. They are fetched and hash-verified at build time, which is what makes
+#the default authentication type work on a machine with no egress to nuget.org, and it means the
+#assemblies load from the module's own - usually read-only - install directory instead of from a
+#user-writable one.
+#
+#Everything below is a straight path swap: when the three files are all there the script-scope paths
+#point into the package, otherwise they point at %LOCALAPPDATA%\OmadaWeb.PS\Bin and Install-WebView2
+#downloads into it exactly as it always has. Nothing is ever copied out of the bundle into Bin, and
+#the bundled folder is never written to. -UpdateDependencies deliberately skips the bundle, so it
+#still forces a fresh download.
+$Script:WebView2Bundled = $false
+$BundledWebView2BasePath = [System.IO.Path]::Combine($PSScriptRoot, "lib", $PowerShellType, $WebView2ArchitectureFolder)
+if (-not $UpdateDependencies) {
+    $BundledWebView2File = @("Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll")
+    $BundledWebView2Complete = $true
+    foreach ($FileName in $BundledWebView2File) {
+        if (!(Test-Path ([System.IO.Path]::Combine($BundledWebView2BasePath, $FileName)) -PathType Leaf)) {
+            $BundledWebView2Complete = $false
+        }
+    }
+    if ($BundledWebView2Complete) {
+        $WebView2BasePath = $BundledWebView2BasePath
+        $Script:WebView2Bundled = $true
+        "{0} - Using the WebView2 assemblies bundled with the module: '{1}'" -f $MyInvocation.MyCommand, $WebView2BasePath | Write-Verbose
+    }
+    else {
+        "{0} - No complete WebView2 bundle at '{1}'; falling back to downloading into '{2}'" -f $MyInvocation.MyCommand, $BundledWebView2BasePath, $WebView2BasePath | Write-Verbose
+    }
 }
-New-Item -ItemType Directory -Path $WebView2BasePath -Force | Out-Null
+
+#Only the download path writes here, so the folder is created only when that path is the one in use.
+#Creating it while running from the bundle would leave an empty folder behind for a download that is
+#never going to happen.
+if (!$Script:WebView2Bundled) {
+    New-Item -ItemType Directory -Path $WebView2BasePath -Force | Out-Null
+}
 
 #WebView2 Core Location
 $Script:WebView2CorePath = [System.IO.Path]::Combine($WebView2BasePath, "Microsoft.Web.WebView2.Core.dll")

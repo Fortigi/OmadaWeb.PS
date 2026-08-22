@@ -64,7 +64,12 @@ try {
     New-Item $ModuleTargetFolder -ItemType Directory -Force | Out-Null
     Get-ChildItem -Path $ModuleSourceFolder | Copy-Item -Destination $ModuleTargetFolder -Recurse -Force
     Get-ChildItem $ModuleTargetFolder -Recurse | Unblock-File
-    Get-ChildItem $ModuleTargetFolder | Where-Object { $_.Name -notin @("OmadaWeb.PS.psm1", "OmadaWeb.PS.psd1") } | Remove-Item -Force
+    # Drops the build's leftovers (the nuspec, test results) but keeps everything the module needs at
+    # runtime. DependencyLock.psd1 used to be swept away here, which left a locally deployed module
+    # unable to verify - and therefore unable to perform - any download at all. The bundled WebView2
+    # assemblies under lib\ are kept for the same reason; -File leaves that folder alone.
+    $KeepFile = @("OmadaWeb.PS.psm1", "OmadaWeb.PS.psd1", "DependencyLock.psd1", "ThirdPartyNotices.txt")
+    Get-ChildItem $ModuleTargetFolder -File | Where-Object { $_.Name -notin $KeepFile } | Remove-Item -Force
     "Finished" | Write-Host
 }
 catch {
