@@ -101,7 +101,10 @@ Describe 'psakeBuild.ps1 packaging' -Tag 'Unit' {
         # declares, and the failure surfaced at publish time.
         $Content = Get-Content -Path $Script:PsakeBuild -Raw
 
-        $BuildTask = [regex]::Match($Content, '(?s)Task Build -depends Analyze \{.*?\r?\n\}')
+        # Matched without pinning the -depends clause: what matters is that the work happens inside
+        # the Build task, not what that task depends on. Anchored to the start of a line so a
+        # comment mentioning `-Task Build` is not mistaken for the declaration.
+        $BuildTask = [regex]::Match($Content, '(?sm)^Task\s+Build\b[^\{]*\{.*?\r?\n\}')
         $BuildTask.Success | Should -BeTrue
 
         $BuildTask.Value | Should -BeLike '*Get-BundledDependency.ps1*' -Because 'a build that does not bundle produces a package its own manifest contradicts'
