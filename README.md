@@ -91,6 +91,30 @@ The warning names the state, the elements that were expected but absent, and the
 
 The module waits 60 seconds without progress before it gives up on autofill, so a slow round trip to Microsoft is not mistaken for a changed page. Waiting for you to approve a sign-in request in your authenticator app does not count against that.
 
+### When Omada refuses the sign-in
+
+A sign-in can also fail on the other side of the redirect. Your identity provider authenticates you, hands the browser back to Omada, and Omada decides it cannot let you in - because the account is not a member of the tenant the Omada application is registered in, because the application registration is not accepted, or for any other reason it reports. That failure is not an HTTP error and not a redirect: it is a message rendered on Omada's own logon page, which then simply sits there.
+
+Nothing that a sign-in usually watches for happens next. No authentication cookie is ever set, so the module used to wait out its response watchdog, close the window, open a new one, and land on the same page again - three times over, half an hour, ending in `Could not authenticate to '...'` with nothing said about why.
+
+The module now reads that page. An error it recognizes as final ends the sign-in immediately, with the message Omada showed:
+
+```text
+WARNING: Sign-in was refused and will not be retried.
+  Error code : AADSTS50178
+  Page URL   : https://example.omada.cloud/logon.aspx
+  Engine     : WebView2
+  Message    : AADSTS50178: User account '...' from identity provider '...' does not exist in tenant 'Example' and cannot access the application '...' in that tenant. The account needs to be added as an external user in the tenant first.
+  Meaning    : The account that signed in is not known in the tenant the Omada application is registered in.
+Opening the sign-in window again would land on this same page, so no further attempts are made. ...
+```
+
+The request then fails with that same message rather than with a bare "could not authenticate", so what to do next - sign in with an account from the application's own tenant, or have yours invited into it - is in the error itself. Add `-ForceAuthentication` to the retry so the sign-in starts from a clean browser session.
+
+**Only errors a retry cannot change stop the sign-in.** An error you can correct in the window that is open - a wrong password on Omada's own logon form - is reported once and otherwise left alone, and so is one the identity provider may recover from by itself, such as `server_error` or `temporarily_unavailable`. An error whose wording the module does not recognize is treated as final only when the page offers no way to sign in again, which is what a failed federated sign-in looks like whatever the Omada version calls it.
+
+This applies to both browser engines, and the message is redacted and stripped of its query string like every other diagnostic the module prints.
+
 ### Deprecations
 
 The module carries its own deprecation schedule and warns you at runtime, once per PowerShell

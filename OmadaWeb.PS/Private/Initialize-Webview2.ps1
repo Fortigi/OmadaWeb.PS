@@ -138,6 +138,15 @@ function Initialize-WebView2 {
 
                                     switch ($Script:WebView2.Source) {
                                         { $_.Host -eq [System.Uri]::New($Script:CurrentWebView2Session.BaseUrl).Host } {
+                                            # A federated sign-in that failed comes back as an error
+                                            # banner on Omada's own logon page, not as an HTTP error:
+                                            # no oisauthtoken is ever set, so the watchdog below would
+                                            # keep re-opening this window until the retry count runs
+                                            # out. Read the page before waiting on a cookie that
+                                            # cannot arrive.
+                                            if (Get-WebView2LogonPageError) {
+                                                return
+                                            }
                                             Get-WebView2Cookie
                                         }
                                         { $_.Host -eq [System.Uri]::New("https://login.microsoftonline.com").Host -and $Script:MicrosoftOnlineLogin } {
