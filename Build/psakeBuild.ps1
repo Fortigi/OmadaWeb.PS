@@ -10,9 +10,12 @@ Properties {
 }
 
 
-Task default -depends Analyze, Build, BundleDependencies, ImportModule, TestHelp, Test
-Task DeployOnly -depends Build, BundleDependencies, Deploy
-Task TestBuildOnly -depends Analyze, Build, BundleDependencies, ImportModule, TestHelp, Test
+# Build produces a complete package on its own - assemblies bundled, contents verified against the
+# manifest - so every task list below and every caller of `build.ps1 -Task Build` gets the same
+# thing.
+Task default -depends Analyze, Build, ImportModule, TestHelp, Test
+Task DeployOnly -depends Build, Deploy
+Task TestBuildOnly -depends Analyze, Build, ImportModule, TestHelp, Test
 
 Task Analyze {
 
@@ -282,20 +285,28 @@ Task Build -depends Analyze {
     "Copy dependency lock file" | Write-Host -ForegroundColor Magenta
     Copy-Item -Path "$ModuleSource\DependencyLock.psd1" -Destination "$OutputDir" -Force
 
-}
-
-# Puts the WebView2 assemblies inside the package, fetched from the pinned URL and verified against
-# the pinned SHA-256 by the module's own download code. It runs between Build and ImportModule so
-# every workflow that builds - release, PR validation and nightly - bundles without a workflow edit,
-# and so the tests below see the same layout a user installs.
-#
-# A failure here fails the build on purpose. A package that quietly shipped without these assemblies
-# would look healthy and then break the first sign-in of every user without egress to nuget.org.
-Task BundleDependencies -depends Build {
+    # Puts the WebView2 assemblies inside the package, fetched from the pinned URL and verified
+    # against the pinned SHA-256 by the module's own download code.
+    #
+    # This belongs to building the module rather than to a task alongside it. The manifest written
+    # above declares these files in its FileList unconditionally, so a package without them is not a
+    # cheaper build - it is a broken one, and it fails much later, in whatever job tries to publish
+    # it. It used to be a separate BundleDependencies task pulled in by the aggregate task lists,
+    # which meant `build.ps1 -Task Build` - what nightly.yml runs - produced exactly that.
+    #
+    # A failure here fails the build on purpose. A package that quietly shipped without these
+    # assemblies would look healthy and then break the first sign-in of every user without egress to
+    # nuget.org.
+    "Bundle runtime dependencies" | Write-Host -ForegroundColor Magenta
     & (Join-Path $PSScriptRoot -ChildPath "Get-BundledDependency.ps1") -PackagePath $OutputDir -RepositoryRoot $ParentPath
+
+    # Everything the manifest promises has to be on disk before anything downstream believes it.
+    "Verify package contents against the manifest" | Write-Host -ForegroundColor Magenta
+    & (Join-Path $PSScriptRoot -ChildPath "Confirm-PackageFileList.ps1") -PackagePath $OutputDir
+
 }
 
-Task ImportModule -depends Build, BundleDependencies {
+Task ImportModule -depends Build {
 
     try {
         $ScriptBlock = {
