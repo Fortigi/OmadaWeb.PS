@@ -43,6 +43,19 @@ Describe 'Show-EntraApprovalNumber' -Tag 'Unit' {
             }
         }
 
+        It 'Asks for the one process by name instead of enumerating every process' {
+            # This runs on the WebView2 UI thread. Filtering the whole process table to answer a
+            # yes/no question about a single process is work the timer does not need to do.
+            InModuleScope 'OmadaWeb.PS' {
+                Mock Get-Process { @() }
+                Mock Write-Host {}
+
+                Show-EntraApprovalNumber -Number '42' | Out-Null
+
+                Should -Invoke Get-Process -Times 1 -Exactly -ParameterFilter { $Name -eq 'PhoneExperienceHost' }
+            }
+        }
+
         It 'Still shows the number when the clipboard cannot be set' {
             # The number is the one piece of information the user needs; a clipboard failure must
             # not cost them it.

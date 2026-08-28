@@ -79,12 +79,30 @@ function Invoke-WebView2MicrosoftLogin {
 "@
 
         # 'Pick an account' identifies each tile by the account name in its data-test-id.
+        #
+        # The visibility test is not decoration: Get-EntraSignInProbeScript reports only visible
+        # tiles, so the resolver can only ever choose one. Clicking the first element carrying the
+        # id regardless would let a hidden namesake take the click instead, and that failure is
+        # invisible from here - the click reports success, which restarts the stall clock, so the
+        # driver would sit on the same page clicking nothing for as long as the window is open.
         $ClickAccountTileScript = @"
 (function(dataTestId) {
+    function isVisible(element) {
+        if (!element) { return false; }
+        try {
+            var style = window.getComputedStyle(element);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') { return false; }
+        }
+        catch (e) { return false; }
+        if (element.getAttribute('aria-hidden') === 'true') { return false; }
+        if (element.disabled === true) { return false; }
+        return element.offsetWidth > 0 || element.offsetHeight > 0 || element.getClientRects().length > 0;
+    }
+
     var elements = document.querySelectorAll('[data-test-id]');
     for (var i = 0; i < elements.length; i++) {
         var value = elements[i].getAttribute('data-test-id');
-        if (value != null && value.toLowerCase() === dataTestId.toLowerCase()) {
+        if (value != null && value.toLowerCase() === dataTestId.toLowerCase() && isVisible(elements[i])) {
             elements[i].click();
             return true;
         }

@@ -52,7 +52,10 @@ function Show-EntraApprovalNumber {
 
     $Message = "`nWaiting for you to approve this sign-in request"
 
-    $PhoneLinkActive = (Get-Process | Where-Object { $_.ProcessName -eq "PhoneExperienceHost" } | Measure-Object).Count -gt 0
+    # Asking for the one process by name rather than filtering the whole table: this runs on the
+    # WebView2 UI thread, and enumerating every process on the machine to answer a yes/no question
+    # about one of them is work the timer does not need to do.
+    $PhoneLinkActive = (Get-Process -Name "PhoneExperienceHost" -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
     if ($PhoneLinkActive) {
         try {
             $Number | Set-Clipboard

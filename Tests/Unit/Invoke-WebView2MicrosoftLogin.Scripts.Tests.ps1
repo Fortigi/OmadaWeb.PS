@@ -67,6 +67,22 @@ Describe 'Invoke-WebView2MicrosoftLogin JavaScript snippets' -Tag 'Unit' {
         }
     }
 
+    Context 'Agreement with the page probe' {
+        It 'Clicks only an account tile it can see' {
+            # Get-EntraSignInProbeScript reports only visible tiles, so the resolver can only ever
+            # choose a visible one. Clicking the first element carrying that data-test-id regardless
+            # would let a hidden namesake take the click - and that failure is invisible from here,
+            # because the click reports success and so restarts the stall clock. The driver would sit
+            # on the same page clicking nothing for as long as the window stayed open.
+            $Snippet = $Script:Snippets['ClickAccountTileScript']
+
+            $Snippet | Should -Not -BeNullOrEmpty
+            $Snippet | Should -Match 'getComputedStyle'
+            $Snippet | Should -Match "aria-hidden"
+            $Snippet | Should -Match 'isVisible\(elements\[i\]\)'
+        }
+    }
+
     Context 'Language independence' {
         # The defect at the heart of issue #18: the 'Stay signed in?' screen used to be recognized by
         # reading the text of its two buttons and comparing it to 'Yes' and 'No', and sign-in
