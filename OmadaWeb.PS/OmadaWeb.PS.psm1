@@ -1,4 +1,5 @@
 #Add parameters like: Import-Module OmadaWeb.PS -ArgumentList "C:\Temp\","C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidGlobalVars", "", Justification = "OmadaWebPSCurrentBaseUrl is deliberately global: it is part of the module's public surface, readable by callers to see which environment the last request went to. It is initialized here and maintained in Invoke-OmadaRequest; no other global is introduced, which is why the rule is suppressed here rather than excluded from the whole build.")]
 param(
     [parameter(Mandatory = $false)]
     [hashtable]$Parameters

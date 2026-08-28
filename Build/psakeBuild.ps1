@@ -22,7 +22,11 @@ Task Analyze {
     $Profile = @{
         Severity     = @('Error', 'Warning')
         IncludeRules = '*'
-        ExcludeRules = '*WriteHost', '*AvoidUsingEmptyCatchBlock*', '*UseShouldProcessForStateChangingFunctions*', '*AvoidOverwritingBuiltInCmdlets*', '*UseToExportFieldsInManifest*', '*UseProcessBlockForPipelineCommand*', '*ConvertToSecureStringWithPlainText*', '*AvoidGlobalVars*'
+        # AvoidGlobalVars is deliberately NOT excluded here. The module's one global,
+        # $Global:OmadaWebPSCurrentBaseUrl, is suppressed inline at the two places that touch it
+        # (OmadaWeb.PS.psm1 and Invoke-OmadaRequest.ps1) so that any new, unjustified global fails
+        # this task instead of passing unnoticed under a blanket exclusion.
+        ExcludeRules = '*WriteHost', '*AvoidUsingEmptyCatchBlock*', '*UseShouldProcessForStateChangingFunctions*', '*AvoidOverwritingBuiltInCmdlets*', '*UseToExportFieldsInManifest*', '*UseProcessBlockForPipelineCommand*', '*ConvertToSecureStringWithPlainText*'
     }
     $saResults = Invoke-ScriptAnalyzer -Path $ModuleSource -Severity @('Error', 'Warning') -Recurse -Profile $Profile -Verbose:$false
     if ($saResults) {

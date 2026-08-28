@@ -1,5 +1,6 @@
 function Invoke-OmadaRequest {
     [CmdletBinding(DefaultParameterSetName = "StandardMethod")]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidGlobalVars", "", Justification = "OmadaWebPSCurrentBaseUrl is deliberately global: it is part of the module's public surface, readable by callers to see which environment the last request went to. It is declared in OmadaWeb.PS.psm1 and this is the only place that maintains it.")]
     param()
 
     dynamicparam {
