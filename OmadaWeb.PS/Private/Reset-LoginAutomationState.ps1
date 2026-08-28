@@ -22,6 +22,13 @@ function Reset-LoginAutomationState {
     $Script:UnmatchedPageSignature = $null
     $Script:UnmatchedPageSince = $null
 
+    # Both are "report this once, not once per 150 ms tick" guards, and both are about the window
+    # that is starting rather than the one that ended: a second attempt has to be allowed to say
+    # again that the preferred verification method is not available, and to start counting its own
+    # wait for an approval from zero.
+    $Script:PreferredMfaMethodWarningIssued = $false
+    $Script:MfaWaitLastReported = $null
+
     # Scrape state of Get-WebView2LogonPageError. It belongs to a browser window - a pending script
     # task cannot outlive the CoreWebView2 that was asked to run it - so it is cleared here with the
     # rest of the per-window state. $Script:LoginAbortReason deliberately is not: a refused sign-in

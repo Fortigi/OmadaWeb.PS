@@ -14,6 +14,7 @@ Describe 'Invoke-WebView2MicrosoftLogin JavaScript snippets' -Tag 'Unit' {
         # command keeps this test working against both the source module and the built one.
         $Definition = InModuleScope 'OmadaWeb.PS' { (Get-Command Invoke-WebView2MicrosoftLogin).Definition }
 
+        $Script:Definition = $Definition
         $Script:Snippets = @{}
 
         foreach ($Match in [regex]::Matches($Definition, '\$(?<Name>\w+Script)\s*=\s*@"\r?\n(?<Body>.*?)\r?\n"@', 'Singleline')) {
@@ -23,16 +24,15 @@ Describe 'Invoke-WebView2MicrosoftLogin JavaScript snippets' -Tag 'Unit' {
 
     Context 'Snippets that the call sites invoke with arguments' {
         # These are appended with an argument list, for example
-        # "$clickElementScript($(ConvertTo-JavaScriptLiteral $SubmitButtonId))". They must therefore
+        # "$ClickElementScript($(ConvertTo-JavaScriptLiteral $SubmitId))". They must therefore
         # stay bare function expressions. A snippet that self-invokes turns the argument list into a
         # second, separate expression statement, and ExecuteScriptAsync then returns the value of
         # that trailing expression instead of the function result.
         It 'Leaves <Name> a bare function expression' -TestCases @(
-            @{ Name = 'setElementValueScript' }
-            @{ Name = 'clickElementScript' }
-            @{ Name = 'isElementVisibleScript' }
-            @{ Name = 'getElementByDataTestIdScript' }
-            @{ Name = 'getElementPropertyScript' }
+            @{ Name = 'SetElementValueScript' }
+            @{ Name = 'ClickElementScript' }
+            @{ Name = 'ClickAccountTileScript' }
+            @{ Name = 'ClickProofOptionScript' }
         ) {
             $Snippet = $Script:Snippets[$Name]
 
@@ -46,10 +46,7 @@ Describe 'Invoke-WebView2MicrosoftLogin JavaScript snippets' -Tag 'Unit' {
         # These take no arguments and are passed to ExecuteScriptAsync unchanged, so they have to
         # invoke themselves.
         It 'Keeps <Name> self-invoking' -TestCases @(
-            @{ Name = 'getAllIdsScript' }
-            @{ Name = 'getMfaElementPropertyScript' }
-            @{ Name = 'clickUseAnotherAccountScript' }
-            @{ Name = 'checkForErrorScript' }
+            @{ Name = 'ClickUseAnotherAccountScript' }
         ) {
             $Snippet = $Script:Snippets[$Name]
 
@@ -58,15 +55,35 @@ Describe 'Invoke-WebView2MicrosoftLogin JavaScript snippets' -Tag 'Unit' {
         }
     }
 
-    Context 'Composed property lookup' {
-        It 'Builds a single call expression for the stay-signed-in button labels' {
-            InModuleScope 'OmadaWeb.PS' -Parameters @{ Snippet = $Script:Snippets['getElementPropertyScript'] } {
-                $ComposedScript = "$Snippet($(ConvertTo-JavaScriptLiteral 'idBtn_Back'), $(ConvertTo-JavaScriptLiteral 'textContent'))"
+    Context 'Composed call expressions' {
+        It 'Builds a single call expression for a click' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Snippet = $Script:Snippets['ClickElementScript'] } {
+                $ComposedScript = "$Snippet($(ConvertTo-JavaScriptLiteral 'idBtn_Back'))"
 
-                # One statement: the function expression immediately applied to its two arguments.
-                $ComposedScript | Should -BeLike '*})("idBtn_Back", "textContent")'
+                # One statement: the function expression immediately applied to its argument.
+                $ComposedScript | Should -BeLike '*})("idBtn_Back")'
                 $ComposedScript | Should -Not -BeLike '*})();*'
             }
+        }
+    }
+
+    Context 'Language independence' {
+        # The defect at the heart of issue #18: the 'Stay signed in?' screen used to be recognized by
+        # reading the text of its two buttons and comparing it to 'Yes' and 'No', and sign-in
+        # failures by sweeping the page for 'incorrect' and 'wrong password'. On a tenant served in
+        # any other language those comparisons match nothing, and credential autofill silently did
+        # nothing at all. The screen is now recognized by KmsiCheckboxField and failures by the
+        # numeric error code, so nothing in this function may read rendered text again.
+        It 'Does not compare rendered button text against a literal, as the old <Description> did' -TestCases @(
+            @{ Description = "'Stay signed in?' button comparison"; Pattern = '-like\s+"\*(Yes|No)\*"' }
+            @{ Description = 'button-label reader'; Pattern = 'BackButtonText' }
+            @{ Description = 'textContent lookup'; Pattern = 'textContent|innerText' }
+            # Quoted, so that describing the old behavior in a comment does not fail the test that
+            # guards against it.
+            @{ Description = 'English error-word sweep'; Pattern = "(?i)[`"']wrong password[`"']|[`"']not recognized[`"']|[`"']incorrect[`"']" }
+            @{ Description = 'accessible-label comparison'; Pattern = 'ComputedAccessibleLabel' }
+        ) {
+            $Script:Definition | Should -Not -Match $Pattern
         }
     }
 }

@@ -38,6 +38,7 @@ function Get-OmadaSessionContext {
         BaseUrl             = $null
         AuthCookie          = $AuthCookie
         Credential          = $null
+        PreferredMfaMethod  = $null
         LastSessionType     = $null
         WebView2Used        = $false
         ForceAuthentication = $false

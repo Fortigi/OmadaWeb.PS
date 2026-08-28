@@ -1,0 +1,480 @@
+param(
+    [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
+)
+
+BeforeAll {
+    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
+    Import-Module $ModulePath -Force -ErrorAction Stop
+
+    # Every snapshot the probe script produces carries all of these members, so the helper does too:
+    # a test built on a half-populated object would pass for reasons the real page never reproduces.
+    function New-PageState {
+        param([hashtable]$Override = @{})
+
+        $State = [ordered]@{
+            ids                     = @()
+            visibleIds              = @()
+            errorCode               = '0'
+            errorCodeText           = ''
+            proofs                  = @()
+            proofOptionCount        = 0
+            accountTiles            = @()
+            hasOtherTile            = $false
+            displaySign             = $null
+            hasVisiblePasswordInput = $false
+            hasVisibleEmailInput    = $false
+            path                    = '/common/login'
+        }
+
+        foreach ($Key in $Override.Keys) {
+            $State[$Key] = $Override[$Key]
+        }
+
+        return [pscustomobject]$State
+    }
+}
+
+Describe 'Resolve-EntraSignInScreen' -Tag 'Unit' {
+
+    BeforeEach {
+        InModuleScope 'OmadaWeb.PS' {
+            $Script:PreferredMfaMethodWarningIssued = $false
+        }
+    }
+
+    Context 'Username and account discovery' {
+        It 'Fills in the user name and submits it' {
+            $PageState = New-PageState @{ ids = @('i0116', 'idSIButton9'); visibleIds = @('i0116', 'idSIButton9') }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'UsernameEntry'
+                $Decision.Action | Should -Be 'SetValueAndClick'
+                $Decision.ElementId | Should -Be 'i0116'
+                $Decision.SubmitId | Should -Be 'idSIButton9'
+                $Decision.ValueSource | Should -Be 'UserName'
+                $Decision.Value | Should -Be 'someone@contoso.com'
+            }
+        }
+
+        It 'Ignores a username field the page renders but hides' {
+            # The password screen keeps i0116 in the markup, hidden. Acting on it there would retype
+            # the user name over the password step.
+            $PageState = New-PageState @{ ids = @('i0116', 'idSIButton9'); visibleIds = @('idSIButton9') }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                (Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword).Screen | Should -Not -Be 'UsernameEntry'
+            }
+        }
+    }
+
+    Context 'Pick an account' {
+        It 'Selects the tile of the account the credential names' {
+            $PageState = New-PageState @{
+                ids          = @('idSIButton9')
+                visibleIds   = @('idSIButton9')
+                accountTiles = @(
+                    [pscustomobject]@{ index = 0; testId = 'other@contoso.com' }
+                    [pscustomobject]@{ index = 1; testId = 'someone@contoso.com' }
+                )
+                hasOtherTile = $true
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'AccountPicker'
+                $Decision.Action | Should -Be 'ClickAccountTile'
+                $Decision.Value | Should -Be 'someone@contoso.com'
+            }
+        }
+
+        It 'Falls back to "use another account" when no tile matches' {
+            $PageState = New-PageState @{
+                accountTiles = @([pscustomobject]@{ index = 0; testId = 'other@contoso.com' })
+                hasOtherTile = $true
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'AccountPicker'
+                $Decision.Action | Should -Be 'ClickUseAnotherAccount'
+            }
+        }
+
+        It 'Waits and explains itself when neither a matching tile nor the fallback exists' {
+            $PageState = New-PageState @{
+                accountTiles = @([pscustomobject]@{ index = 0; testId = 'other@contoso.com' })
+                hasOtherTile = $false
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.Reason | Should -Not -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Password' {
+        It 'Fills in the password without ever putting it in the decision' {
+            # The decision object reaches the verbose stream; the secret must not travel with it.
+            $PageState = New-PageState @{ ids = @('i0118', 'idSIButton9'); visibleIds = @('i0118', 'idSIButton9') }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'PasswordEntry'
+                $Decision.Action | Should -Be 'SetValueAndClick'
+                $Decision.ElementId | Should -Be 'i0118'
+                $Decision.SubmitId | Should -Be 'idSIButton9'
+                $Decision.ValueSource | Should -Be 'Password'
+                $Decision.Value | Should -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Passwordless credentials' {
+        It 'Switches to another sign-in method rather than submitting an empty password' {
+            $PageState = New-PageState @{
+                ids        = @('i0118', 'idSIButton9', 'idA_PWD_SwitchToCredPicker')
+                visibleIds = @('i0118', 'idSIButton9', 'idA_PWD_SwitchToCredPicker')
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Screen | Should -Be 'SwitchToPasswordless'
+                $Decision.Action | Should -Be 'Click'
+                $Decision.ElementId | Should -Be 'idA_PWD_SwitchToCredPicker'
+            }
+        }
+
+        It 'Uses the signInAnotherWay link when the credential picker link is absent' {
+            $PageState = New-PageState @{
+                ids        = @('i0118', 'idSIButton9', 'signInAnotherWay')
+                visibleIds = @('i0118', 'idSIButton9', 'signInAnotherWay')
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                (Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com').ElementId | Should -Be 'signInAnotherWay'
+            }
+        }
+
+        It 'Never submits a blank password, whatever the page offers' {
+            # The negative criterion of issue #18: an empty-password credential must not spend one of
+            # the attempts before smart lockout on a value that cannot be right.
+            $Variant = @(
+                @('i0118', 'idSIButton9')
+                @('i0118', 'idSIButton9', 'idA_PWD_SwitchToCredPicker')
+                @('i0118', 'idSIButton9', 'signInAnotherWay')
+                @('i0118', 'idSIButton9', 'idA_PWD_ForgotPassword')
+            )
+
+            foreach ($Ids in $Variant) {
+                $PageState = New-PageState @{ ids = $Ids; visibleIds = $Ids }
+
+                InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                    $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                    $Decision.ValueSource | Should -Not -Be 'Password'
+                    ($Decision.Action -eq 'SetValueAndClick' -and $Decision.ElementId -eq 'i0118') | Should -BeFalse
+                }
+            }
+        }
+
+        It 'Waits, saying so, when a password is required and none can be supplied' {
+            $PageState = New-PageState @{ ids = @('i0118', 'idSIButton9'); visibleIds = @('i0118', 'idSIButton9') }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Screen | Should -Be 'PasswordRequired'
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.Reason | Should -BeLike '*empty password*'
+            }
+        }
+    }
+
+    Context 'Approval numbers' {
+        It 'Reads the number from <ElementId>' -TestCases @(
+            @{ ElementId = 'idRemoteNGC_DisplaySign' }
+            @{ ElementId = 'idRichContext_DisplaySign' }
+        ) {
+            # Passwordless sign-in uses the first, Authenticator number match the second. Only the
+            # second was ever read before, which is why passwordless sign-in stalled silently.
+            $PageState = New-PageState @{ ids = @($ElementId); visibleIds = @($ElementId); displaySign = '42' }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState; ElementId = $ElementId } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Screen | Should -Be 'ApprovalNumber'
+                $Decision.Action | Should -Be 'ReadNumber'
+                $Decision.ElementId | Should -Be $ElementId
+                $Decision.Value | Should -Be '42'
+            }
+        }
+
+        It 'Reports a failed approval as one to retry' {
+            $PageState = New-PageState @{ ids = @('idA_SAASDS_Resend'); visibleIds = @('idA_SAASDS_Resend') }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -MfaRequestDisplayed
+
+                $Decision.Screen | Should -Be 'MfaRetry'
+                $Decision.Action | Should -Be 'Retry'
+            }
+        }
+
+        It 'Does not mistake a resend link next to a live request for a failed one' {
+            $PageState = New-PageState @{
+                ids         = @('idA_SAASDS_Resend', 'idRichContext_DisplaySign')
+                visibleIds  = @('idA_SAASDS_Resend', 'idRichContext_DisplaySign')
+                displaySign = '42'
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                (Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -MfaRequestDisplayed).Screen | Should -Be 'ApprovalNumber'
+            }
+        }
+    }
+
+    Context 'One-time code' {
+        It 'Waits for a code that only a person can supply, and says so' {
+            $PageState = New-PageState @{
+                ids        = @('idTxtBx_SAOTCC_OTC', 'idSubmit_SAOTCC_Continue')
+                visibleIds = @('idTxtBx_SAOTCC_OTC', 'idSubmit_SAOTCC_Continue')
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Screen | Should -Be 'OneTimeCode'
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.Reason | Should -Not -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Choose a way to sign in' {
+        It 'Clicks the option of the most secure offered method' {
+            $PageState = New-PageState @{
+                ids              = @('idDiv_SAOTCS_Proofs')
+                visibleIds       = @('idDiv_SAOTCS_Proofs')
+                proofs           = @(
+                    [pscustomobject]@{ authMethodId = 'OneWaySMS'; isDefault = $true }
+                    [pscustomobject]@{ authMethodId = 'PhoneAppNotification'; isDefault = $false }
+                )
+                proofOptionCount = 2
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Screen | Should -Be 'MethodPicker'
+                $Decision.Action | Should -Be 'ClickProofOption'
+                $Decision.Index | Should -Be 1
+                $Decision.Value | Should -Be 'PhoneAppNotification'
+            }
+        }
+
+        It 'Honours -PreferredMfaMethod' {
+            $PageState = New-PageState @{
+                ids              = @('idDiv_SAOTCS_Proofs')
+                visibleIds       = @('idDiv_SAOTCS_Proofs')
+                proofs           = @(
+                    [pscustomobject]@{ authMethodId = 'OneWaySMS'; isDefault = $true }
+                    [pscustomobject]@{ authMethodId = 'PhoneAppNotification'; isDefault = $false }
+                )
+                proofOptionCount = 2
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                (Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -PreferredMfaMethod 'OneWaySMS').Index | Should -Be 0
+            }
+        }
+
+        It 'Refuses to click by position when the options and the methods do not line up' {
+            # The option elements carry no identifier naming the method, so position is the only
+            # link between them. A page where that link is broken is a page to leave alone.
+            $PageState = New-PageState @{
+                ids              = @('idDiv_SAOTCS_Proofs')
+                visibleIds       = @('idDiv_SAOTCS_Proofs')
+                proofs           = @(
+                    [pscustomobject]@{ authMethodId = 'OneWaySMS'; isDefault = $true }
+                    [pscustomobject]@{ authMethodId = 'PhoneAppNotification'; isDefault = $false }
+                )
+                proofOptionCount = 5
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.Reason | Should -BeLike '*cannot be selected safely*'
+            }
+        }
+    }
+
+    Context 'Stay signed in' {
+        It 'Declines by clicking the back button, with no button text read at all' {
+            # This is the screen that used to be recognized by comparing its buttons to the words
+            # 'Yes' and 'No', which is why credential autofill did nothing on a tenant served in any
+            # other language. The checkbox is on no other screen and is not localized.
+            $PageState = New-PageState @{
+                ids        = @('KmsiCheckboxField', 'idBtn_Back', 'idSIButton9')
+                visibleIds = @('KmsiCheckboxField', 'idBtn_Back', 'idSIButton9')
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'StaySignedIn'
+                $Decision.Action | Should -Be 'Click'
+                $Decision.ElementId | Should -Be 'idBtn_Back'
+            }
+        }
+    }
+
+    Context 'Errors the server reports' {
+        It 'Ends the sign-in on <ErrorCode> instead of retrying it' -TestCases @(
+            @{ ErrorCode = '53003' }
+            @{ ErrorCode = '50126' }
+            @{ ErrorCode = '50053' }
+            @{ ErrorCode = '50055' }
+        ) {
+            $PageState = New-PageState @{
+                ids        = @('i0118', 'idSIButton9')
+                visibleIds = @('i0118', 'idSIButton9')
+                errorCode  = $ErrorCode
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState; ErrorCode = $ErrorCode } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'SignInError'
+                $Decision.Action | Should -Be 'Stop'
+                $Decision.IsTerminal | Should -BeTrue
+                $Decision.Code | Should -Be ("AADSTS{0}" -f $ErrorCode)
+            }
+        }
+
+        It 'Reads the code from sErrorCode when iErrorCode is absent' {
+            $PageState = New-PageState @{ errorCode = ''; errorCodeText = '53003' }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                (Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com').Action | Should -Be 'Stop'
+            }
+        }
+
+        It 'Hands a registration interrupt back to the user without ending the sign-in' {
+            $PageState = New-PageState @{ errorCode = '50072' }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.IsTerminal | Should -BeFalse
+                $Decision.Reason | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Reads the error before acting on a password field that is on the same page' {
+            # A refused password screen is rendered again, with the field intact. Filling it in
+            # before reading the code is exactly how an account reaches smart lockout.
+            $PageState = New-PageState @{
+                ids        = @('i0118', 'idSIButton9', 'passwordError')
+                visibleIds = @('i0118', 'idSIButton9', 'passwordError')
+                errorCode  = '50126'
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.ValueSource | Should -Not -Be 'Password'
+                $Decision.Action | Should -Be 'Stop'
+            }
+        }
+    }
+
+    Context 'Pages this module does not recognize' {
+        It 'Waits rather than guessing, so a page mid-navigation is not mistaken for a broken one' {
+            $PageState = New-PageState
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'Unknown'
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.Reason | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Names the renamed field when a password screen no longer carries the id it used to' {
+            $PageState = New-PageState @{ hasVisiblePasswordInput = $true }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'UnrecognizedPasswordScreen'
+                $Decision.Reason | Should -BeLike '*i0118*'
+            }
+        }
+
+        It 'Names the renamed field when an account screen no longer carries the id it used to' {
+            $PageState = New-PageState @{ hasVisibleEmailInput = $true }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'UnrecognizedUserNameScreen'
+                $Decision.Reason | Should -BeLike '*i0116*'
+            }
+        }
+
+        It 'Says the page could not be read when there is no snapshot at all' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Decision = Resolve-EntraSignInScreen -PageState $null -UserName 'someone@contoso.com'
+
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.Reason | Should -Not -BeNullOrEmpty
+            }
+        }
+    }
+
+    Context 'Language independence' {
+        It 'Decides identically for every screen whatever language the tenant is served in' {
+            # The snapshot the decision is made from carries no rendered text at all, so a tenant
+            # served in Dutch or German produces byte-identical input for the same screen. This
+            # asserts the property that makes that true: no member of the snapshot is prose.
+            $Screen = @(
+                @{ ids = @('i0116', 'idSIButton9') }
+                @{ ids = @('i0118', 'idSIButton9') }
+                @{ ids = @('KmsiCheckboxField', 'idBtn_Back', 'idSIButton9') }
+                @{ ids = @('idRemoteNGC_DisplaySign') }
+            )
+
+            foreach ($Definition in $Screen) {
+                $PageState = New-PageState @{ ids = $Definition.ids; visibleIds = $Definition.ids }
+
+                InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                    $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                    $Decision.Screen | Should -Not -Be 'Unknown'
+
+                    # Nothing the decision was made from is text a translator would have touched.
+                    foreach ($Property in $PageState.PSObject.Properties) {
+                        $Property.Name | Should -Not -BeIn @('title', 'buttonText', 'message', 'label')
+                    }
+                }
+            }
+        }
+    }
+}
+
+AfterAll {
+    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
+}

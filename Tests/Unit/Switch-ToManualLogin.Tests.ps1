@@ -234,14 +234,38 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
 
     BeforeEach {
         InModuleScope 'OmadaWeb.PS' {
-            # A page that carries none of the element IDs any scenario acts on - what a Microsoft
-            # sign-in redesign looks like from here. getAllIdsScript only ever reports IDs from its
-            # own list, so an unrecognized page reaches ProcessingScenarios either empty or carrying
-            # one of the IDs that list looks for but no scenario handles. i0281 is such an ID, and
-            # using it keeps this fixture the shape the state machine really receives.
-            $Script:UnknownPageAttributes = @(
-                [PSCustomObject]@{ id = 'i0281'; tagName = 'DIV'; outerHTML = '<div id="i0281"></div>' }
-            )
+            # The sign-in automation reads the page once per step, as one JSON snapshot. The fake
+            # CoreWebView2 below returns whatever snapshot a test puts in $Script:NextScriptResult,
+            # encoded the way ExecuteScriptAsync encodes a return value: the script's JSON document,
+            # itself JSON-encoded.
+            function Script:New-SnapshotResult {
+                param([hashtable]$Override = @{})
+
+                $State = [ordered]@{
+                    ids                     = @()
+                    visibleIds              = @()
+                    errorCode               = '0'
+                    errorCodeText           = ''
+                    proofs                  = @()
+                    proofOptionCount        = 0
+                    accountTiles            = @()
+                    hasOtherTile            = $false
+                    displaySign             = $null
+                    hasVisiblePasswordInput = $false
+                    hasVisibleEmailInput    = $false
+                    path                    = '/common/login'
+                }
+
+                foreach ($Key in $Override.Keys) {
+                    $State[$Key] = $Override[$Key]
+                }
+
+                return (ConvertTo-Json -InputObject (ConvertTo-Json -InputObject $State -Depth 5 -Compress) -Compress)
+            }
+
+            # A page carrying one element the module knows of but no screen is recognized by - what a
+            # Microsoft sign-in redesign looks like from here.
+            $Script:NextScriptResult = Script:New-SnapshotResult @{ ids = @('idA_PWD_ForgotPassword'); visibleIds = @('idA_PWD_ForgotPassword') }
 
             $Script:WebView2 = [PSCustomObject]@{
                 Source       = [System.Uri]::New('https://login.microsoftonline.com/common/oauth2/authorize?client_id=abc')
@@ -249,31 +273,50 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
             }
 
             $Script:WebView2.CoreWebView2 | Add-Member -MemberType ScriptMethod -Name ExecuteScriptAsync -Value {
-                param($Script)
+                param($ScriptText)
 
                 [PSCustomObject]@{
                     IsCompleted = $true
                     IsFaulted   = $false
-                    Result      = 'null'
+                    Result      = $Script:NextScriptResult
                 }
             }
 
             $Script:CurrentWebView2Session = [PSCustomObject]@{
-                Credential = New-Object System.Management.Automation.PSCredential('user@contoso.com', (ConvertTo-SecureString 'password' -AsPlainText -Force))
+                Credential         = New-Object System.Management.Automation.PSCredential('user@contoso.com', (ConvertTo-SecureString 'password' -AsPlainText -Force))
+                PreferredMfaMethod = $null
             }
 
             $Script:MicrosoftOnlineLogin = $true
             $Script:LoginFailed = $false
             $Script:ManualLoginFallbackActive = $false
             $Script:MfaRequestDisplayed = $false
-            $Script:LoginState = 'ProcessingScenarios'
-            $Script:LoginSubState = $null
+            $Script:MfaWaitLastReported = $null
+            $Script:LoginState = $null
             $Script:LoginTask = $null
-            $Script:IdAttributes = $Script:UnknownPageAttributes
-            $Script:PreviousAttributes = $Script:UnknownPageAttributes
+            $Script:PageState = $null
+            $Script:PendingSubmitId = $null
+            $Script:CurrentScenario = $null
+            $Script:PreviousScenario = $null
             $Script:UnmatchedPageSignature = $null
             $Script:UnmatchedPageSince = $null
             $Script:LoginAutomationFallbackTimeout = 0
+
+            # Reading the page, deciding, and acting each take their own tick, so a test that wants
+            # to see what several ticks produce has to run several. Warnings raised inside the state
+            # machine do not reach an outer -WarningVariable, so the warning stream is redirected and
+            # only warning records are kept - folding every stream together would let the verbose
+            # logging satisfy the assertions on its own.
+            function Script:Invoke-LoginTick {
+                param([int]$Count = 6)
+
+                $Warnings = @()
+                for ($Tick = 0; $Tick -lt $Count; $Tick++) {
+                    $Warnings += @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+                }
+
+                return ($Warnings -join "`n")
+            }
         }
     }
 
@@ -281,135 +324,83 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
         InModuleScope 'OmadaWeb.PS' {
             $Script:WebView2 = $null
             $Script:CurrentWebView2Session = $null
-            $Script:IdAttributes = $null
-            $Script:PreviousAttributes = $null
+            $Script:PageState = $null
             $Script:LoginAutomationFallbackTimeout = 60
         }
     }
 
     It 'Falls back to manual login when the page matches no known sign-in step' {
         InModuleScope 'OmadaWeb.PS' {
-            # First pass arms the stall clock, second pass hits the timeout. Warnings raised inside
-            # the state machine do not reach an outer -WarningVariable, so redirect the warning
-            # stream and keep only warning records - a fold of every stream would let the verbose
-            # logging satisfy these assertions on its own.
-            Invoke-WebView2MicrosoftLogin -WarningAction SilentlyContinue | Out-Null
-            $Script:LoginState = 'ProcessingScenarios'
-            $Script:IdAttributes = $Script:UnknownPageAttributes
-            $Warnings = @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+            $Warning = Script:Invoke-LoginTick
 
             $Script:MicrosoftOnlineLogin | Should -BeFalse
-            ($Warnings -join "`n") | Should -BeLike '*ProcessingScenarios*'
+            $Warning | Should -BeLike '*Deciding*'
         }
     }
 
     It 'Names the missing selectors and the page in the diagnostic' {
         InModuleScope 'OmadaWeb.PS' {
-            Invoke-WebView2MicrosoftLogin -WarningAction SilentlyContinue | Out-Null
-            $Script:LoginState = 'ProcessingScenarios'
-            $Script:IdAttributes = $Script:UnknownPageAttributes
-            $Warnings = @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
-
-            $Warning = $Warnings -join "`n"
+            $Warning = Script:Invoke-LoginTick
 
             $Warning | Should -BeLike '*i0116*'
             $Warning | Should -BeLike '*i0118*'
             $Warning | Should -BeLike '*idSIButton9*'
-            $Warning | Should -BeLike '*Elements present : i0281*'
+            $Warning | Should -BeLike '*Elements present : idA_PWD_ForgotPassword*'
             $Warning | Should -BeLike '*https://login.microsoftonline.com/common/oauth2/authorize*'
         }
     }
 
     It 'Does not fall back while the page still matches a known sign-in step' {
         InModuleScope 'OmadaWeb.PS' {
-            # Working through the sub-states of a recognized page takes several ticks, which is why
-            # the timeout is generous in the module. Use the real one here.
+            # Working through a recognized page takes several ticks, which is why the timeout is
+            # generous in the module. Use the real one here.
             $Script:LoginAutomationFallbackTimeout = 60
+            $Script:NextScriptResult = Script:New-SnapshotResult @{ ids = @('i0116', 'idSIButton9'); visibleIds = @('i0116', 'idSIButton9') }
 
-            $KnownPage = @(
-                [PSCustomObject]@{ id = 'i0116'; outerHTML = '<input id="i0116">' }
-                [PSCustomObject]@{ id = 'idSIButton9'; outerHTML = '<input id="idSIButton9">' }
-            )
-
-            $Script:IdAttributes = $KnownPage
-            $Script:PreviousAttributes = $KnownPage
-
-            Invoke-WebView2MicrosoftLogin -WarningAction SilentlyContinue | Out-Null
-            $Script:LoginState = 'ProcessingScenarios'
-            $Script:IdAttributes = $KnownPage
-            $Warnings = @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+            $Warning = Script:Invoke-LoginTick
 
             $Script:MicrosoftOnlineLogin | Should -BeTrue
-            ($Warnings | Measure-Object).Count | Should -Be 0
+            $Warning | Should -BeNullOrEmpty
         }
     }
 
     It 'Does not fall back while waiting for the user to approve the sign-in request' {
         InModuleScope 'OmadaWeb.PS' {
-            $MfaPage = @(
-                [PSCustomObject]@{ id = 'idRichContext_DisplaySign'; outerHTML = '<div id="idRichContext_DisplaySign">42</div>' }
-            )
-
             $Script:MfaRequestDisplayed = $true
-            $Script:IdAttributes = $MfaPage
-            $Script:PreviousAttributes = $MfaPage
+            $Script:NextScriptResult = Script:New-SnapshotResult @{
+                ids         = @('idRichContext_DisplaySign')
+                visibleIds  = @('idRichContext_DisplaySign')
+                displaySign = '42'
+            }
 
-            Invoke-WebView2MicrosoftLogin -WarningAction SilentlyContinue | Out-Null
-            $Script:LoginState = 'ProcessingScenarios'
-            $Script:IdAttributes = $MfaPage
-            $Warnings = @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+            $Warning = Script:Invoke-LoginTick -Count 10
 
             $Script:MicrosoftOnlineLogin | Should -BeTrue
-            ($Warnings | Measure-Object).Count | Should -Be 0
+            $Warning | Should -BeNullOrEmpty
         }
     }
 
-    It 'Does not report a scenario the previous page was in' {
+    It 'Reports the screen it could not act on rather than the previous one' {
         InModuleScope 'OmadaWeb.PS' {
-            # The username page matched a scenario, then the sign-in moved to a page nothing
-            # recognizes. Naming UsernameEntry in the diagnostic would send a reader looking at the
-            # wrong code.
-            #
-            # A page with only the back button reaches the "no scenario matched" branch: the
-            # stay-signed-in scenario needs a submit button too, and account selection needs the
-            # back button to be absent.
-            $BackButtonOnlyPage = @(
-                [PSCustomObject]@{ id = 'idBtn_Back'; outerHTML = '<input id="idBtn_Back">' }
-            )
-
+            # The username screen was recognized, then the sign-in moved to a page nothing
+            # recognizes. Naming UsernameEntry in the diagnostic would send a reader to the wrong
+            # code.
             $Script:CurrentScenario = 'UsernameEntry'
-            $Script:IdAttributes = $BackButtonOnlyPage
-            $Script:PreviousAttributes = $BackButtonOnlyPage
 
-            Invoke-WebView2MicrosoftLogin -WarningAction SilentlyContinue | Out-Null
-
-            $Script:CurrentScenario | Should -BeNullOrEmpty -Because 'no scenario is acting on this page'
-
-            $Script:LoginState = 'ProcessingScenarios'
-            $Script:IdAttributes = $BackButtonOnlyPage
-            $Warnings = @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
-
-            $Warning = $Warnings -join "`n"
+            $Warning = Script:Invoke-LoginTick
 
             $Warning | Should -Not -BeLike '*UsernameEntry*'
-            $Warning | Should -BeLike '*ProcessingScenarios/NoMatchingScenario*'
+            $Warning | Should -BeLike '*Deciding/NoMatchingScreen*'
         }
     }
 
-    It 'Names every known selector when the page carries none of them' {
+    It 'Names every known selector when the page cannot be read at all' {
         InModuleScope 'OmadaWeb.PS' {
-            # getAllIds found nothing at all - the loudest form of a selector break. The diagnostic
-            # has to list what was looked for, since the page itself offers nothing to report.
-            $Script:LoginState = 'GettingIds'
-            $Script:LoginTask = [PSCustomObject]@{ IsCompleted = $true; IsFaulted = $false; Result = '"[]"' }
+            # The probe answered with nothing usable - the loudest form of a selector break. The
+            # diagnostic has to list what was looked for, since the page offers nothing to report.
+            $Script:NextScriptResult = 'null'
 
-            Invoke-WebView2MicrosoftLogin -WarningAction SilentlyContinue | Out-Null
-
-            $Script:LoginState = 'GettingIds'
-            $Script:LoginTask = [PSCustomObject]@{ IsCompleted = $true; IsFaulted = $false; Result = '"[]"' }
-            $Warnings = @(Invoke-WebView2MicrosoftLogin 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
-
-            $Warning = $Warnings -join "`n"
+            $Warning = Script:Invoke-LoginTick
 
             $Warning | Should -BeLike '*i0116*'
             $Warning | Should -BeLike '*KmsiCheckboxField*'
@@ -428,6 +419,49 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
 
             $Script:ManualLoginFallbackActive | Should -BeFalse
             $Script:UnmatchedPageSince | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'Ends the sign-in without retrying when Entra ID reports a Conditional Access block' {
+        InModuleScope 'OmadaWeb.PS' {
+            # Issue #18: a 53003 page is terminal. Re-opening the window lands on it again, and the
+            # driver has to be told that rather than spending its retries discovering it.
+            $Script:LoginAbortReason = $null
+            $Script:LoginAutomationFallbackTimeout = 60
+            $Script:WebView2 | Add-Member -MemberType ScriptMethod -Name FindForm -Value { return $null } -Force
+            $Script:NextScriptResult = Script:New-SnapshotResult @{ errorCode = '53003' }
+
+            $Warning = Script:Invoke-LoginTick -Count 4
+
+            $Script:LoginAbortReason | Should -Not -BeNullOrEmpty
+            $Script:LoginAbortReason.Code | Should -Be 'AADSTS53003'
+            $Script:LoginFailed | Should -BeTrue
+            $Script:MicrosoftOnlineLogin | Should -BeFalse
+            $Warning | Should -BeLike '*will not be retried*'
+
+            $Script:LoginAbortReason = $null
+        }
+    }
+
+    It 'Does not resubmit a credential Entra ID has just refused' {
+        InModuleScope 'OmadaWeb.PS' {
+            # The refused password screen is rendered again with the field intact. Filling it in is
+            # what drives an account into smart lockout, so the sign-in stops instead.
+            $Script:LoginAbortReason = $null
+            $Script:LoginAutomationFallbackTimeout = 60
+            $Script:WebView2 | Add-Member -MemberType ScriptMethod -Name FindForm -Value { return $null } -Force
+            $Script:NextScriptResult = Script:New-SnapshotResult @{
+                ids        = @('i0118', 'idSIButton9', 'passwordError')
+                visibleIds = @('i0118', 'idSIButton9', 'passwordError')
+                errorCode  = '50126'
+            }
+
+            Script:Invoke-LoginTick -Count 4 | Out-Null
+
+            $Script:LoginAbortReason.Code | Should -Be 'AADSTS50126'
+            $Script:LoginFailed | Should -BeTrue
+
+            $Script:LoginAbortReason = $null
         }
     }
 }
