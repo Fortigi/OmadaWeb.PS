@@ -197,8 +197,11 @@ function Resolve-EntraSignInScreen {
         # The credential names an account but carries no password, so this account signs in another
         # way. Submitting an empty password would spend one of the attempts before smart lockout on
         # a value that cannot be right.
+        # Visible, not merely present: this link is what gets clicked, and Entra keeps elements in
+        # the markup after hiding them. Clicking a hidden one does nothing while reporting success,
+        # which is the shape of every silent stall on this screen.
         foreach ($SwitchId in @($Id.SwitchToCredPicker, $Id.SignInAnotherWay)) {
-            if ($SwitchId -in $Present) {
+            if ($SwitchId -in $Visible) {
                 $Decision.Screen = "SwitchToPasswordless"
                 $Decision.Action = "Click"
                 $Decision.ElementId = $SwitchId

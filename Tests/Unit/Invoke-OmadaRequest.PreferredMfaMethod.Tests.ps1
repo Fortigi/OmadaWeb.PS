@@ -35,6 +35,36 @@ Describe 'Invoke-OmadaRequest -PreferredMfaMethod validation' -Tag 'Unit' {
         } | Should -Throw -ExpectedMessage "*got 'Basic'*"
     }
 
+    It 'Accepts it on a Browser session that is already running on WebView2' {
+        # -AuthenticationType Browser keeps using WebView2 once a session has used it, without
+        # -UseWebView2 being supplied again - so refusing the parameter on that call would refuse it
+        # on exactly the sign-in it applies to. The sign-in itself is stubbed out; all this asserts
+        # is that the parameter check is not what stops the call.
+        InModuleScope 'OmadaWeb.PS' {
+            Mock Get-DataFromWebView2 {}
+            Mock Write-OmadaDeprecationWarning {}
+
+            $Uri = [System.Uri]::new('http://localhost:19999/api/unit-test')
+            $Credential = New-Object System.Management.Automation.PSCredential('someone@contoso.com', (ConvertTo-SecureString 'password' -AsPlainText -Force))
+
+            # The same key the request will compute for itself, so the seeded state is the state it
+            # finds.
+            $SessionKey = Get-OmadaSessionKey -Uri $Uri -AuthenticationType 'Browser' -Credential $Credential -SessionKey $null
+            (Get-OmadaSessionContext -Key $SessionKey -AuthorityHost $Uri.Host).WebView2Used = $true
+
+            $Failure = $null
+            try {
+                Invoke-OmadaRestMethod -Uri $Uri.AbsoluteUri -AuthenticationType 'Browser' -Credential $Credential -PreferredMfaMethod 'PhoneAppOTP' -ErrorAction Stop
+            }
+            catch {
+                $Failure = $_.Exception.Message
+            }
+
+            # It still fails - nothing is listening on that port - but not on the parameter.
+            $Failure | Should -Not -BeLike '*-PreferredMfaMethod only applies*'
+        }
+    }
+
     It 'Refuses before any request is made' {
         # Nothing listens on the port above, so a call that got as far as the network would fail
         # with a connection error rather than with the parameter error.

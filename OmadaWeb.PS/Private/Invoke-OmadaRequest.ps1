@@ -157,7 +157,13 @@ function Invoke-OmadaRequest {
             # automates. Every other authentication type would accept the parameter and quietly do
             # nothing with it, so it is refused here rather than silently ignored.
             if ("PreferredMfaMethod" -in $BoundParams.Keys -and -not [string]::IsNullOrWhiteSpace($BoundParams.PreferredMfaMethod)) {
-                $UsesWebView2 = $BoundParams.AuthenticationType -eq "WebView2" -or ($BoundParams.AuthenticationType -eq "Browser" -and $BoundParams.ContainsKey("UseWebView2") -and $BoundParams.UseWebView2)
+                # The three ways a sign-in ends up on WebView2, which is what Invoke-BrowserAuthentication
+                # itself checks: the authentication type, the deprecated switch, and a session that
+                # has already used WebView2 - after which -AuthenticationType Browser keeps using it
+                # without either of the first two being supplied again. Leaving that last one out
+                # refused the parameter on exactly the sign-in it would have applied to.
+                $UsesWebView2 = $BoundParams.AuthenticationType -eq "WebView2" -or
+                    ($BoundParams.AuthenticationType -eq "Browser" -and (($BoundParams.ContainsKey("UseWebView2") -and $BoundParams.UseWebView2) -or $SessionContext.WebView2Used))
                 if (-not $UsesWebView2) {
                     "{0} - -PreferredMfaMethod only applies to -AuthenticationType WebView2, got '{1}'" -f $MyInvocation.MyCommand, $BoundParams.AuthenticationType | Write-Error -ErrorAction "Stop"
                 }

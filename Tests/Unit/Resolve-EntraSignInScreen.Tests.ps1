@@ -205,6 +205,23 @@ Describe 'Resolve-EntraSignInScreen' -Tag 'Unit' {
             }
         }
 
+        It 'Does not click a "sign in another way" link the page is not showing' {
+            # Entra keeps elements in the markup after hiding them. Clicking a hidden link does
+            # nothing while reporting success, which is the shape of every silent stall on this
+            # screen - and here it would also leave a passwordless account stuck on a password
+            # prompt it can never answer.
+            $Ids = @('i0118', 'idSIButton9', 'idA_PWD_SwitchToCredPicker', 'signInAnotherWay')
+            $PageState = New-PageState @{ ids = $Ids; visibleIds = @('i0118', 'idSIButton9') }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Screen | Should -Be 'PasswordRequired'
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.ValueSource | Should -Not -Be 'Password'
+            }
+        }
+
         It 'Waits, saying so, when a password is required and none can be supplied' {
             $PageState = New-PageState @{ ids = @('i0118', 'idSIButton9'); visibleIds = @('i0118', 'idSIButton9') }
 
