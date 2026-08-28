@@ -74,12 +74,11 @@ function Select-EntraMfaMethod {
             $AuthMethodId = [string]$Offered[$Index].authMethodId
         }
 
+        # A hashtable lookup rather than a scan of its keys. PowerShell hashtables match keys
+        # case-insensitively, which is the same comparison the scan did.
         $MethodRank = 999
-        foreach ($Known in $Rank.Keys) {
-            if ($AuthMethodId -eq $Known) {
-                $MethodRank = $Rank[$Known]
-                break
-            }
+        if ($Rank.ContainsKey($AuthMethodId)) {
+            $MethodRank = $Rank[$AuthMethodId]
         }
 
         $IsDefault = $false

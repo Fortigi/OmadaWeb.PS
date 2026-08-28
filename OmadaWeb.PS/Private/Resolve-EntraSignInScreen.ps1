@@ -169,7 +169,13 @@ function Resolve-EntraSignInScreen {
 
     # 3. 'Stay signed in?'. Its checkbox is on no other screen, and the back button is its decline
     #    action - which is what the two localized button labels used to be compared for.
-    if ($Id.KeepMeSignedIn -in $Present -and $Id.Back -in $Present) {
+    #
+    #    The checkbox is asked for by presence and the button by visibility, which is not an
+    #    oversight either way. The checkbox is the marker - it is what makes this screen unmistakable
+    #    - but a checkbox is routinely styled by hiding the real input behind a label, so requiring
+    #    it to be visible would risk not recognizing the screen at all. The back button is the thing
+    #    that gets clicked, and clicking one that is not actionable would do nothing at all.
+    if ($Id.KeepMeSignedIn -in $Present -and $Id.Back -in $Visible) {
         $Decision.Screen = "StaySignedIn"
         $Decision.Action = "Click"
         $Decision.ElementId = $Id.Back

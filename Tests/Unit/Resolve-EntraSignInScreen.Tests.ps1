@@ -358,6 +358,41 @@ Describe 'Resolve-EntraSignInScreen' -Tag 'Unit' {
         }
     }
 
+    Context 'Stay signed in, when the page only looks like it' {
+        It 'Does not act on a back button the page is not showing' {
+            # Clicking an element that is in the markup but not actionable does nothing, and this
+            # rule is tested before the username and password screens - so a stale checkbox left in
+            # the DOM would shadow the screen the user is actually on.
+            $PageState = New-PageState @{
+                ids        = @('KmsiCheckboxField', 'idBtn_Back', 'i0116', 'idSIButton9')
+                visibleIds = @('i0116', 'idSIButton9')
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'UsernameEntry'
+            }
+        }
+
+        It 'Still recognizes the screen when the checkbox itself is styled out of sight' {
+            # The real input of a styled checkbox is routinely hidden behind its label. The checkbox
+            # is the marker for this screen, so requiring it to be visible would risk not
+            # recognizing the screen at all; only the button that gets clicked has to be actionable.
+            $PageState = New-PageState @{
+                ids        = @('KmsiCheckboxField', 'idBtn_Back', 'idSIButton9')
+                visibleIds = @('idBtn_Back', 'idSIButton9')
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'StaySignedIn'
+                $Decision.ElementId | Should -Be 'idBtn_Back'
+            }
+        }
+    }
+
     Context 'Errors the server reports' {
         It 'Ends the sign-in on <ErrorCode> instead of retrying it' -TestCases @(
             @{ ErrorCode = '53003' }
