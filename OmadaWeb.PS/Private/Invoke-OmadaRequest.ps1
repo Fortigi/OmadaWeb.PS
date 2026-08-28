@@ -240,7 +240,7 @@ function Invoke-OmadaRequest {
                         elseif ("Content-Type" -notin $BoundParams.Headers.Keys) {
                             $BoundParams.Headers.Add("Content-Type", "application/json")
                         }
-                        $Parameters = Set-RequestParameter
+                        $Parameters = Set-RequestParameter -RequestContext $RequestContext
 
                         try {
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
@@ -298,7 +298,7 @@ function Invoke-OmadaRequest {
                         return $Return
                     }
                     "Invoke-WebRequest" {
-                        $Parameters = Set-RequestParameter
+                        $Parameters = Set-RequestParameter -RequestContext $RequestContext
                         try {
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
                         }
@@ -387,7 +387,7 @@ function Invoke-OmadaRequest {
                     }
 
                     try {
-                        $Parameters = Set-RequestParameter -InvokeOmadaRequest
+                        $Parameters = Set-RequestParameter -RequestContext $RequestContext -InvokeOmadaRequest
                         return (Invoke-OmadaRequest @Parameters)
                     }
                     catch {

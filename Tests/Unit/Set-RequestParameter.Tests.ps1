@@ -8,6 +8,44 @@ BeforeAll {
 }
 
 Describe 'Set-RequestParameter' -Tag 'Unit' {
+    BeforeAll {
+        InModuleScope 'OmadaWeb.PS' {
+            # Each test builds its own context instead of relying on ambient variables inherited
+            # from the caller's scope. Script: so the definition lands in the module's scope and
+            # stays visible to the InModuleScope block of every It below.
+            function Script:New-TestRequestContext {
+                param(
+                    [hashtable]$BoundParams,
+                    [Microsoft.PowerShell.Commands.WebRequestSession]$Session = ([Microsoft.PowerShell.Commands.WebRequestSession]::new()),
+                    [string]$Key = 'unit-test-set-requestparameter'
+                )
+
+                return New-OmadaRequestContext -BoundParams $BoundParams -Session $Session -SessionContext (Get-OmadaSessionContext -Key $Key)
+            }
+        }
+    }
+
+    Context 'Contract' {
+        It 'Should require a RequestContext' {
+            InModuleScope 'OmadaWeb.PS' {
+                { Set-RequestParameter -ErrorAction Stop } | Should -Throw
+            }
+        }
+
+        It 'Should read the context without modifying the bound parameters' {
+            InModuleScope 'OmadaWeb.PS' {
+                # Unlike the authentication helpers, this one is a pure reader: it returns a new
+                # hashtable and must leave the caller's own parameter set untouched.
+                $BoundParams = @{ Uri = 'https://example.omada.cloud'; Method = 'GET'; SessionKey = 'user-a' }
+                $Before = @($BoundParams.Keys | Sort-Object)
+
+                Set-RequestParameter -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+
+                @($BoundParams.Keys | Sort-Object) | Should -Be $Before
+            }
+        }
+    }
+
     Context 'Default mode (Invoke-OmadaRestMethod/Invoke-OmadaWebRequest)' {
         It 'Should exclude Omada-specific parameters not understood by the native cmdlets' {
             InModuleScope 'OmadaWeb.PS' {
@@ -21,7 +59,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                     Paged               = $true
                     SessionKey          = 'user-a'
                 }
-                $Result = Set-RequestParameter
+                $Result = Set-RequestParameter -RequestContext (New-TestRequestContext -BoundParams $BoundParams)
                 $Result.Keys | Should -Contain 'Uri'
                 $Result.Keys | Should -Contain 'Method'
                 $Result.Keys | Should -Not -Contain 'AuthenticationType'
@@ -43,7 +81,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                     MaximumRetryCount = 3
                     RetryIntervalSec  = 2
                 }
-                $Result = Set-RequestParameter
+                $Result = Set-RequestParameter -RequestContext (New-TestRequestContext -BoundParams $BoundParams)
 
                 $Result.Keys | Should -Contain 'Uri'
                 $Result.Keys | Should -Not -Contain 'MaximumRetryCount'
@@ -64,7 +102,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                     SessionKey = 'user-a'
                     NotAParam  = 'should be excluded'
                 }
-                $Result = Set-RequestParameter -InvokeOmadaRequest
+                $Result = Set-RequestParameter -RequestContext (New-TestRequestContext -BoundParams $BoundParams) -InvokeOmadaRequest
                 $Result.Keys | Should -Contain 'Uri'
                 $Result.Keys | Should -Contain 'Method'
                 $Result.Keys | Should -Not -Contain 'NotAParam'
@@ -79,7 +117,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                     Method     = 'GET'
                     SessionKey = 'user-a'
                 }
-                $Result = Set-RequestParameter -InvokeOmadaRequest
+                $Result = Set-RequestParameter -RequestContext (New-TestRequestContext -BoundParams $BoundParams) -InvokeOmadaRequest
                 $Result.Keys | Should -Contain 'SessionKey'
                 $Result.SessionKey | Should -Be 'user-a'
             }
@@ -99,11 +137,12 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                     Credential = New-Object System.Management.Automation.PSCredential('omada\svc_sql', (ConvertTo-SecureString 'Sup3rSecret!' -AsPlainText -Force))
                     Body       = '{"C_QUERY":"SELECT * FROM dbo.Person"}'
                 }
+                $RequestContext = New-TestRequestContext -BoundParams $BoundParams -Session $Session
 
                 # Keep the verbose records only. The function also returns the parameter hashtable,
                 # and formatting that for comparison would print the very values under test - a
                 # property of this test, not of the log line it is checking.
-                $VerboseOutput = ((Set-RequestParameter -Verbose 4>&1) | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] }) | Out-String
+                $VerboseOutput = ((Set-RequestParameter -RequestContext $RequestContext -Verbose 4>&1) | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] }) | Out-String
 
                 # Nothing secret.
                 $VerboseOutput | Should -Not -Match 'dXNlcjpTdXAzclNlY3JldCE'

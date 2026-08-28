@@ -1,8 +1,15 @@
 ﻿function Set-RequestParameter {
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory)]
+        [PSTypeName("OmadaWeb.PS.RequestContext")]$RequestContext,
+
         [switch]$InvokeOmadaRequest
     )
+
+    # Only reads the context, so unlike the other converted helpers it keeps returning the parameter
+    # hashtable it builds rather than the context.
+    $BoundParams = $RequestContext.BoundParams
 
     "{0} - Setting request parameters" -f $MyInvocation.MyCommand | Write-Verbose
 
