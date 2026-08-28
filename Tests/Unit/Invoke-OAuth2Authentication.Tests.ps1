@@ -10,20 +10,55 @@ BeforeAll {
 }
 
 Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
+    BeforeAll {
+        InModuleScope 'OmadaWeb.PS' {
+            # Each test builds its own context instead of relying on ambient variables inherited
+            # from the caller's scope. Script: so the definition lands in the module's scope and
+            # stays visible to the InModuleScope block of every It below. The session context is a
+            # stub holding only BaseUrl, which is all this helper reads from it.
+            function Script:New-TestRequestContext {
+                param(
+                    [hashtable]$BoundParams,
+                    [string]$BaseUrl = 'https://example.omada.cloud'
+                )
+
+                return New-OmadaRequestContext -BoundParams $BoundParams -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -SessionContext ([pscustomobject]@{ BaseUrl = $BaseUrl })
+            }
+        }
+    }
+
+    Context 'Contract' {
+        It 'Should require a RequestContext' {
+            InModuleScope 'OmadaWeb.PS' {
+                { Invoke-OAuth2Authentication -ErrorAction Stop } | Should -Throw
+            }
+        }
+
+        It 'Should return the same context instance it was given' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
+
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
+
+                $Returned = Invoke-OAuth2Authentication -RequestContext $RequestContext
+
+                [object]::ReferenceEquals($Returned, $RequestContext) | Should -BeTrue
+            }
+        }
+    }
+
     Context 'Validation' {
         It 'Should throw when Credential is missing' {
             InModuleScope 'OmadaWeb.PS' {
-                $BoundParams = @{ EntraIdTenantId = 'tenant' }
-                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
-                { Invoke-OAuth2Authentication -ErrorAction Stop } | Should -Throw
+                $RequestContext = New-TestRequestContext -BoundParams @{ EntraIdTenantId = 'tenant' }
+                { Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop } | Should -Throw
             }
         }
 
         It 'Should throw when neither EntraIdTenantId nor OAuthUri is provided' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
-                $BoundParams = @{ Credential = $Credential }
-                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
-                { Invoke-OAuth2Authentication -ErrorAction Stop } | Should -Throw
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential }
+                { Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop } | Should -Throw
             }
         }
     }
@@ -34,9 +69,8 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'test-token'; token_type = 'Bearer' } } -Verifiable
 
                 $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'c1ec94c3-4a7a-4568-9321-79b0a74b8e70'; Headers = @{} }
-                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
 
-                Invoke-OAuth2Authentication
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
                 Should -Invoke Invoke-RestMethod -ParameterFilter {
                     $Uri -eq 'https://login.microsoftonline.com/c1ec94c3-4a7a-4568-9321-79b0a74b8e70/oauth2/v2.0/token'
@@ -50,9 +84,8 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'custom-token' } }
 
                 $BoundParams = @{ Credential = $Credential; OAuthUri = 'https://idp.example.com/oauth2/token'; Headers = @{} }
-                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
 
-                Invoke-OAuth2Authentication
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
                 Should -Invoke Invoke-RestMethod -ParameterFilter { $Uri -eq 'https://idp.example.com/oauth2/token' }
                 $BoundParams.Headers.Authorization | Should -Be 'Bearer custom-token'
@@ -63,10 +96,11 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
 
-                $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
-                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
+                # The default scope comes from the context's SessionContext.BaseUrl, which is the
+                # only member of it this helper reads.
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
 
-                Invoke-OAuth2Authentication
+                Invoke-OAuth2Authentication -RequestContext $RequestContext | Out-Null
 
                 Should -Invoke Invoke-RestMethod -ParameterFilter { $Body.scope -eq 'https://example.omada.cloud/.default' }
             }
@@ -77,9 +111,8 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
 
                 $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'tenant'; OAuthScope = 'customScope'; Headers = @{} }
-                $SessionContext = [pscustomobject]@{ BaseUrl = 'https://example.omada.cloud' }
 
-                Invoke-OAuth2Authentication
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
                 Should -Invoke Invoke-RestMethod -ParameterFilter { $Body.scope -eq 'customScope' }
             }

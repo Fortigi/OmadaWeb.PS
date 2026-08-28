@@ -167,7 +167,7 @@ function Invoke-OmadaRequest {
                 }
                 "OAuth" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-OAuth2Authentication
+                    $RequestContext = Invoke-OAuth2Authentication -RequestContext $RequestContext
                 }
                 "Integrated" {
                     "{0} - {1} Authentication " -f $MyInvocation.MyCommand, $_ | Write-Verbose

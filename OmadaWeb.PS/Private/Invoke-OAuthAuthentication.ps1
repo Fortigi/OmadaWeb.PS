@@ -1,10 +1,16 @@
 ﻿function Invoke-OAuth2Authentication {
     [CmdletBinding()]
-    param()
+    param(
+        [Parameter(Mandatory)]
+        [PSTypeName("OmadaWeb.PS.RequestContext")]$RequestContext
+    )
+
+    $BoundParams = $RequestContext.BoundParams
+    $SessionContext = $RequestContext.SessionContext
 
     "{0} - Invoking OAuth authentication" -f $MyInvocation.MyCommand | Write-Verbose
 
-    "{0} - Request bearer token" -f $MyInvocation.MyCommand, $_ | Write-Verbose
+    "{0} - Request bearer token" -f $MyInvocation.MyCommand | Write-Verbose
     if ($null -eq $BoundParams.Credential) {
         "{0} - Credentials not provided! This mandatory for OAuth authentication!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
     }
@@ -62,6 +68,7 @@
 
     "{0} - Invoke REST method to get bearer token from OAuth2 endpoint: {1}" -f $MyInvocation.MyCommand, $OAuthUri | Write-Verbose
     $BearerToken = Invoke-RestMethod @Arguments
-    $BearerToken = $BearerToken
     $BoundParams.Headers.Add("Authorization" , "Bearer {0}" -f $BearerToken.access_token)
+
+    return $RequestContext
 }
