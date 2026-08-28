@@ -30,9 +30,17 @@ function Invoke-OmadaRetryableRequest {
     # error may well have been applied server-side already, so replaying it silently could duplicate
     # a write. Paging continuations reach this function with the same GET method as the first page,
     # so they are covered by the same check.
+    #
+    # The verb has to be read from -CustomMethod as well as -Method. They live in different
+    # parameter sets of the native cmdlets - the CustomMethod sets do not carry Method at all - so
+    # looking only at Method would leave -CustomMethod DELETE with no verb, fall back to the GET
+    # default below, and retry a request that deletes something.
     $Method = "GET"
     if ($Parameters.ContainsKey("Method") -and -not [string]::IsNullOrWhiteSpace($Parameters.Method)) {
         $Method = [string]$Parameters.Method
+    }
+    elseif ($Parameters.ContainsKey("CustomMethod") -and -not [string]::IsNullOrWhiteSpace($Parameters.CustomMethod)) {
+        $Method = [string]$Parameters.CustomMethod
     }
     $Idempotent = $Method.ToUpperInvariant() -in @("GET", "HEAD")
 
@@ -90,7 +98,12 @@ function Invoke-OmadaRetryableRequest {
             "{0} - Transient failure ({1}); retry {2} of {3} in {4}s." -f $MyInvocation.MyCommand, $Reason, $Attempt, $MaximumRetryCount, $DelayText | Write-Verbose
 
             if ($DelaySec -gt 0) {
-                Start-Sleep -Milliseconds ([int][math]::Round($DelaySec * 1000))
+                # Clamped before the cast: -MaximumRetryDelaySec accepts any non-negative double,
+                # and a value whose millisecond form exceeds Int32 would throw on conversion -
+                # turning a transient failure into an immediate hard one, which is the opposite of
+                # what this function is for.
+                $DelayMilliseconds = [math]::Min([math]::Round($DelaySec * 1000), [double][int]::MaxValue)
+                Start-Sleep -Milliseconds ([int]$DelayMilliseconds)
             }
         }
     }

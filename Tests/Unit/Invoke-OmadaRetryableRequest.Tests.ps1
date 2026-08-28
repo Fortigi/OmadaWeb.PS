@@ -301,6 +301,54 @@ Describe 'Invoke-OmadaRetryableRequest' -Tag 'Unit' {
             }
         }
 
+        It 'Should not retry -CustomMethod <Method>, which carries no Method parameter at all' -ForEach @(
+            @{ Method = 'DELETE' }
+            @{ Method = 'PURGE' }
+            @{ Method = 'POST' }
+        ) {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Method = $Method } {
+                param($Method)
+                # The native cmdlets put -Method and -CustomMethod in different parameter sets, so a
+                # -CustomMethod call arrives here with no Method key. Reading only Method would fall
+                # back to the GET default and replay a request that deletes something.
+                $Script:RetryTestCalls = 0
+                $Command = {
+                    param($Uri, $CustomMethod)
+                    $Script:RetryTestCalls++
+                    $Exception = [OmadaWebPSTests.FakeHttpException]::new('throttled')
+                    $Exception.Response = [OmadaWebPSTests.FakeResponse]::new()
+                    $Exception.Response.StatusCode = 503
+                    throw $Exception
+                }
+
+                { Invoke-OmadaRetryableRequest -CommandInfo $Command -Parameters @{ Uri = 'https://example.omada.cloud'; CustomMethod = $Method } -MaximumRetryCount 3 -RetryIntervalSec 0 } | Should -Throw
+
+                $Script:RetryTestCalls | Should -Be 1
+            }
+        }
+
+        It 'Should still retry -CustomMethod GET' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:RetryTestCalls = 0
+                $Command = {
+                    param($Uri, $CustomMethod)
+                    $Script:RetryTestCalls++
+                    if ($Script:RetryTestCalls -lt 2) {
+                        $Exception = [OmadaWebPSTests.FakeHttpException]::new('throttled')
+                        $Exception.Response = [OmadaWebPSTests.FakeResponse]::new()
+                        $Exception.Response.StatusCode = 503
+                        throw $Exception
+                    }
+                    return 'recovered'
+                }
+
+                Invoke-OmadaRetryableRequest -CommandInfo $Command -Parameters @{ Uri = 'https://example.omada.cloud'; CustomMethod = 'GET' } -MaximumRetryCount 3 -RetryIntervalSec 0 |
+                    Should -Be 'recovered'
+
+                $Script:RetryTestCalls | Should -Be 2
+            }
+        }
+
         It 'Should treat a request without an explicit method as GET and retry it' {
             InModuleScope 'OmadaWeb.PS' {
                 $Script:RetryTestCalls = 0
@@ -431,6 +479,38 @@ Describe 'Invoke-OmadaRetryableRequest' -Tag 'Unit' {
                 $Stopwatch.Stop()
 
                 $Stopwatch.Elapsed.TotalSeconds | Should -BeLessThan 5
+            }
+        }
+
+        It 'Should not overflow when the maximum delay exceeds what Start-Sleep can express in milliseconds' {
+            InModuleScope 'OmadaWeb.PS' {
+                # A Retry-After is capped at -MaximumRetryDelaySec, which accepts any non-negative
+                # double. Converting a delay that large to milliseconds overflows Int32, and an
+                # unclamped cast would throw - turning a transient failure into an immediate hard
+                # one. Start-Sleep is mocked so the clamped value can be asserted without the test
+                # waiting out the delay it is checking.
+                Mock Start-Sleep { }
+
+                $Script:RetryTestCalls = 0
+                $Command = {
+                    param($Uri)
+                    $Script:RetryTestCalls++
+                    if ($Script:RetryTestCalls -lt 2) {
+                        $Exception = [OmadaWebPSTests.FakeHttpException]::new('throttled')
+                        $Exception.Response = [OmadaWebPSTests.FakeResponse]::new()
+                        $Exception.Response.StatusCode = 429
+                        $Exception.Response.Headers = [System.Collections.Generic.Dictionary[string, string]]::new()
+                        $Exception.Response.Headers.Add('Retry-After', '999999999999')
+                        throw $Exception
+                    }
+                    return 'recovered'
+                }
+
+                Invoke-OmadaRetryableRequest -CommandInfo $Command -Parameters @{ Uri = 'https://example.omada.cloud' } -MaximumRetryCount 3 -RetryIntervalSec 0 -MaximumRetryDelaySec ([double]::MaxValue) |
+                    Should -Be 'recovered'
+
+                $Script:RetryTestCalls | Should -Be 2
+                Should -Invoke Start-Sleep -Times 1 -Exactly -ParameterFilter { $Milliseconds -eq [int]::MaxValue }
             }
         }
 
