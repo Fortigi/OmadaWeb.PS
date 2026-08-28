@@ -128,7 +128,19 @@ $Script:SensitiveLogNamePatterns = @(
 # Used only inside an object that pairs a Name member with a Value member - a cookie or a header,
 # where the value is the secret. Precomputed for the same reason as the list above.
 $Script:SensitiveLogNamePatternsWithValue = $Script:SensitiveLogNamePatterns + "value"
-$Global:OmadaWebPSCurrentBaseUrl = $null
+# Wrapped in a function purely to scope the analyzer suppression to this one assignment. The
+# attribute always covers the whole scope it sits on - PSAvoidGlobalVars has no per-variable
+# suppression ID - so on the param() block above it would have covered this entire file and hidden
+# any global added to module initialization later. The variable has to exist before the first
+# request: Set-StrictMode is active, and Set-OmadaCurrentBaseUrl reads it before writing it.
+function Initialize-OmadaCurrentBaseUrl {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidGlobalVars", "", Justification = "OmadaWebPSCurrentBaseUrl is deliberately global: it is part of the module's public surface, readable by callers to see which environment the last request went to. Maintained by Set-OmadaCurrentBaseUrl and cleared by Clear-OmadaWebCache.")]
+    param()
+
+    $Global:OmadaWebPSCurrentBaseUrl = $null
+}
+
+Initialize-OmadaCurrentBaseUrl
 [bool]$Script:EnvironmentSuspended = $false
 # The suspended status is cached in $Script:EnvironmentSuspended for the current base URL only
 # ($Global:OmadaWebPSCurrentBaseUrl tracks that single last-used URL - there is no per-URL map, so

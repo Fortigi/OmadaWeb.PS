@@ -58,10 +58,11 @@ function Invoke-OmadaRequest {
                 # block runs, so deferring this assignment would leave the global holding the previous
                 # URL and re-probe a suspended environment on every call instead of once. Capture the
                 # previous value first so the probe can still tell whether the base URL actually changed.
-                $PreviousBaseUrl = $Global:OmadaWebPSCurrentBaseUrl
                 "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $BaseUrl | Write-Verbose
-                $Global:OmadaWebPSCurrentBaseUrl = $BaseUrl
-                "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Global:OmadaWebPSCurrentBaseUrl | Write-Verbose
+                # Reads and updates the global in one step, and carries the analyzer suppression so
+                # it does not have to sit on this whole function - see Set-OmadaCurrentBaseUrl.ps1.
+                $PreviousBaseUrl = Set-OmadaCurrentBaseUrl -BaseUrl $BaseUrl
+                "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $BaseUrl | Write-Verbose
 
                 # Test environment status. The result is cached for the current base URL (only the
                 # single last-used URL is tracked, so alternating between two environments re-probes
@@ -98,6 +99,11 @@ function Invoke-OmadaRequest {
             # always available for Invoke-BrowserAuthentication.ps1's cache-write step later, even when
             # this particular call took the -CookiePath branch instead on its first-ever use of this session.
             $SessionContext.CookieCacheFilePath = Get-OmadaCookieCacheFilePath -SessionKey $SessionKey
+
+            # The three pieces of per-request state the private helpers work on, bundled so they can
+            # take them as a parameter instead of reading them out of this function's scope. The
+            # context aliases the objects below rather than copying them, so the locals stay valid.
+            $RequestContext = New-OmadaRequestContext -BoundParams $BoundParams -Session $Session -SessionContext $SessionContext
 
             if ($BoundParams.Keys -contains "CookiePath") {
                 # -CookiePath is authoritative on every call (not just when no cookie is cached yet),
@@ -150,27 +156,27 @@ function Invoke-OmadaRequest {
             switch ($BoundParams.AuthenticationType) {
                 "Windows" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-WindowsAuthentication
+                    $RequestContext = Invoke-WindowsAuthentication -RequestContext $RequestContext
                 }
                 "Browser" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-BrowserAuthentication
+                    $RequestContext = Invoke-BrowserAuthentication -RequestContext $RequestContext
                 }
                 "WebView2" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-BrowserAuthentication
+                    $RequestContext = Invoke-BrowserAuthentication -RequestContext $RequestContext
                 }
                 "OAuth" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-OAuth2Authentication
+                    $RequestContext = Invoke-OAuth2Authentication -RequestContext $RequestContext
                 }
                 "Integrated" {
                     "{0} - {1} Authentication " -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-IntegratedAuthentication
+                    $RequestContext = Invoke-IntegratedAuthentication -RequestContext $RequestContext
                 }
                 "Basic" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-BasicAuthentication
+                    $RequestContext = Invoke-BasicAuthentication -RequestContext $RequestContext
                 }
                 "None" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
@@ -182,7 +188,7 @@ function Invoke-OmadaRequest {
 
             if ($BoundParams.Method -in @('PUT', 'POST', 'PATCH')) {
                 "{0} - {1} - Add Body" -f $MyInvocation.MyCommand, $BoundParams.Method | Write-Verbose
-                Set-Body
+                $RequestContext = Set-Body -RequestContext $RequestContext
             }
 
             $BoundParams.Add("WebSession", $Session)
@@ -235,7 +241,7 @@ function Invoke-OmadaRequest {
                         elseif ("Content-Type" -notin $BoundParams.Headers.Keys) {
                             $BoundParams.Headers.Add("Content-Type", "application/json")
                         }
-                        $Parameters = Set-RequestParameter
+                        $Parameters = Set-RequestParameter -RequestContext $RequestContext
 
                         try {
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
@@ -293,7 +299,7 @@ function Invoke-OmadaRequest {
                         return $Return
                     }
                     "Invoke-WebRequest" {
-                        $Parameters = Set-RequestParameter
+                        $Parameters = Set-RequestParameter -RequestContext $RequestContext
                         try {
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
                         }
@@ -382,7 +388,7 @@ function Invoke-OmadaRequest {
                     }
 
                     try {
-                        $Parameters = Set-RequestParameter -InvokeOmadaRequest
+                        $Parameters = Set-RequestParameter -RequestContext $RequestContext -InvokeOmadaRequest
                         return (Invoke-OmadaRequest @Parameters)
                     }
                     catch {

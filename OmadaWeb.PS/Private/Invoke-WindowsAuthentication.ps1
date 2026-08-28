@@ -1,6 +1,11 @@
-﻿function Invoke-WindowsAuthentication {
+function Invoke-WindowsAuthentication {
     [CmdletBinding()]
-    PARAM()
+    PARAM(
+        [Parameter(Mandatory)]
+        [PSTypeName("OmadaWeb.PS.RequestContext")]$RequestContext
+    )
+
+    $BoundParams = $RequestContext.BoundParams
 
     "{0} - Set Windows authentication" -f $MyInvocation.MyCommand | Write-Verbose
     if ($BoundParams.keys -notcontains "Credential") {
@@ -9,4 +14,6 @@
     if ($BoundParams.Keys -contains "Headers" -and $BoundParams.Headers.ContainsKey("Authorization")) {
         $BoundParams.Headers.Remove("Authorization")
     }
+
+    return $RequestContext
 }

@@ -22,7 +22,16 @@ Task Analyze {
     $Profile = @{
         Severity     = @('Error', 'Warning')
         IncludeRules = '*'
-        ExcludeRules = '*WriteHost', '*AvoidUsingEmptyCatchBlock*', '*UseShouldProcessForStateChangingFunctions*', '*AvoidOverwritingBuiltInCmdlets*', '*UseToExportFieldsInManifest*', '*UseProcessBlockForPipelineCommand*', '*ConvertToSecureStringWithPlainText*', '*AvoidGlobalVars*'
+        # AvoidGlobalVars is deliberately NOT excluded here, so that a new, unjustified global fails
+        # this task instead of passing unnoticed under a blanket exclusion. The module's one global,
+        # $Global:OmadaWebPSCurrentBaseUrl, has three touch points: it is initialized by
+        # Initialize-OmadaCurrentBaseUrl (OmadaWeb.PS.psm1), maintained by Set-OmadaCurrentBaseUrl,
+        # and cleared by Clear-OmadaWebCache. The first two carry an inline suppression and exist as
+        # separate small functions only so that the attribute - which has no per-variable suppression
+        # ID and therefore always covers its whole scope - covers a few lines rather than a whole
+        # file or a 400-line function. Clear-OmadaWebCache needs no suppression because it goes
+        # through Set-Variable -Scope Global, a form this rule does not flag.
+        ExcludeRules = '*WriteHost', '*AvoidUsingEmptyCatchBlock*', '*UseShouldProcessForStateChangingFunctions*', '*AvoidOverwritingBuiltInCmdlets*', '*UseToExportFieldsInManifest*', '*UseProcessBlockForPipelineCommand*', '*ConvertToSecureStringWithPlainText*'
     }
     $saResults = Invoke-ScriptAnalyzer -Path $ModuleSource -Severity @('Error', 'Warning') -Recurse -Profile $Profile -Verbose:$false
     if ($saResults) {

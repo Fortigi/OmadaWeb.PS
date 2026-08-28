@@ -8,11 +8,48 @@ BeforeAll {
 }
 
 Describe 'Invoke-IntegratedAuthentication' -Tag 'Unit' {
+    BeforeAll {
+        InModuleScope 'OmadaWeb.PS' {
+            # Each test builds its own context instead of relying on ambient variables inherited
+            # from the caller's scope. Script: so the definition lands in the module's scope and
+            # stays visible to the InModuleScope block of every It below.
+            function Script:New-TestRequestContext {
+                param(
+                    [hashtable]$BoundParams,
+                    [string]$Key = 'unit-test-integrated-authentication'
+                )
+
+                return New-OmadaRequestContext -BoundParams $BoundParams -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -SessionContext (Get-OmadaSessionContext -Key $Key)
+            }
+        }
+    }
+
+    Context 'Contract' {
+        It 'Should require a RequestContext' {
+            InModuleScope 'OmadaWeb.PS' {
+                # Asserted through the parameter metadata rather than by calling the function
+                # without it: in an interactive host a missing mandatory parameter prompts rather
+                # than throwing, which would hang the run.
+                (Get-Command Invoke-IntegratedAuthentication).Parameters['RequestContext'].Attributes.Where({ $_ -is [System.Management.Automation.ParameterAttribute] }).Mandatory | Should -BeTrue
+            }
+        }
+
+        It 'Should return the same context instance it was given' {
+            InModuleScope 'OmadaWeb.PS' {
+                $RequestContext = New-TestRequestContext -BoundParams @{}
+
+                $Returned = Invoke-IntegratedAuthentication -RequestContext $RequestContext
+
+                [object]::ReferenceEquals($Returned, $RequestContext) | Should -BeTrue
+            }
+        }
+    }
+
     It 'Should add UseDefaultCredentials to the bound parameters' {
         InModuleScope 'OmadaWeb.PS' {
             $BoundParams = @{}
 
-            Invoke-IntegratedAuthentication
+            Invoke-IntegratedAuthentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
             $BoundParams.UseDefaultCredentials | Should -Be $true
         }

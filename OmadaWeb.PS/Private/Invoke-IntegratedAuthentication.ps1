@@ -1,7 +1,12 @@
-﻿function Invoke-IntegratedAuthentication {
+function Invoke-IntegratedAuthentication {
     [CmdletBinding()]
-    PARAM()
-    
-    "{0} - Set integrated authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-    $BoundParams.Add("UseDefaultCredentials", $true)
+    PARAM(
+        [Parameter(Mandatory)]
+        [PSTypeName("OmadaWeb.PS.RequestContext")]$RequestContext
+    )
+
+    "{0} - Set integrated authentication" -f $MyInvocation.MyCommand | Write-Verbose
+    $RequestContext.BoundParams.Add("UseDefaultCredentials", $true)
+
+    return $RequestContext
 }
