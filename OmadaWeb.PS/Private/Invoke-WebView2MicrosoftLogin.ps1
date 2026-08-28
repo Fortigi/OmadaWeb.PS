@@ -87,18 +87,7 @@ function Invoke-WebView2MicrosoftLogin {
         # driver would sit on the same page clicking nothing for as long as the window is open.
         $ClickAccountTileScript = @"
 (function(dataTestId) {
-    function isVisible(element) {
-        if (!element) { return false; }
-        try {
-            var style = window.getComputedStyle(element);
-            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') { return false; }
-        }
-        catch (e) { return false; }
-        if (element.getAttribute('aria-hidden') === 'true') { return false; }
-        if (element.disabled === true) { return false; }
-        return element.offsetWidth > 0 || element.offsetHeight > 0 || element.getClientRects().length > 0;
-    }
-
+$(Get-EntraElementVisibilityScript)
     var elements = document.querySelectorAll('[data-test-id]');
     for (var i = 0; i < elements.length; i++) {
         var value = elements[i].getAttribute('data-test-id');
@@ -135,14 +124,21 @@ function Invoke-WebView2MicrosoftLogin {
         # Verification methods on 'choose a way to sign in' are clicked by position, because the
         # options carry nothing that names which method they are. Resolve-EntraSignInScreen only
         # produces an index after checking that the options and the methods line up.
+        #
+        # Which makes counting the same options the probe counted the whole safety of it. A hidden
+        # template option included here and not there - or the reverse - shifts every index after it,
+        # and the failure is silent in the worst possible way: the click succeeds, so nothing reports
+        # an error, and the account is sent a weaker verification method than the one that was
+        # chosen. Both sides filter through the same isVisible.
         $ClickProofOptionScript = @"
 (function(containerId, index) {
+$(Get-EntraElementVisibilityScript)
     var container = document.getElementById(containerId);
     if (!container) { return false; }
     var options = container.querySelectorAll('[data-value], [role="button"], [role="listitem"]');
     var counted = [];
     for (var i = 0; i < options.length; i++) {
-        if (counted.indexOf(options[i]) === -1) { counted.push(options[i]); }
+        if (counted.indexOf(options[i]) === -1 && isVisible(options[i])) { counted.push(options[i]); }
     }
     if (index < 0 || index >= counted.length) { return false; }
     counted[index].click();

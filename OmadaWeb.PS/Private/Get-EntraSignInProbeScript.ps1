@@ -63,17 +63,7 @@ function Get-EntraSignInProbeScript {
     var passwordlessNumberId = __PASSWORDLESS_NUMBER_ID__;
     var numberMatchId = __NUMBER_MATCH_ID__;
 
-    function isVisible(element) {
-        if (!element) { return false; }
-        try {
-            var style = window.getComputedStyle(element);
-            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') { return false; }
-        }
-        catch (e) { return false; }
-        if (element.getAttribute('aria-hidden') === 'true') { return false; }
-        if (element.disabled === true || element.readOnly === true) { return false; }
-        return element.offsetWidth > 0 || element.offsetHeight > 0 || element.getClientRects().length > 0;
-    }
+__IS_VISIBLE__
 
     function readNumber(element) {
         if (!element) { return null; }
@@ -122,13 +112,19 @@ function Get-EntraSignInProbeScript {
     // One clickable option per offered method. Counted rather than matched to a method, because the
     // options carry no identifier naming which method they are; Resolve-EntraSignInScreen refuses to
     // click by position when this count and the proofs array disagree.
+    //
+    // Only the options a user could actually click are counted, which is what makes that check mean
+    // anything: a hidden template option counted here but skipped by the click - or the reverse -
+    // shifts every index after it, and the click still succeeds, so the account is sent a different
+    // verification method than the one that was chosen and nothing reports an error. The click
+    // filters through this same isVisible.
     var proofOptionCount = 0;
     var proofsContainer = document.getElementById(proofsContainerId);
     if (proofsContainer) {
         var options = proofsContainer.querySelectorAll('[data-value], [role="button"], [role="listitem"]');
         var counted = [];
         for (var o = 0; o < options.length; o++) {
-            if (counted.indexOf(options[o]) === -1) { counted.push(options[o]); }
+            if (counted.indexOf(options[o]) === -1 && isVisible(options[o])) { counted.push(options[o]); }
         }
         proofOptionCount = counted.length;
     }
@@ -178,6 +174,7 @@ function Get-EntraSignInProbeScript {
 })();
 '@
 
+    $ProbeScript = $ProbeScript.Replace("__IS_VISIBLE__", (Get-EntraElementVisibilityScript))
     $ProbeScript = $ProbeScript.Replace("__ELEMENT_IDS__", $ElementIdJson)
     $ProbeScript = $ProbeScript.Replace("__PROOFS_CONTAINER_ID__", $ProofsContainerJson)
     $ProbeScript = $ProbeScript.Replace("__PASSWORDLESS_NUMBER_ID__", $PasswordlessNumberJson)

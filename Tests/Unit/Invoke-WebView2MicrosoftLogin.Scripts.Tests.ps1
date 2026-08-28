@@ -68,18 +68,30 @@ Describe 'Invoke-WebView2MicrosoftLogin JavaScript snippets' -Tag 'Unit' {
     }
 
     Context 'Agreement with the page probe' {
-        It 'Clicks only an account tile it can see' {
-            # Get-EntraSignInProbeScript reports only visible tiles, so the resolver can only ever
-            # choose a visible one. Clicking the first element carrying that data-test-id regardless
-            # would let a hidden namesake take the click - and that failure is invisible from here,
-            # because the click reports success and so restarts the stall clock. The driver would sit
-            # on the same page clicking nothing for as long as the window stayed open.
-            $Snippet = $Script:Snippets['ClickAccountTileScript']
+        # The probe reports only what a user could see and act on, so a click that does not apply the
+        # same test acts on something the resolver never chose. That failure is invisible from here -
+        # the click reports success, which restarts the stall clock - so the driver would sit on the
+        # same page doing nothing for as long as the window stayed open. Worse on the method picker,
+        # where a miscount shifts every index and silently selects a different verification method.
+        It 'Filters <Name> through the shared visibility test' -TestCases @(
+            @{ Name = 'ClickAccountTileScript'; Applied = 'isVisible(elements[i])' }
+            @{ Name = 'ClickProofOptionScript'; Applied = 'isVisible(options[i])' }
+        ) {
+            $Snippet = $Script:Snippets[$Name]
 
             $Snippet | Should -Not -BeNullOrEmpty
-            $Snippet | Should -Match 'getComputedStyle'
-            $Snippet | Should -Match "aria-hidden"
-            $Snippet | Should -Match 'isVisible\(elements\[i\]\)'
+            $Snippet | Should -BeLike '*Get-EntraElementVisibilityScript*' -Because 'the definition must be the shared one, not a copy that can drift'
+            # Contains, not -BeLike: the square brackets of an array index are wildcard character
+            # classes, so the pattern would silently look for something else entirely.
+            $Snippet.Contains($Applied) | Should -BeTrue -Because "$Name must apply isVisible as '$Applied'"
+        }
+
+        It 'Uses one definition of visibility everywhere it is needed' {
+            InModuleScope 'OmadaWeb.PS' {
+                # The probe injects it too, so all three agree by construction rather than by review.
+                Get-EntraSignInProbeScript | Should -BeLike '*function isVisible(element)*'
+                (Get-EntraElementVisibilityScript) | Should -BeLike '*getComputedStyle*'
+            }
         }
     }
 
