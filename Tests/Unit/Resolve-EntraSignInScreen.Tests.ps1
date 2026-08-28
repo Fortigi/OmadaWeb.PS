@@ -536,6 +536,38 @@ Describe 'Resolve-EntraSignInScreen' -Tag 'Unit' {
         }
     }
 
+    Context 'Elements the page is not showing' {
+        # The sign-in app leaves elements behind after hiding them - the username field is still in
+        # the markup on the password screen - so presence says nothing about which screen this is.
+        # Acting on a hidden element does nothing while reporting success, which restarts the stall
+        # clock, so the driver cannot tell that apart from working. Every screen below is therefore
+        # given its own elements as present-but-hidden, and none of them may produce an action.
+        It 'Does not act on a hidden <Screen>' -TestCases @(
+            @{ Screen = 'username screen'; Ids = @('i0116', 'idSIButton9') }
+            @{ Screen = 'password screen'; Ids = @('i0118', 'idSIButton9') }
+            @{ Screen = 'one-time code screen'; Ids = @('idTxtBx_SAOTCC_OTC', 'idSubmit_SAOTCC_Continue') }
+            @{ Screen = 'method picker'; Ids = @('idDiv_SAOTCS_Proofs') }
+            @{ Screen = 'approval number'; Ids = @('idRemoteNGC_DisplaySign') }
+            @{ Screen = 'stay signed in button'; Ids = @('KmsiCheckboxField', 'idBtn_Back') }
+        ) {
+            $PageState = New-PageState @{ ids = $Ids; visibleIds = @() }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Action | Should -Be 'Wait' -Because 'nothing on this page can be clicked or typed into'
+            }
+        }
+
+        It 'Does not report a hidden resend link as a failed approval' {
+            $PageState = New-PageState @{ ids = @('idA_SAASDS_Resend'); visibleIds = @() }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                (Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -MfaRequestDisplayed).Screen | Should -Not -Be 'MfaRetry'
+            }
+        }
+    }
+
     Context 'Language independence' {
         It 'Decides identically for every screen whatever language the tenant is served in' {
             # The snapshot the decision is made from carries no rendered text at all, so a tenant

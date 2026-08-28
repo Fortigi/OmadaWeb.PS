@@ -42,6 +42,13 @@ function Resolve-EntraSignInScreen {
         type comes from the credential's password, and the caller - which holds the credential
         anyway - reads it.
 
+        Every rule asks whether an element is *visible*, not whether it is in the markup. The sign-in
+        app leaves elements behind after hiding them - the username field is still there on the
+        password screen - so presence says nothing about which screen this is, and acting on a hidden
+        element does nothing while reporting success, which restarts the stall clock and is therefore
+        indistinguishable from working. The one exception is KmsiCheckboxField, and the reason is
+        given where it is used.
+
     .PARAMETER PageState
         The deserialized snapshot of the page, as produced by the script from
         Get-EntraSignInProbeScript.
@@ -158,8 +165,8 @@ function Resolve-EntraSignInScreen {
 
     # 2. A failed approval offers to send a new one. Recognized before the approval screen itself,
     #    because a resend link and an approval number can be on the page at the same time.
-    $HasResendLink = ($Id.MfaResendTotp -in $Present) -or ($Id.MfaResendDs -in $Present)
-    $HasApprovalNumber = ($Id.PasswordlessNumber -in $Present) -or ($Id.NumberMatch -in $Present)
+    $HasResendLink = ($Id.MfaResendTotp -in $Visible) -or ($Id.MfaResendDs -in $Visible)
+    $HasApprovalNumber = ($Id.PasswordlessNumber -in $Visible) -or ($Id.NumberMatch -in $Visible)
     if ($MfaRequestDisplayed -and $HasResendLink -and -not $HasApprovalNumber) {
         $Decision.Screen = "MfaRetry"
         $Decision.Action = "Retry"
@@ -220,7 +227,7 @@ function Resolve-EntraSignInScreen {
     #    match in another; both mean the same thing to the user, so both are read.
     if ($HasApprovalNumber) {
         $NumberElementId = $Id.PasswordlessNumber
-        if ($Id.PasswordlessNumber -notin $Present) {
+        if ($Id.PasswordlessNumber -notin $Visible) {
             $NumberElementId = $Id.NumberMatch
         }
 
@@ -250,7 +257,7 @@ function Resolve-EntraSignInScreen {
         $Proof = @($Value["proofs"])
     }
 
-    $HasProofScreen = ($Id.ProofsContainer -in $Present) -or ($Id.MethodPicker -in $Present) -or $Proof.Count -gt 0
+    $HasProofScreen = ($Id.ProofsContainer -in $Visible) -or ($Id.MethodPicker -in $Visible) -or $Proof.Count -gt 0
     if ($HasProofScreen) {
         $Decision.Screen = "MethodPicker"
 
@@ -317,7 +324,7 @@ function Resolve-EntraSignInScreen {
     }
 
     # 9. The username screen, the most generic of the sign-in screens and therefore the last one.
-    if ($Id.UserName -in $Visible -and $Id.Submit -in $Present) {
+    if ($Id.UserName -in $Visible -and $Id.Submit -in $Visible) {
         $Decision.Screen = "UsernameEntry"
         $Decision.Action = "SetValueAndClick"
         $Decision.ElementId = $Id.UserName
