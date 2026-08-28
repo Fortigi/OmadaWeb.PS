@@ -1,4 +1,4 @@
-﻿function Set-DynamicParameter {
+function Set-DynamicParameter {
     [CmdletBinding()]
     param(
         $FunctionName
@@ -100,6 +100,20 @@ IMPORTANT: Due to the requirements of Selenium, the selected Edge profile needs 
     New-DynamicParam -Name "UseWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use WebView2 instead of Selenium WebDriver for browser-based authentication.
 
 IMPORTANT: This parameter is deprecated and obsolete. The default is AuthenticationType WebView2, so this parameter is not needed anymore and will be removed in a future release."
+    New-DynamicParam -Name "PreferredMfaMethod" -Type "string" -ValidateSet ("PhoneAppNotification", "PhoneAppOTP", "OneWaySMS", "TwoWayVoiceMobile", "TwoWayVoiceAlternateMobile", "TwoWayVoiceOffice", "ConsolidatedTelephony") -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage 'The multi-factor authentication method to select when Entra ID asks which way to sign in, and the account has more than one method registered. Without this parameter the most secure method the account offers is chosen automatically, preferring an Authenticator approval over a code that has to be typed, a code over a text message, and a text message over a voice call.
+
+The values are the method identifiers Entra ID itself uses, so they mean the same thing whatever language the sign-in page is served in:
+- ''PhoneAppNotification'': Microsoft Authenticator approval, including number matching.
+- ''PhoneAppOTP'': A verification code from Microsoft Authenticator.
+- ''OneWaySMS'': A code sent by text message.
+- ''TwoWayVoiceMobile'': A call to the registered mobile number.
+- ''TwoWayVoiceAlternateMobile'': A call to the registered alternate mobile number.
+- ''TwoWayVoiceOffice'': A call to the registered office number.
+- ''ConsolidatedTelephony'': The consolidated telephony method.
+
+When the account does not offer the requested method, a warning is written and the most secure method it does offer is used instead, so a preference never fails a sign-in that would otherwise succeed.
+
+IMPORTANT: This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. Supplying it with any other authentication type raises a terminating error.'
     New-DynamicParam -Name "DebugWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to enable WebView2 browser debugging options like Developer Tools"
     New-DynamicParam -Name "SessionKey" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Explicitly discriminate the reusable authentication session (cookie, base URL, WebView2/Selenium profile) to use for this call, in addition to the base URL, -AuthenticationType and -Credential (when supplied). Use this to keep multiple concurrent sessions apart when they would otherwise share the same base URL, authentication type and credential - for example two interactive Browser/WebView2 logins to the same tenant before either has a known user identity. Has no effect on which cookie/base URL etc. is used beyond distinguishing sessions from each other; defaults to an empty value, which reproduces prior single-session-per-(base URL, AuthenticationType, Credential) behavior."
 

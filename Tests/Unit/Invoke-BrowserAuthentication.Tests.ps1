@@ -138,6 +138,77 @@ Describe 'Invoke-BrowserAuthentication' -Tag 'Unit' {
             }
         }
     }
+
+    Context 'Preferred MFA method' {
+        It 'Should carry -PreferredMfaMethod onto the session context the sign-in reads' {
+            InModuleScope 'OmadaWeb.PS' {
+                # The WebView2 sign-in runs inside a blocking WinForm dialog whose event handlers
+                # cannot see the call stack, so the session context is the only way the choice
+                # reaches Resolve-EntraSignInScreen.
+                Mock Get-DataFromWebView2 { $SessionContext.AuthCookie = [PSCustomObject]@{ Name = 'oisauthtoken'; Value = 'cookie-value'; domain = 'localhost' } }
+
+                $RequestContext = New-TestRequestContext -Key 'unit-test-preferred-mfa-method' -BoundParams @{
+                    AuthenticationType = 'WebView2'
+                    Headers            = @{}
+                    SkipCookieCache    = $true
+                    PreferredMfaMethod = 'PhoneAppOTP'
+                }
+
+                Invoke-BrowserAuthentication -RequestContext $RequestContext | Out-Null
+
+                $RequestContext.SessionContext.PreferredMfaMethod | Should -Be 'PhoneAppOTP'
+            }
+        }
+
+        It 'Should clear a preference left over from an earlier call' {
+            InModuleScope 'OmadaWeb.PS' {
+                Mock Get-DataFromWebView2 { $SessionContext.AuthCookie = [PSCustomObject]@{ Name = 'oisauthtoken'; Value = 'cookie-value'; domain = 'localhost' } }
+
+                $RequestContext = New-TestRequestContext -Key 'unit-test-preferred-mfa-method-cleared' -BoundParams @{
+                    AuthenticationType = 'WebView2'
+                    Headers            = @{}
+                    SkipCookieCache    = $true
+                    PreferredMfaMethod = 'PhoneAppOTP'
+                }
+
+                Invoke-BrowserAuthentication -RequestContext $RequestContext | Out-Null
+
+                $RequestContext.SessionContext.AuthCookie = $null
+                $RequestContext.BoundParams.Remove('PreferredMfaMethod')
+                $RequestContext.BoundParams.Headers = @{}
+
+                Invoke-BrowserAuthentication -RequestContext $RequestContext | Out-Null
+
+                $RequestContext.SessionContext.PreferredMfaMethod | Should -BeNullOrEmpty
+            }
+        }
+
+        It 'Should not forward -PreferredMfaMethod to the underlying web cmdlet' {
+            InModuleScope 'OmadaWeb.PS' {
+                # It configures this module's sign-in automation; Invoke-RestMethod has never heard
+                # of it and would fail the call.
+                $RequestContext = New-TestRequestContext -Key 'unit-test-preferred-mfa-not-forwarded' -BoundParams @{
+                    AuthenticationType = 'WebView2'
+                    Headers            = @{}
+                    PreferredMfaMethod = 'PhoneAppOTP'
+                    Uri                = 'http://localhost:19000/'
+                }
+
+                (Set-RequestParameter -RequestContext $RequestContext).Keys | Should -Not -Contain 'PreferredMfaMethod'
+            }
+        }
+
+        It 'Should offer only the method identifiers Entra ID uses' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Parameter = (Set-DynamicParameter -FunctionName 'Invoke-RestMethod')['PreferredMfaMethod']
+                $ValidateSet = $Parameter.Attributes.Where({ $_ -is [System.Management.Automation.ValidateSetAttribute] })[0]
+
+                $ValidateSet.ValidValues | Should -Contain 'PhoneAppNotification'
+                $ValidateSet.ValidValues | Should -Contain 'PhoneAppOTP'
+                $ValidateSet.ValidValues | Should -Contain 'OneWaySMS'
+            }
+        }
+    }
 }
 
 AfterAll {

@@ -153,6 +153,16 @@ function Invoke-OmadaRequest {
 
             "{0} - Authentication type: {1}" -f $MyInvocation.MyCommand, $($BoundParams.AuthenticationType) | Write-Verbose
 
+            # -PreferredMfaMethod drives the Entra ID sign-in screens, which only the WebView2 engine
+            # automates. Every other authentication type would accept the parameter and quietly do
+            # nothing with it, so it is refused here rather than silently ignored.
+            if ("PreferredMfaMethod" -in $BoundParams.Keys -and -not [string]::IsNullOrWhiteSpace($BoundParams.PreferredMfaMethod)) {
+                $UsesWebView2 = $BoundParams.AuthenticationType -eq "WebView2" -or ($BoundParams.AuthenticationType -eq "Browser" -and $BoundParams.ContainsKey("UseWebView2") -and $BoundParams.UseWebView2)
+                if (-not $UsesWebView2) {
+                    "{0} - -PreferredMfaMethod only applies to -AuthenticationType WebView2, got '{1}'" -f $MyInvocation.MyCommand, $BoundParams.AuthenticationType | Write-Error -ErrorAction "Stop"
+                }
+            }
+
             switch ($BoundParams.AuthenticationType) {
                 "Windows" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
