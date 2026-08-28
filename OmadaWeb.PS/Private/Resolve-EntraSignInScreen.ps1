@@ -141,9 +141,16 @@ function Resolve-EntraSignInScreen {
         $Decision.Code = $ErrorVerdict.Code
         $Decision.Reason = $ErrorVerdict.Reason
         $Decision.IsTerminal = $ErrorVerdict.IsTerminal
+
+        # The verdict's own answer is carried through rather than flattened into "wait and see".
+        # Waiting is the right response to a page this module does not recognize, because it might
+        # only be mid-navigation - but a screen that has named its own error is not that page. It
+        # will not turn into something drivable, so making the user watch a still window for the
+        # length of the stall timeout before being told what happened is a minute spent saying
+        # nothing. 'Manual' hands over at once, with the code in the message.
         $Decision.Action = "Wait"
-        if ($ErrorVerdict.Action -eq "Stop") {
-            $Decision.Action = "Stop"
+        if ($ErrorVerdict.Action -eq "Stop" -or $ErrorVerdict.Action -eq "Manual") {
+            $Decision.Action = $ErrorVerdict.Action
         }
 
         return $Decision

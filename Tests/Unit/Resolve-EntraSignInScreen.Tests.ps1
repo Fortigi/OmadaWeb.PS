@@ -90,6 +90,25 @@ Describe 'Resolve-EntraSignInScreen' -Tag 'Unit' {
             }
         }
 
+        It 'Matches the tile whatever case Entra ID wrote the account name in' {
+            # PowerShell's -eq is case-insensitive for strings, which is what this relies on, and
+            # what the click helper's own toLowerCase comparison agrees with. Asserted rather than
+            # assumed: -ceq is one character away, and the failure it would cause - falling through
+            # to "use another account" on a tile that was right there - is not obvious from reading
+            # the code.
+            $PageState = New-PageState @{
+                accountTiles = @([pscustomobject]@{ index = 0; testId = 'Someone@Contoso.com' })
+                hasOtherTile = $true
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Action | Should -Be 'ClickAccountTile'
+                $Decision.Value | Should -Be 'Someone@Contoso.com'
+            }
+        }
+
         It 'Falls back to "use another account" when no tile matches' {
             $PageState = New-PageState @{
                 accountTiles = @([pscustomobject]@{ index = 0; testId = 'other@contoso.com' })
@@ -370,15 +389,35 @@ Describe 'Resolve-EntraSignInScreen' -Tag 'Unit' {
             }
         }
 
-        It 'Hands a registration interrupt back to the user without ending the sign-in' {
-            $PageState = New-PageState @{ errorCode = '50072' }
+        It 'Hands <ErrorCode> back to the user at once, without ending the sign-in' -TestCases @(
+            @{ ErrorCode = '50072' }
+            @{ ErrorCode = '50074' }
+            @{ ErrorCode = '50158' }
+        ) {
+            # 'Manual', not 'Wait'. Waiting is the right answer to a page this module does not
+            # recognize, because it might only be mid-navigation; a screen that has named its own
+            # error is not that page, and making the user watch a still window for the length of the
+            # stall timeout before being told what happened is a minute spent saying nothing.
+            $PageState = New-PageState @{ errorCode = $ErrorCode }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState; ErrorCode = $ErrorCode } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Action | Should -Be 'Manual'
+                $Decision.IsTerminal | Should -BeFalse
+                $Decision.Code | Should -Be ("AADSTS{0}" -f $ErrorCode)
+                $Decision.Reason | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It 'Hands an error code it does not recognize back to the user rather than guessing' {
+            $PageState = New-PageState @{ errorCode = '90210' }
 
             InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
                 $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
 
-                $Decision.Action | Should -Be 'Wait'
+                $Decision.Action | Should -Be 'Manual'
                 $Decision.IsTerminal | Should -BeFalse
-                $Decision.Reason | Should -Not -BeNullOrEmpty
             }
         }
 

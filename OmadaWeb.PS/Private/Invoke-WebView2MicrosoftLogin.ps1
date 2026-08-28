@@ -305,6 +305,20 @@ function Invoke-WebView2MicrosoftLogin {
                         return $false
                     }
 
+                    "Manual" {
+                        # Entra ID named its own error, and it is one only the person at the keyboard
+                        # can resolve - registering security information, completing an extra
+                        # verification step. Waiting out the stall timeout first would add a silent
+                        # minute to a message that is already known, so hand over now.
+                        $Reason = $Decision.Reason
+                        if (-not [string]::IsNullOrWhiteSpace($Decision.Code)) {
+                            $Reason = "{0}: {1}" -f $Decision.Code, $Reason
+                        }
+
+                        Switch-ToManualLogin -State ("Deciding/{0}" -f $Decision.Screen) -FoundElementId $Present -Url $Script:WebView2.Source.AbsoluteUri -Reason $Reason | Out-Null
+                        return $false
+                    }
+
                     "Retry" {
                         "`nMFA failed! Please retry!" | Write-Warning
                         $Script:MfaRequestDisplayed = $false

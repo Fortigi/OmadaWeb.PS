@@ -495,6 +495,22 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
         }
     }
 
+    It 'Reports a registration interrupt at once instead of after the stall timeout' {
+        InModuleScope 'OmadaWeb.PS' {
+            # The real timeout, not zero: the point is that this screen does not wait for it. Entra
+            # ID has already said what is wrong, and only the person at the keyboard can fix it, so
+            # a silent minute before the message would be a minute wasted.
+            $Script:LoginAutomationFallbackTimeout = 60
+            $Script:NextScriptResult = Script:New-SnapshotResult @{ errorCode = '50072' }
+
+            $Warning = Script:Invoke-LoginTick -Count 3
+
+            $Script:MicrosoftOnlineLogin | Should -BeFalse
+            $Warning | Should -BeLike '*AADSTS50072*'
+            $Warning | Should -BeLike '*security information*'
+        }
+    }
+
     It 'Resets the fallback when the browser leaves the Microsoft sign-in page' {
         InModuleScope 'OmadaWeb.PS' {
             $Script:ManualLoginFallbackActive = $true
