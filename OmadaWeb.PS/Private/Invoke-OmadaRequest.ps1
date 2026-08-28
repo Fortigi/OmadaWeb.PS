@@ -1,6 +1,5 @@
 function Invoke-OmadaRequest {
     [CmdletBinding(DefaultParameterSetName = "StandardMethod")]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidGlobalVars", "", Justification = "OmadaWebPSCurrentBaseUrl is deliberately global: it is part of the module's public surface, readable by callers to see which environment the last request went to. It is declared in OmadaWeb.PS.psm1 and this is the only place that maintains it.")]
     param()
 
     dynamicparam {
@@ -59,10 +58,11 @@ function Invoke-OmadaRequest {
                 # block runs, so deferring this assignment would leave the global holding the previous
                 # URL and re-probe a suspended environment on every call instead of once. Capture the
                 # previous value first so the probe can still tell whether the base URL actually changed.
-                $PreviousBaseUrl = $Global:OmadaWebPSCurrentBaseUrl
                 "{0} - BaseUrl: {1}" -f $MyInvocation.MyCommand, $BaseUrl | Write-Verbose
-                $Global:OmadaWebPSCurrentBaseUrl = $BaseUrl
-                "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $Global:OmadaWebPSCurrentBaseUrl | Write-Verbose
+                # Reads and updates the global in one step, and carries the analyzer suppression so
+                # it does not have to sit on this whole function - see Set-OmadaCurrentBaseUrl.ps1.
+                $PreviousBaseUrl = Set-OmadaCurrentBaseUrl -BaseUrl $BaseUrl
+                "{0} - Export global variable OmadaWebPSCurrentBaseUrl: {1}" -f $MyInvocation.MyCommand, $BaseUrl | Write-Verbose
 
                 # Test environment status. The result is cached for the current base URL (only the
                 # single last-used URL is tracked, so alternating between two environments re-probes

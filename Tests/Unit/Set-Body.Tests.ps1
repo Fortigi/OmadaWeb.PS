@@ -28,7 +28,10 @@ Describe 'Set-Body' -Tag 'Unit' {
     Context 'Contract' {
         It 'Should require a RequestContext' {
             InModuleScope 'OmadaWeb.PS' {
-                { Set-Body -ErrorAction Stop } | Should -Throw
+                # Asserted through the parameter metadata rather than by calling the function
+                # without it: in an interactive host a missing mandatory parameter prompts rather
+                # than throwing, which would hang the run.
+                (Get-Command Set-Body).Parameters['RequestContext'].Attributes.Where({ $_ -is [System.Management.Automation.ParameterAttribute] }).Mandatory | Should -BeTrue
             }
         }
 

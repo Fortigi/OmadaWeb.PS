@@ -22,8 +22,10 @@ function New-OmadaRequestContext {
     # as a parameter instead of reading $BoundParams, $Session and $SessionContext out of their
     # caller's scope. Members:
     #
-    #   BoundParams    - hashtable of the caller's bound parameters. Every helper reads it and most
-    #                    add to it: headers, credential, Authorization, UseDefaultCredentials.
+    #   BoundParams    - the caller's bound parameters, as an IDictionary rather than a Hashtable
+    #                    (see the parameter above - constraining to Hashtable would copy them).
+    #                    Every helper reads it and most add to it: headers, credential,
+    #                    Authorization, UseDefaultCredentials.
     #   Session        - the WebRequestSession carrying the cookie container and the user agent.
     #   SessionContext - per-(base URL, authentication type, identity) state, the object returned by
     #                    Get-OmadaSessionContext.
