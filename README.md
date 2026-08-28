@@ -228,49 +228,49 @@ Clear-OmadaWebCache [-Scope {All | Cookies | BrowserProfiles | Binaries | Sessio
 ### Invoke-OmadaRestMethod (StandardMethod)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (StandardMethodNoProxy)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (CustomMethod)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (CustomMethodNoProxy)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (StandardMethod)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (StandardMethodNoProxy)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (CustomMethod)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (CustomMethodNoProxy)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 <!-- END GENERATED SYNTAX -->
@@ -650,6 +650,38 @@ This parameter only applies to Invoke-OmadaRestMethod.
 
 ```yaml
         Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+#### -MaximumRetryCount <int>
+How many times a failed request is retried before the error is raised. Defaults to 3, so a request is attempted 4 times in total. Use -MaximumRetryCount 0 to switch retrying off.
+
+Only requests that can be repeated safely are retried: HTTP GET and HEAD, including the page requests -Paged makes. A POST, PUT, PATCH or DELETE may already have been applied by the server, so it is never repeated automatically. Retries are triggered by the transient conditions a multi-tenant cloud produces - HTTP 429, 502, 503 and 504, and socket-level network failures - and never by an authentication failure, which is handled by re-authenticating instead. A client-side timeout is not retried either, so -TimeoutSec keeps bounding the call.
+
+Between attempts the command waits -RetryIntervalSec, doubling that wait after each attempt and varying it slightly so that several clients backing off at once do not retry in lockstep. When the server answers with a Retry-After header, the delay it asks for is used instead. Every retry is reported on the verbose stream with the status code and the delay.
+
+```yaml
+        Type: System.Int32
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: MaxRetryCount
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+#### -RetryIntervalSec <int>
+The wait in seconds before the first retry, doubled for each attempt after that. Defaults to 2. A Retry-After header sent by the server takes precedence over this value. Has no effect when -MaximumRetryCount is 0.
+
+```yaml
+        Type: System.Int32
         Required: false
         Position: Named
         Accept pipeline input: false

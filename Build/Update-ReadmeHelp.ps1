@@ -61,7 +61,21 @@ $PreferredParameterOrder = @(
     "InPrivate",
     "UseWebView2",
     "DebugWebView2",
-    "Paged"
+    "Paged",
+    "MaximumRetryCount",
+    "RetryIntervalSec"
+)
+
+# Parameters the module declares itself in Set-DynamicParameter.ps1 even though the wrapped native
+# cmdlet happens to declare one of the same name. Without this list they would be classified as
+# inherited and disappear from the generated documentation, because the "Omada-specific" test is
+# "not a parameter of the native cmdlet". That test is right for everything else, but wrong here:
+# PowerShell 7's Invoke-RestMethod/Invoke-WebRequest have MaximumRetryCount and RetryIntervalSec
+# while Windows PowerShell 5.1's do not, so documenting them as inherited would both hide them and
+# describe them incorrectly - the module supplies them on both engines, with its own semantics.
+$ModuleOwnedParameterNames = @(
+    "MaximumRetryCount",
+    "RetryIntervalSec"
 )
 
 # ValidateSet values that are populated from the local machine (not a fixed set of documentation
@@ -107,7 +121,7 @@ function Get-ParameterAttribute {
 
 function Get-OmadaSpecificParameterNames {
     param($Command, $NativeCommand)
-    $Names = $Command.Parameters.Keys | Where-Object { $_ -notin $NativeCommand.Parameters.Keys }
+    $Names = $Command.Parameters.Keys | Where-Object { $_ -notin $NativeCommand.Parameters.Keys -or $_ -in $ModuleOwnedParameterNames }
     return $Names | Sort-Object -Property @(
         @{ Expression = { $Index = $PreferredParameterOrder.IndexOf($_); if ($Index -lt 0) { [int]::MaxValue } else { $Index } } },
         @{ Expression = { $_ } }
