@@ -155,7 +155,7 @@ function Invoke-OmadaRequest {
             switch ($BoundParams.AuthenticationType) {
                 "Windows" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-WindowsAuthentication
+                    $RequestContext = Invoke-WindowsAuthentication -RequestContext $RequestContext
                 }
                 "Browser" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
@@ -171,11 +171,11 @@ function Invoke-OmadaRequest {
                 }
                 "Integrated" {
                     "{0} - {1} Authentication " -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-IntegratedAuthentication
+                    $RequestContext = Invoke-IntegratedAuthentication -RequestContext $RequestContext
                 }
                 "Basic" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-BasicAuthentication
+                    $RequestContext = Invoke-BasicAuthentication -RequestContext $RequestContext
                 }
                 "None" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose

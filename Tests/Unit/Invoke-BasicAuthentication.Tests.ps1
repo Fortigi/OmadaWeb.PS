@@ -8,12 +8,47 @@ BeforeAll {
 }
 
 Describe 'Invoke-BasicAuthentication' -Tag 'Unit' {
+    BeforeAll {
+        InModuleScope 'OmadaWeb.PS' {
+            # Each test builds its own context instead of relying on ambient variables inherited
+            # from the caller's scope. Script: so the definition lands in the module's scope and
+            # stays visible to the InModuleScope block of every It below.
+            function Script:New-TestRequestContext {
+                param(
+                    [hashtable]$BoundParams,
+                    [string]$Key = 'unit-test-basic-authentication'
+                )
+
+                return New-OmadaRequestContext -BoundParams $BoundParams -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -SessionContext (Get-OmadaSessionContext -Key $Key)
+            }
+        }
+    }
+
+    Context 'Contract' {
+        It 'Should require a RequestContext' {
+            InModuleScope 'OmadaWeb.PS' {
+                { Invoke-BasicAuthentication -ErrorAction Stop } | Should -Throw
+            }
+        }
+
+        It 'Should return the same context instance it was given' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Credential = New-Object System.Management.Automation.PSCredential('user', (ConvertTo-SecureString 'password' -AsPlainText -Force))
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; Headers = @{} }
+
+                $Returned = Invoke-BasicAuthentication -RequestContext $RequestContext
+
+                [object]::ReferenceEquals($Returned, $RequestContext) | Should -BeTrue
+            }
+        }
+    }
+
     It 'Should add a Basic Authorization header built from the provided Credential' {
         InModuleScope 'OmadaWeb.PS' {
             $Credential = New-Object System.Management.Automation.PSCredential('user', (ConvertTo-SecureString 'password' -AsPlainText -Force))
             $BoundParams = @{ Credential = $Credential; Headers = @{} }
 
-            Invoke-BasicAuthentication
+            Invoke-BasicAuthentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
             $Expected = 'Basic {0}' -f [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes('user:password'))
             $BoundParams.Headers.Authorization | Should -Be $Expected
@@ -30,7 +65,7 @@ Describe 'Invoke-BasicAuthentication' -Tag 'Unit' {
 
             $BoundParams = @{ Headers = @{} }
 
-            Invoke-BasicAuthentication
+            Invoke-BasicAuthentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
             Should -Invoke Get-Credential -Times 1
             $BoundParams.Headers.Authorization | Should -Match '^Basic '
