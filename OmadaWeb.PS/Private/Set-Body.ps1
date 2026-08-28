@@ -1,6 +1,11 @@
 function Set-Body {
     [CmdletBinding()]
-    PARAM()
+    PARAM(
+        [Parameter(Mandatory)]
+        [PSTypeName("OmadaWeb.PS.RequestContext")]$RequestContext
+    )
+
+    $BoundParams = $RequestContext.BoundParams
 
     "{0} - {1} - Add Body" -f $MyInvocation.MyCommand, $BoundParams.Method | Write-Verbose
     if ($null -eq $BoundParams.Body) {
@@ -10,7 +15,7 @@ function Set-Body {
     if ("Content-Type" -notin $BoundParams.Headers.Keys) {
         $BoundParams.Headers.Add("Content-Type", "application/json")
     }
-    else{
+    else {
         $BoundParams.Headers.'Content-Type' = "application/json"
     }
     if ($BoundParams.Body.GetType().FullName -in @("System.Collections.Hashtable", "System.Collections.Specialized.OrderedDictionary", "System.Management.Automation.PSCustomObject")) {
@@ -23,4 +28,6 @@ function Set-Body {
     else {
         "{0} - Provided -Body will be processed directly without converting it." -f $MyInvocation.MyCommand | Write-Verbose
     }
+
+    return $RequestContext
 }

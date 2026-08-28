@@ -99,6 +99,11 @@ function Invoke-OmadaRequest {
             # this particular call took the -CookiePath branch instead on its first-ever use of this session.
             $SessionContext.CookieCacheFilePath = Get-OmadaCookieCacheFilePath -SessionKey $SessionKey
 
+            # The three pieces of per-request state the private helpers work on, bundled so they can
+            # take them as a parameter instead of reading them out of this function's scope. The
+            # context aliases the objects below rather than copying them, so the locals stay valid.
+            $RequestContext = New-OmadaRequestContext -BoundParams $BoundParams -Session $Session -SessionContext $SessionContext
+
             if ($BoundParams.Keys -contains "CookiePath") {
                 # -CookiePath is authoritative on every call (not just when no cookie is cached yet),
                 # so callers can force a specific session's cookie to be used for a given call.
@@ -182,7 +187,7 @@ function Invoke-OmadaRequest {
 
             if ($BoundParams.Method -in @('PUT', 'POST', 'PATCH')) {
                 "{0} - {1} - Add Body" -f $MyInvocation.MyCommand, $BoundParams.Method | Write-Verbose
-                Set-Body
+                $RequestContext = Set-Body -RequestContext $RequestContext
             }
 
             $BoundParams.Add("WebSession", $Session)
