@@ -194,6 +194,16 @@ function Resolve-EntraSignInScreen {
     if ($Id.Password -in $Visible) {
         if ($HasPassword) {
             $Decision.Screen = "PasswordEntry"
+
+            # Filling the field and submitting it are two steps, so both have to be possible before
+            # the first one is taken. A page still rendering its button would otherwise have the
+            # password typed into it once per cycle with nothing to submit it - and the sign-in would
+            # wait out the whole stall timeout rather than the tick or two the page actually needed.
+            if ($Id.Submit -notin $Visible) {
+                $Decision.Reason = "The password field is ready but the button that submits it is not, so the page is given a moment to finish."
+                return $Decision
+            }
+
             $Decision.Action = "SetValueAndClick"
             $Decision.ElementId = $Id.Password
             $Decision.SubmitId = $Id.Submit

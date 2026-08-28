@@ -156,6 +156,37 @@ Describe 'Resolve-EntraSignInScreen' -Tag 'Unit' {
         }
     }
 
+    Context 'A screen that is not finished rendering' {
+        It 'Does not type the password until the button that submits it is there' {
+            # Filling the field and submitting it are two steps. Taking the first before the second
+            # is possible retypes the password once per cycle with nothing to submit it, and waits
+            # out the whole stall timeout instead of the tick or two the page needed.
+            $PageState = New-PageState @{
+                ids        = @('i0118', 'idSIButton9')
+                visibleIds = @('i0118')
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword
+
+                $Decision.Screen | Should -Be 'PasswordEntry'
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.ValueSource | Should -Not -Be 'Password'
+            }
+        }
+
+        It 'Does not type the user name until the button that submits it is there' {
+            $PageState = New-PageState @{
+                ids        = @('i0116', 'idSIButton9')
+                visibleIds = @('i0116')
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                (Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com' -HasPassword).Action | Should -Be 'Wait'
+            }
+        }
+    }
+
     Context 'Passwordless credentials' {
         It 'Switches to another sign-in method rather than submitting an empty password' {
             $PageState = New-PageState @{
