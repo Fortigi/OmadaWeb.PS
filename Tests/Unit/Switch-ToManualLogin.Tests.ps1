@@ -123,6 +123,27 @@ Describe 'Reset-LoginAutomationState' -Tag 'Unit' {
         }
     }
 
+    It 'Lets a new browser window show its own approval number' {
+        InModuleScope 'OmadaWeb.PS' {
+            # The number belongs to one sign-in request, and a new window means a new request with a
+            # new number. Carrying the flag over would suppress the only thing the user needs in
+            # order to approve it - leaving them looking at a window waiting for something it never
+            # told them about - and would let a resend link on the new page read as a failed
+            # approval that never happened.
+            Mock Get-Process { @() }
+            Mock Write-Host {}
+
+            Show-EntraApprovalNumber -Number '42' | Should -BeTrue
+            $Script:MfaRequestDisplayed | Should -BeTrue
+
+            Reset-LoginAutomationState
+
+            $Script:MfaRequestDisplayed | Should -BeFalse
+            Show-EntraApprovalNumber -Number '73' | Should -BeTrue
+            Should -Invoke Write-Host -Times 1 -Exactly -ParameterFilter { $Object -like '*73*' }
+        }
+    }
+
     It 'Clears the stall clock' {
         InModuleScope 'OmadaWeb.PS' {
             $Script:UnmatchedPageSignature = 'i0116'

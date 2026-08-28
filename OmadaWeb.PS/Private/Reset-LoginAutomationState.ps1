@@ -22,12 +22,19 @@ function Reset-LoginAutomationState {
     $Script:UnmatchedPageSignature = $null
     $Script:UnmatchedPageSince = $null
 
-    # Both are "report this once, not once per 150 ms tick" guards, and both are about the window
-    # that is starting rather than the one that ended: a second attempt has to be allowed to say
-    # again that the preferred verification method is not available, and to start counting its own
-    # wait for an approval from zero.
+    # All three are "report this once, not once per 150 ms tick" guards, and all three are about the
+    # window that is starting rather than the one that ended: a second attempt has to be allowed to
+    # say again that the preferred verification method is not available, to start counting its own
+    # wait for an approval from zero, and to show its own approval number.
+    #
+    # That last one matters most. The number belongs to a single sign-in request, and a new window
+    # means a new request with a new number - so carrying the flag over would suppress the only
+    # thing the user needs in order to approve it, leaving them looking at a window that is waiting
+    # for something it never told them about. It would also let a resend link on the new page read
+    # as a failed approval that never happened.
     $Script:PreferredMfaMethodWarningIssued = $false
     $Script:MfaWaitLastReported = $null
+    $Script:MfaRequestDisplayed = $false
 
     # Scrape state of Get-WebView2LogonPageError. It belongs to a browser window - a pending script
     # task cannot outlive the CoreWebView2 that was asked to run it - so it is cleared here with the
