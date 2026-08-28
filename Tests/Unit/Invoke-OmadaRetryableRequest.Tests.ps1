@@ -49,6 +49,44 @@ Describe 'Invoke-OmadaRetryableRequest' -Tag 'Unit' {
         }
     }
 
+    Context 'Parameter validation' {
+        It 'Should reject a negative <Parameter>' -ForEach @(
+            @{ Parameter = 'MaximumRetryCount' }
+            @{ Parameter = 'RetryIntervalSec' }
+            @{ Parameter = 'MaximumRetryDelaySec' }
+        ) {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Parameter = $Parameter } {
+                param($Parameter)
+                # A negative interval would make every computed backoff fall to zero and turn the
+                # retry loop into a hot loop against a server that is already struggling.
+                $Arguments = @{
+                    CommandInfo = { param($Uri) 'ok' }
+                    Parameters  = @{ Uri = 'https://example.omada.cloud' }
+                    $Parameter  = -1
+                }
+
+                { Invoke-OmadaRetryableRequest @Arguments } | Should -Throw
+            }
+        }
+
+        It 'Should accept zero for <Parameter>' -ForEach @(
+            @{ Parameter = 'MaximumRetryCount' }
+            @{ Parameter = 'RetryIntervalSec' }
+        ) {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Parameter = $Parameter } {
+                param($Parameter)
+                # Zero stays valid: it is how retrying is switched off, and how the tests ask for no wait.
+                $Arguments = @{
+                    CommandInfo = { param($Uri) 'ok' }
+                    Parameters  = @{ Uri = 'https://example.omada.cloud' }
+                    $Parameter  = 0
+                }
+
+                Invoke-OmadaRetryableRequest @Arguments | Should -Be 'ok'
+            }
+        }
+    }
+
     Context 'Retryable HTTP status codes' {
         It 'Should retry HTTP <StatusCode> and return the result of the successful attempt' -ForEach @(
             @{ StatusCode = 429 }

@@ -205,6 +205,26 @@ Describe 'Invoke-TestOmadaRestMethod retry policy' -Tag 'Integration' {
         }
     }
 
+    Context 'Parameter validation' {
+        It 'Should reject a negative -<Parameter> before making any request' -ForEach @(
+            @{ Parameter = 'MaximumRetryCount' }
+            @{ Parameter = 'RetryIntervalSec' }
+        ) {
+            Reset-FakeServer
+
+            $Arguments = @{
+                Uri                = "$Script:BaseUrl/data"
+                AuthenticationType = 'None'
+                $Parameter         = -1
+            }
+
+            { Invoke-TestOmadaRestMethod @Arguments -ErrorAction Stop } | Should -Throw
+
+            # Rejected at parameter binding, so the server is never contacted at all.
+            $Script:SharedServer.RequestCount | Should -Be 0
+        }
+    }
+
     Context 'Socket-level failure' {
         It 'Should retry a dropped connection and return the eventual response' {
             Reset-FakeServer -Failures 1 -Mode 'Socket'

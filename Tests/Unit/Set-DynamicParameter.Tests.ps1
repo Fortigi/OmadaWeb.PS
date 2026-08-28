@@ -97,6 +97,20 @@ Describe 'Set-DynamicParameter' -Tag 'Unit' {
         }
     }
 
+    It 'Should reject a negative value for <Parameter>' -ForEach @(
+        @{ Parameter = 'MaximumRetryCount' }
+        @{ Parameter = 'RetryIntervalSec' }
+    ) {
+        InModuleScope 'OmadaWeb.PS' -Parameters @{ Parameter = $Parameter } {
+            param($Parameter)
+            $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
+            $RangeAttribute = $Dictionary[$Parameter].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] } | Select-Object -First 1
+
+            $RangeAttribute | Should -Not -BeNullOrEmpty
+            $RangeAttribute.MinRange | Should -Be 0
+        }
+    }
+
     It 'Should document the retry policy, its default and how to switch it off' {
         InModuleScope 'OmadaWeb.PS' {
             $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'

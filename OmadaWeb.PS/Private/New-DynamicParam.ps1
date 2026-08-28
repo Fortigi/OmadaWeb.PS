@@ -6,6 +6,11 @@
         [System.Object]$Type = [string], # Accept Object to handle deserialized types
         [string[]]$Alias = @(),
         [string[]]$ValidateSet,
+        # Two elements, minimum first. Supplied as a plain array rather than as a
+        # [ValidateRange()] attribute literal because a dynamic parameter's attributes are built at
+        # runtime, where the constant-expression rule that applies to attribute arguments in a
+        # param block does not.
+        [object[]]$ValidateRange,
         $ValidateScript,
         [switch]$Mandatory,
         [string[]]$ParameterSetName = "__AllParameterSets",
@@ -62,6 +67,17 @@
         $ParamOptions = New-Object System.Management.Automation.ValidateSetAttribute -ArgumentList $ValidateSet
         $AttributeCollection.Add($ParamOptions)
     }
+    # Tested for emptiness explicitly rather than with a plain truth test: a single-element array
+    # unwraps to its element, so @(0) - exactly the malformed input the count check below exists to
+    # catch - would evaluate as false and skip the check entirely.
+    if ($null -ne $ValidateRange -and $ValidateRange.Count -gt 0) {
+        if ($ValidateRange.Count -ne 2) {
+            Throw "ValidateRange must be supplied as exactly two elements: the minimum and the maximum."
+        }
+        $ParamOptions = New-Object System.Management.Automation.ValidateRangeAttribute -ArgumentList $ValidateRange[0], $ValidateRange[1]
+        $AttributeCollection.Add($ParamOptions)
+    }
+
     if ($ValidateScript) {
         $ParamOptions = New-Object System.Management.Automation.ValidateScriptAttribute -ArgumentList $ValidateScript
         $AttributeCollection.Add($ParamOptions)

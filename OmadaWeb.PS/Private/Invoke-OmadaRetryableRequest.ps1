@@ -5,8 +5,15 @@ function Invoke-OmadaRetryableRequest {
         $CommandInfo,
         [Parameter(Mandatory)]
         [hashtable]$Parameters,
+        # Negative values are rejected rather than clamped. A negative interval would make every
+        # computed backoff fall to zero and turn this loop into a hot retry loop against a server
+        # that is already struggling, and a negative count would silently disable retrying while
+        # reading as if it enabled it. Zero stays valid for both: it is how retrying is switched off.
+        [ValidateRange(0, [int]::MaxValue)]
         [int]$MaximumRetryCount = 3,
+        [ValidateRange(0, [int]::MaxValue)]
         [int]$RetryIntervalSec = 2,
+        [ValidateRange(0, [double]::MaxValue)]
         [double]$MaximumRetryDelaySec = 300
     )
 
