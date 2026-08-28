@@ -44,6 +44,37 @@ Describe 'New-OmadaRequestContext' -Tag 'Unit' {
             }
         }
 
+        It 'Should not copy a PSBoundParametersDictionary, which is what callers actually pass' {
+            InModuleScope 'OmadaWeb.PS' {
+                # Regression guard. $PsCmdLet.MyInvocation.BoundParameters is a
+                # PSBoundParametersDictionary - an IDictionary, but NOT a Hashtable. A [hashtable]
+                # constraint on the factory converts it and stores a copy, so everything
+                # Invoke-OmadaRequest adds to its own $BoundParams afterwards (WebSession, and
+                # UseBasicParsing on Windows PowerShell 5.1) never reaches Set-RequestParameter.
+                # A test that passes a plain @{} cannot see this, which is why this one does not.
+                function Get-RealBoundParameters {
+                    [CmdletBinding()]
+                    param([string]$Uri)
+                    return $PSCmdlet.MyInvocation.BoundParameters
+                }
+
+                $BoundParams = Get-RealBoundParameters -Uri 'https://example.omada.cloud'
+                $BoundParams | Should -Not -BeOfType [hashtable]
+
+                $RequestContext = New-OmadaRequestContext -BoundParams $BoundParams -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -SessionContext (Get-OmadaSessionContext -Key 'unit-test-context-bound-parameters')
+
+                [object]::ReferenceEquals($RequestContext.BoundParams, $BoundParams) | Should -BeTrue
+
+                # Keys added after the context was built must still be visible through it - this is
+                # the exact failure the [hashtable] constraint caused.
+                $BoundParams.Add('WebSession', [Microsoft.PowerShell.Commands.WebRequestSession]::new())
+                $BoundParams.Add('UseBasicParsing', $true)
+
+                $RequestContext.BoundParams.Keys | Should -Contain 'WebSession'
+                $RequestContext.BoundParams.Keys | Should -Contain 'UseBasicParsing'
+            }
+        }
+
         It 'Should surface mutations made through the context to the original hashtable' {
             InModuleScope 'OmadaWeb.PS' {
                 $BoundParams = @{ Headers = @{} }
