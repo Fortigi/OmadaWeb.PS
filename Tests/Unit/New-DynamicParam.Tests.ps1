@@ -69,6 +69,36 @@ Describe 'New-DynamicParam' -Tag 'Unit' {
             }
         }
     }
+    Context 'ValidateRange' {
+        It 'Should attach a ValidateRangeAttribute with the supplied bounds' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Dictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
+                New-DynamicParam -Name 'Attempts' -Type ([int]) -ValidateRange @(0, 10) -DPDictionary $Dictionary
+
+                $RangeAttribute = $Dictionary['Attempts'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] } | Select-Object -First 1
+                $RangeAttribute | Should -Not -BeNullOrEmpty
+                $RangeAttribute.MinRange | Should -Be 0
+                $RangeAttribute.MaxRange | Should -Be 10
+            }
+        }
+
+        It 'Should throw when ValidateRange is not exactly two elements' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Dictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
+
+                { New-DynamicParam -Name 'Attempts' -Type ([int]) -ValidateRange @(0) -DPDictionary $Dictionary } | Should -Throw
+            }
+        }
+
+        It 'Should not attach a ValidateRangeAttribute when ValidateRange is not supplied' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Dictionary = New-Object System.Management.Automation.RuntimeDefinedParameterDictionary
+                New-DynamicParam -Name 'Attempts' -Type ([int]) -DPDictionary $Dictionary
+
+                $Dictionary['Attempts'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] } | Should -BeNullOrEmpty
+            }
+        }
+    }
 }
 
 AfterAll {

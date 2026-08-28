@@ -16,7 +16,11 @@
         }
     }
     else {
-        $ExcludedParameters = @("SkipCookieCache", "CookiePath", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile", "UseWebView2", "EntraApplicationIdUri", "OAuthUri", "OAuthScope", "DebugWebView2", "Paged", "SessionKey")
+        # MaximumRetryCount and RetryIntervalSec are excluded even though PowerShell 7's native
+        # cmdlets would accept them: the retry policy is implemented by Invoke-OmadaRetryableRequest
+        # around the call, so passing them on as well would nest a second, differently behaving
+        # retry loop inside each attempt of the first.
+        $ExcludedParameters = @("SkipCookieCache", "CookiePath", "InPrivate", "ForceAuthentication", "AuthenticationType", "EntraIdTenantId", "RequestType", "EdgeProfile", "UseWebView2", "EntraApplicationIdUri", "OAuthUri", "OAuthScope", "DebugWebView2", "Paged", "SessionKey", "MaximumRetryCount", "RetryIntervalSec")
     }
 
     $Parameters = @{}

@@ -32,6 +32,24 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                 $Result.Keys | Should -Not -Contain 'SessionKey'
             }
         }
+
+        It 'Should exclude the retry parameters, which the module implements around the native call' {
+            InModuleScope 'OmadaWeb.PS' {
+                # Passing these on would nest PowerShell 7's own retry loop inside the module's,
+                # retrying each attempt again and ignoring Retry-After on the inner one.
+                $BoundParams = @{
+                    Uri               = 'https://example.omada.cloud'
+                    Method            = 'GET'
+                    MaximumRetryCount = 3
+                    RetryIntervalSec  = 2
+                }
+                $Result = Set-RequestParameter
+
+                $Result.Keys | Should -Contain 'Uri'
+                $Result.Keys | Should -Not -Contain 'MaximumRetryCount'
+                $Result.Keys | Should -Not -Contain 'RetryIntervalSec'
+            }
+        }
     }
 
     Context '-InvokeOmadaRequest mode' {

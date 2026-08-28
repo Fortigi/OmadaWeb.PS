@@ -26,6 +26,25 @@ function Invoke-OmadaRequest {
                 $Script:DebugWebView2 = $true
             }
 
+            # The retry policy is on by default; -MaximumRetryCount 0 turns it off, matching how the
+            # native cmdlets read that parameter. Defaults are applied to $BoundParams rather than
+            # relying on the dynamic parameter's own default value, because a dynamic parameter that
+            # was not supplied never reaches $PsCmdLet.MyInvocation.BoundParameters at all. Putting
+            # them in $BoundParams also carries them through the re-authentication recursion below,
+            # which rebuilds its arguments from exactly this hashtable.
+            if ("MaximumRetryCount" -notin $BoundParams.Keys) {
+                $BoundParams.Add("MaximumRetryCount", 3)
+            }
+
+            if ("RetryIntervalSec" -notin $BoundParams.Keys) {
+                $BoundParams.Add("RetryIntervalSec", 2)
+            }
+
+            $RetryPolicy = @{
+                MaximumRetryCount = [int]$BoundParams.MaximumRetryCount
+                RetryIntervalSec  = [int]$BoundParams.RetryIntervalSec
+            }
+
             if ("Headers" -notin $BoundParams.Keys) {
                 $BoundParams.Add("Headers", @{})
             }
@@ -227,7 +246,7 @@ function Invoke-OmadaRequest {
                         }
                         "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
 
-                        $Return = & ($CommandInfo) @Parameters
+                        $Return = Invoke-OmadaRetryableRequest -CommandInfo $CommandInfo -Parameters $Parameters @RetryPolicy
 
                         if ($Paged -and $null -ne $Return -and $Return.PSObject.Properties['@odata.nextLink'] -and -not [string]::IsNullOrWhiteSpace($Return.'@odata.nextLink')) {
                             $OriginalUri = $Parameters.Uri
@@ -248,7 +267,7 @@ function Invoke-OmadaRequest {
                                         throw "Paging aborted: exceeded maximum page limit (1000)."
                                     }
                                     "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
-                                    $NextPage = & ($CommandInfo) @Parameters
+                                    $NextPage = Invoke-OmadaRetryableRequest -CommandInfo $CommandInfo -Parameters $Parameters @RetryPolicy
                                     if ($null -ne $NextPage -and $NextPage.PSObject.Properties['value']) {
                                         $ValueList.AddRange(@($NextPage.value))
                                     }
@@ -283,7 +302,7 @@ function Invoke-OmadaRequest {
                             $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
                         }
                         "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
-                        $Return = & ($CommandInfo) @Parameters
+                        $Return = Invoke-OmadaRetryableRequest -CommandInfo $CommandInfo -Parameters $Parameters @RetryPolicy
 
                         #To support -SkipHttpErrorCheck
                         if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and $Return -is [Microsoft.PowerShell.Commands.WebResponseObject] -and $Return.StatusCode -eq 401) {
@@ -300,19 +319,11 @@ function Invoke-OmadaRequest {
 
             catch {
                 # Not every exception reaching here is HTTP-based (e.g. the $CustomErrorTrigger
-                # re-auth signal thrown above has no .Response). Resolve the status code once via
-                # PSObject.Properties lookups so a missing .Response/.StatusCode safely evaluates to
-                # $null instead of faulting the catch handler under Set-StrictMode (a bare
-                # $_.Exception.Response.StatusCode read throws on exceptions lacking those members),
-                # and reuse the single value for the 502/401 checks below.
-                $StatusCode = $null
-                $ResponseProperty = $_.Exception.PSObject.Properties['Response']
-                if ($ResponseProperty -and $null -ne $ResponseProperty.Value) {
-                    $StatusCodeProperty = $ResponseProperty.Value.PSObject.Properties['StatusCode']
-                    if ($StatusCodeProperty) {
-                        $StatusCode = $StatusCodeProperty.Value
-                    }
-                }
+                # re-auth signal thrown above has no .Response), which is why the status code is
+                # resolved through Get-OmadaResponseStatusCode - it evaluates to $null rather than
+                # faulting the catch handler under Set-StrictMode. The single value is reused for
+                # the 502/401 checks below.
+                $StatusCode = Get-OmadaResponseStatusCode -Exception $_.Exception
                 if ($StatusCode -eq 502) {
                     # A 502 is how a suspended Omada environment surfaces once a session already
                     # exists; invalidate the cached status so the next request re-probes the

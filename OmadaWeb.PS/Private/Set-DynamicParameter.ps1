@@ -24,7 +24,15 @@
         "Authentication",
         "SessionVariable",
         "UseDefaultCredentials",
-        "UseBasicParsing"
+        "UseBasicParsing",
+        # PowerShell 7's Invoke-RestMethod/Invoke-WebRequest declare these two themselves, Windows
+        # PowerShell 5.1's do not. Inheriting them would mean the module offers a different retry
+        # surface - and different retry semantics - depending on which engine it runs on, and on 7
+        # it would also retry twice: once in the native cmdlet and once in the module's own policy.
+        # They are dropped here and re-declared below so both engines get one identical parameter
+        # with one implementation behind it, which honours Retry-After and applies jitter.
+        "MaximumRetryCount",
+        "RetryIntervalSec"
     )
 
     $ParameterObjects = @()
@@ -94,6 +102,13 @@ IMPORTANT: Due to the requirements of Selenium, the selected Edge profile needs 
 IMPORTANT: This parameter is deprecated and obsolete. The default is AuthenticationType WebView2, so this parameter is not needed anymore and will be removed in a future release."
     New-DynamicParam -Name "DebugWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to enable WebView2 browser debugging options like Developer Tools"
     New-DynamicParam -Name "SessionKey" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Explicitly discriminate the reusable authentication session (cookie, base URL, WebView2/Selenium profile) to use for this call, in addition to the base URL, -AuthenticationType and -Credential (when supplied). Use this to keep multiple concurrent sessions apart when they would otherwise share the same base URL, authentication type and credential - for example two interactive Browser/WebView2 logins to the same tenant before either has a known user identity. Has no effect on which cookie/base URL etc. is used beyond distinguishing sessions from each other; defaults to an empty value, which reproduces prior single-session-per-(base URL, AuthenticationType, Credential) behavior."
+
+    New-DynamicParam -Name "MaximumRetryCount" -Type ([int]) -Alias "MaxRetryCount" -ValidateRange @(0, [int]::MaxValue) -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value 3 -HelpMessage "How many times a failed request is retried before the error is raised. Defaults to 3, so a request is attempted 4 times in total. Use -MaximumRetryCount 0 to switch retrying off.
+
+Only requests that can be repeated safely are retried: HTTP GET and HEAD, including the page requests -Paged makes. A POST, PUT, PATCH or DELETE may already have been applied by the server, so it is never repeated automatically. Retries are triggered by the transient conditions a multi-tenant cloud produces - HTTP 429, 502, 503 and 504, and socket-level network failures - and never by an authentication failure, which is handled by re-authenticating instead. A client-side timeout is not retried either, so -TimeoutSec keeps bounding the call.
+
+Between attempts the command waits -RetryIntervalSec, doubling that wait after each attempt and varying it slightly so that several clients backing off at once do not retry in lockstep. When the server answers with a Retry-After header, the delay it asks for is used instead. Every retry is reported on the verbose stream with the status code and the delay."
+    New-DynamicParam -Name "RetryIntervalSec" -Type ([int]) -ValidateRange @(0, [int]::MaxValue) -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -Value 2 -HelpMessage "The wait in seconds before the first retry, doubled for each attempt after that. Defaults to 2. A Retry-After header sent by the server takes precedence over this value. Has no effect when -MaximumRetryCount is 0."
 
     if ($FunctionName -eq "Invoke-RestMethod") {
         New-DynamicParam -Name "Paged" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to retrieve all pages of data from the API. This parameter is only applicable to Omada API endpoints that support pagination. Only supported for HTTP GET requests (the default); combining -Paged with -Method PUT, POST, or PATCH throws a terminating error."
