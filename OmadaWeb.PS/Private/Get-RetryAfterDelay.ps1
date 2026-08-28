@@ -4,6 +4,10 @@ function Get-RetryAfterDelay {
         [Parameter(Mandatory)]
         [AllowNull()]
         $Exception,
+        # A negative cap would make Math.Min below return a negative delay, which reads as
+        # "retry immediately" and prints as a nonsense verbose line. Zero stays valid: it means
+        # honour Retry-After by retrying without waiting.
+        [ValidateRange(0, [double]::MaxValue)]
         [double]$MaximumDelaySec = 300
     )
 
@@ -58,7 +62,16 @@ function Get-RetryAfterDelay {
     # delay-seconds is 1*DIGIT, so it is matched with a regex rather than a culture-sensitive
     # numeric parse - a decimal-comma culture must not change how a wire format is read.
     if ($RetryAfter -match '^\d+$') {
-        return [math]::Min([double]$RetryAfter, $MaximumDelaySec)
+        # Parsed rather than cast. Nothing stops a server sending more digits than a double can
+        # represent, and on Windows PowerShell 5.1 casting one of those throws - which would turn
+        # the very failure being handled into a hard error, from inside the retry path. A value too
+        # large to represent is simply capped, which is what the cap is for. PowerShell 7 parses the
+        # same input to Infinity, and Math.Min reduces that to the cap on its own.
+        $DelaySec = 0.0
+        if (-not [double]::TryParse($RetryAfter, [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$DelaySec)) {
+            return $MaximumDelaySec
+        }
+        return [math]::Min($DelaySec, $MaximumDelaySec)
     }
 
     $RetryAfterDate = [datetime]::MinValue

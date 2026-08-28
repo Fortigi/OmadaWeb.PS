@@ -41,6 +41,26 @@ Describe 'Get-RetryAfterDelay' -Tag 'Unit' {
             }
         }
 
+        It 'Should cap a delay with more digits than a double can represent instead of throwing' {
+            InModuleScope 'OmadaWeb.PS' {
+                # Windows PowerShell 5.1 throws when casting a 320-digit string to [double]. This
+                # runs inside the retry path's catch block, so throwing here would turn the
+                # transient failure being handled into a hard one.
+                $Exception = [PSCustomObject]@{ Response = [PSCustomObject]@{ Headers = @{ 'Retry-After' = ('9' * 320) } } }
+
+                Get-RetryAfterDelay -Exception $Exception -MaximumDelaySec 300 | Should -Be 300
+            }
+        }
+
+        It 'Should reject a negative MaximumDelaySec' {
+            InModuleScope 'OmadaWeb.PS' {
+                # A negative cap would make the returned delay negative, which reads as "retry now".
+                $Exception = [PSCustomObject]@{ Response = [PSCustomObject]@{ Headers = @{ 'Retry-After' = '120' } } }
+
+                { Get-RetryAfterDelay -Exception $Exception -MaximumDelaySec -1 } | Should -Throw
+            }
+        }
+
         It 'Should not be affected by a culture that uses a decimal comma' {
             InModuleScope 'OmadaWeb.PS' {
                 $OriginalCulture = [System.Threading.Thread]::CurrentThread.CurrentCulture
