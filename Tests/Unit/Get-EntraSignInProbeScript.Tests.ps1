@@ -33,6 +33,31 @@ Describe 'Get-EntraSignInProbeScript' -Tag 'Unit' {
         }
     }
 
+    Context 'Built once' {
+        It 'Hands out the same script rather than building it again' {
+            # It is built from the selector table and from nothing else, and the sign-in reads the
+            # page again and again on the WebView2 UI thread while a user works through it.
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:EntraSignInProbeScript = $null
+
+                $First = Get-EntraSignInProbeScript
+                $Second = Get-EntraSignInProbeScript
+
+                $Script:EntraSignInProbeScript | Should -Not -BeNullOrEmpty -Because 'the cache is populated before the first call returns'
+                [object]::ReferenceEquals($First, $Second) | Should -BeTrue
+            }
+        }
+
+        It 'Rebuilds from the selector table when that table changes' {
+            InModuleScope 'OmadaWeb.PS' {
+                # Import-Module -Force re-runs the module file, which clears the cache. Without that
+                # an edited selector table would keep serving the script made from the old one.
+                $Script:EntraSignInProbeScript = $null
+                Get-EntraSignInProbeScript | Should -BeLike '*i0116*'
+            }
+        }
+    }
+
     Context 'One selector table, not two' {
         It 'Looks for every element id the rules are written against' {
             # The script and the rules would drift apart the moment either kept its own copy of the

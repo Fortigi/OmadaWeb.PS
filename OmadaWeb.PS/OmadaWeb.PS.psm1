@@ -222,6 +222,11 @@ $Script:EntraSignInElementId = [ordered]@{
     MfaResendTotp      = "idA_SAASTO_Resend"
     MfaResendDs        = "idA_SAASDS_Resend"
 }
+# The JavaScript built from the table above, kept because it is built from nothing else: the same
+# table produces the same script, and the sign-in reads the page over and over while a user works
+# through it. Reset here rather than only inside the function so that Import-Module -Force rebuilds
+# it - otherwise an edited selector table would keep serving the script made from the old one.
+$Script:EntraSignInProbeScript = $null
 # Set once per sign-in when -PreferredMfaMethod named a verification method the account does not
 # offer, so the 150 ms timer reports that once instead of on every tick.
 $Script:PreferredMfaMethodWarningIssued = $false

@@ -43,6 +43,14 @@ function Get-EntraSignInProbeScript {
     [OutputType([System.String])]
     param()
 
+    # The script depends on nothing but the selector table, and the sign-in reads the page again and
+    # again while a user works through it - so it is built once and handed out after that. The build
+    # is small, but it happens on the WebView2 UI thread, which is the one place in this module where
+    # small and repeated is worth not doing at all.
+    if (-not [string]::IsNullOrEmpty($Script:EntraSignInProbeScript)) {
+        return $Script:EntraSignInProbeScript
+    }
+
     $ElementIdJson = ConvertTo-Json -InputObject @($Script:EntraSignInElementId.Values) -Compress
     $ProofsContainerJson = ConvertTo-JavaScriptLiteral $Script:EntraSignInElementId.ProofsContainer
     $PasswordlessNumberJson = ConvertTo-JavaScriptLiteral $Script:EntraSignInElementId.PasswordlessNumber
@@ -174,6 +182,9 @@ function Get-EntraSignInProbeScript {
     $ProbeScript = $ProbeScript.Replace("__PROOFS_CONTAINER_ID__", $ProofsContainerJson)
     $ProbeScript = $ProbeScript.Replace("__PASSWORDLESS_NUMBER_ID__", $PasswordlessNumberJson)
     $ProbeScript = $ProbeScript.Replace("__NUMBER_MATCH_ID__", $NumberMatchJson)
+
+    # Populated before returning, so that the very next call is the cached one.
+    $Script:EntraSignInProbeScript = $ProbeScript
 
     return $ProbeScript
 }
