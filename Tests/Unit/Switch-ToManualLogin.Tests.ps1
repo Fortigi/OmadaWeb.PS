@@ -409,6 +409,29 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
         }
     }
 
+    It 'Hands over when the page cannot be read at all, instead of retrying for ever' {
+        InModuleScope 'OmadaWeb.PS' {
+            # A script that will not execute is no different from a page that answers nothing: both
+            # have to arm the stall clock. Without that the driver re-issues the same failing script
+            # every 150 ms and never hands the sign-in back, however long the timeout is.
+            $Script:WebView2.CoreWebView2 | Add-Member -MemberType ScriptMethod -Name ExecuteScriptAsync -Force -Value {
+                param($ScriptText)
+
+                [PSCustomObject]@{
+                    IsCompleted = $true
+                    IsFaulted   = $true
+                    Exception   = [PSCustomObject]@{ Message = 'Script execution is disabled' }
+                    Result      = $null
+                }
+            }
+
+            $Warning = Script:Invoke-LoginTick
+
+            $Script:MicrosoftOnlineLogin | Should -BeFalse
+            $Warning | Should -BeLike '*Script execution is disabled*'
+        }
+    }
+
     It 'Resets the fallback when the browser leaves the Microsoft sign-in page' {
         InModuleScope 'OmadaWeb.PS' {
             $Script:ManualLoginFallbackActive = $true

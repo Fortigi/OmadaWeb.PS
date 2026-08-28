@@ -173,29 +173,39 @@ function Invoke-WebView2MicrosoftLogin {
                     return $false
                 }
 
-                if ($Script:LoginTask.IsFaulted) {
-                    "Invoke-WebView2MicrosoftLogin - Could not read the sign-in page: {0}" -f $Script:LoginTask.Exception.Message | Write-Verbose
-                    $Script:LoginTask = $null
-                    return $false
-                }
-
                 $Snapshot = $null
-                try {
-                    # ExecuteScriptAsync hands back the script's return value as JSON, and the script
-                    # returns a JSON document - so the payload is decoded twice.
-                    $Snapshot = $Script:LoginTask.Result | ConvertFrom-Json | ConvertFrom-Json
+                $UnreadableReason = $null
+
+                if ($Script:LoginTask.IsFaulted) {
+                    $UnreadableReason = $Script:LoginTask.Exception.Message
+                    "Invoke-WebView2MicrosoftLogin - Could not read the sign-in page: {0}" -f $UnreadableReason | Write-Verbose
                 }
-                catch {
-                    "Invoke-WebView2MicrosoftLogin - The sign-in page snapshot could not be read: {0}" -f $_.Exception.Message | Write-Verbose
+                else {
+                    try {
+                        # ExecuteScriptAsync hands back the script's return value as JSON, and the
+                        # script returns a JSON document - so the payload is decoded twice.
+                        $Snapshot = $Script:LoginTask.Result | ConvertFrom-Json | ConvertFrom-Json
+                    }
+                    catch {
+                        $UnreadableReason = $_.Exception.Message
+                        "Invoke-WebView2MicrosoftLogin - The sign-in page snapshot could not be read: {0}" -f $UnreadableReason | Write-Verbose
+                    }
+
+                    if ($null -eq $Snapshot -and $null -eq $UnreadableReason) {
+                        $UnreadableReason = "The sign-in page did not answer the query this module reads it with."
+                    }
                 }
 
                 $Script:LoginTask = $null
 
                 if ($null -eq $Snapshot) {
-                    # A page that answers nothing at all is the loudest form of a selector break, and
-                    # retrying it would otherwise never end.
+                    # A page that cannot be read is the loudest form of a selector break - and a
+                    # script that cannot even be executed is no different from here. Both retry on
+                    # the next tick, because a page mid-navigation produces exactly this; the stall
+                    # clock is what ends the retrying, and leaving it unarmed on either path would
+                    # loop until the window is closed by hand.
                     if (Test-LoginAutomationStalled -ElementId @()) {
-                        Switch-ToManualLogin -State "ReadingPage" -MissingElementId @($Script:EntraSignInElementId.Values) -FoundElementId @() -Url $Script:WebView2.Source.AbsoluteUri -Reason "The sign-in page did not answer the query this module reads it with." | Out-Null
+                        Switch-ToManualLogin -State "ReadingPage" -MissingElementId @($Script:EntraSignInElementId.Values) -FoundElementId @() -Url $Script:WebView2.Source.AbsoluteUri -Reason $UnreadableReason | Out-Null
                     }
 
                     return $false
