@@ -52,12 +52,22 @@ function Invoke-WebView2MicrosoftLogin {
             return $false
         }
 
-        # Writes a value into a field and raises the events the sign-in app listens for. Applied to
-        # its arguments by the call site, so it stays a bare function expression.
+        # Every one of these answers true only when it acted on something the user could have acted
+        # on themselves, and that is what the driver reads to decide whether the page moved.
+        #
+        # Checking again here, after the probe already reported the element as visible, is not
+        # redundant. The probe's answer is a snapshot, and several ticks pass between taking it and
+        # acting on it - the page can navigate in between. Without the second check the script would
+        # report success for typing into a field that had gone, the driver would count that as
+        # progress and restart the stall clock, and the sign-in would sit on a page nothing was
+        # happening to. The predicate is the shared one, so it cannot disagree with the probe's.
+        #
+        # Applied to its arguments by the call site, so it stays a bare function expression.
         $SetElementValueScript = @"
 (function(elementId, value) {
+$(Get-EntraElementVisibilityScript)
     var element = document.getElementById(elementId);
-    if (element) {
+    if (element && isVisible(element)) {
         element.value = value;
         element.dispatchEvent(new Event('input', { bubbles: true }));
         element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -69,8 +79,9 @@ function Invoke-WebView2MicrosoftLogin {
 
         $ClickElementScript = @"
 (function(elementId) {
+$(Get-EntraElementVisibilityScript)
     var element = document.getElementById(elementId);
-    if (element) {
+    if (element && isVisible(element)) {
         element.click();
         return true;
     }
@@ -104,15 +115,16 @@ $(Get-EntraElementVisibilityScript)
         # the element that labels it is not.
         $ClickUseAnotherAccountScript = @"
 (function() {
+$(Get-EntraElementVisibilityScript)
     var otherAccount = document.querySelector('[aria-labelledby="otherTileText"]');
-    if (otherAccount) {
+    if (otherAccount && isVisible(otherAccount)) {
         otherAccount.click();
         return true;
     }
     var otherTileText = document.getElementById('otherTileText');
     if (otherTileText) {
         var clickable = otherTileText.closest('[role="button"], button, a, div');
-        if (clickable) {
+        if (clickable && isVisible(clickable)) {
             clickable.click();
             return true;
         }

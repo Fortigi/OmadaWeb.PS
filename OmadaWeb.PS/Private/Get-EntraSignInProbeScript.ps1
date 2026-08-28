@@ -139,7 +139,19 @@ __IS_VISIBLE__
         accountTiles.push({ index: accountTiles.length, testId: String(testId) });
     }
 
-    var hasOtherTile = document.querySelector('[aria-labelledby="otherTileText"]') !== null || document.getElementById('otherTileText') !== null;
+    // Reported only when it is something the user could click, because that is what
+    // Resolve-EntraSignInScreen uses it for - the fallback when no tile matches the credential. A
+    // hidden one would have the driver clicking at nothing and calling it progress.
+    var hasOtherTile = false;
+    var otherAccount = document.querySelector('[aria-labelledby="otherTileText"]');
+    if (otherAccount && isVisible(otherAccount)) { hasOtherTile = true; }
+    if (!hasOtherTile) {
+        var otherTileText = document.getElementById('otherTileText');
+        if (otherTileText) {
+            var otherClickable = otherTileText.closest('[role="button"], button, a, div');
+            if (otherClickable && isVisible(otherClickable)) { hasOtherTile = true; }
+        }
+    }
 
     var displaySign = readNumber(document.getElementById(passwordlessNumberId));
     if (!displaySign) { displaySign = readNumber(document.getElementById(numberMatchId)); }

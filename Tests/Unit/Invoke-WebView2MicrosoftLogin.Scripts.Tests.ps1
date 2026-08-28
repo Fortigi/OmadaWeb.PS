@@ -86,6 +86,21 @@ Describe 'Invoke-WebView2MicrosoftLogin JavaScript snippets' -Tag 'Unit' {
             $Snippet.Contains($Applied) | Should -BeTrue -Because "$Name must apply isVisible as '$Applied'"
         }
 
+        It 'Leaves no snippet that acts on the page without the shared visibility test' {
+            # The general rule, asserted over whatever snippets exist rather than over a list that
+            # has to be remembered: anything that types into the page or clicks it must answer false
+            # when the element is not actionable, because the driver reads that answer as "the page
+            # moved" and restarts the stall clock on it. Four snippets were found missing this one
+            # at a time; this is what stops a fifth being added.
+            $Acting = $Script:Snippets.Keys | Where-Object { $_ -match 'Click|SetElementValue' }
+
+            ($Acting | Measure-Object).Count | Should -BeGreaterThan 0
+            foreach ($Name in $Acting) {
+                $Script:Snippets[$Name] | Should -BeLike '*Get-EntraElementVisibilityScript*' -Because "$Name acts on the page, so it must apply the shared visibility test"
+                $Script:Snippets[$Name] | Should -BeLike '*isVisible(*' -Because "$Name must actually call it, not merely include it"
+            }
+        }
+
         It 'Uses one definition of visibility everywhere it is needed' {
             InModuleScope 'OmadaWeb.PS' {
                 # The probe injects it too, so all three agree by construction rather than by review.
