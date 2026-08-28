@@ -272,13 +272,24 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
                 CoreWebView2 = [PSCustomObject]@{}
             }
 
+            # What a snippet answers is not the same as whether it ran: the probe returns the page
+            # snapshot, and every acting snippet returns "true" when it found its element and
+            # "false" when it did not. The fake has to keep those apart, or a test would never
+            # exercise the difference. $Script:NextClickResult lets a test say the click found
+            # nothing.
+            $Script:NextClickResult = 'true'
             $Script:WebView2.CoreWebView2 | Add-Member -MemberType ScriptMethod -Name ExecuteScriptAsync -Value {
                 param($ScriptText)
+
+                $Result = $Script:NextClickResult
+                if ($ScriptText -like '*knownIds*') {
+                    $Result = $Script:NextScriptResult
+                }
 
                 [PSCustomObject]@{
                     IsCompleted = $true
                     IsFaulted   = $false
-                    Result      = $Script:NextScriptResult
+                    Result      = $Result
                 }
             }
 
@@ -429,6 +440,58 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
 
             $Script:MicrosoftOnlineLogin | Should -BeFalse
             $Warning | Should -BeLike '*Script execution is disabled*'
+        }
+    }
+
+    It 'Hands over when the page is recognized but does not respond to being driven' {
+        InModuleScope 'OmadaWeb.PS' {
+            # A screen this module recognizes, whose element has been renamed underneath it: the
+            # script executes perfectly and does nothing, answering false. Counting that as progress
+            # would clear the stall clock on every tick, so the driver would re-issue the same
+            # useless click for as long as the window stayed open and never hand over.
+            $Script:NextScriptResult = Script:New-SnapshotResult @{ ids = @('i0116', 'idSIButton9'); visibleIds = @('i0116', 'idSIButton9') }
+            $Script:NextClickResult = 'false'
+
+            $Warning = Script:Invoke-LoginTick -Count 8
+
+            $Script:MicrosoftOnlineLogin | Should -BeFalse
+            $Warning | Should -BeLike '*Deciding/UsernameEntry*'
+        }
+    }
+
+    It 'Does not submit a field it could not fill in' {
+        InModuleScope 'OmadaWeb.PS' {
+            # Writing the value and clicking submit are two scripts. If the first found no field,
+            # clicking submit would send whatever the field already held - nothing - and spend one
+            # of the attempts before Entra ID smart lockout on it.
+            $Script:LoginAutomationFallbackTimeout = 60
+            $Script:NextScriptResult = Script:New-SnapshotResult @{ ids = @('i0118', 'idSIButton9'); visibleIds = @('i0118', 'idSIButton9') }
+            $Script:NextClickResult = 'false'
+
+            $Script:ClickedElementId = @()
+            $Script:WebView2.CoreWebView2 | Add-Member -MemberType ScriptMethod -Name ExecuteScriptAsync -Force -Value {
+                param($ScriptText)
+
+                $Result = $Script:NextClickResult
+                if ($ScriptText -like '*knownIds*') {
+                    $Result = $Script:NextScriptResult
+                }
+                else {
+                    $Script:ClickedElementId += $ScriptText
+                }
+
+                [PSCustomObject]@{
+                    IsCompleted = $true
+                    IsFaulted   = $false
+                    Result      = $Result
+                }
+            }
+
+            Script:Invoke-LoginTick -Count 8 | Out-Null
+
+            # The password field was written to; the submit button never was.
+            ($Script:ClickedElementId | Where-Object { $_ -like '*"i0118"*' } | Measure-Object).Count | Should -BeGreaterThan 0
+            ($Script:ClickedElementId | Where-Object { $_ -like '*("idSIButton9")*' } | Measure-Object).Count | Should -Be 0
         }
     }
 

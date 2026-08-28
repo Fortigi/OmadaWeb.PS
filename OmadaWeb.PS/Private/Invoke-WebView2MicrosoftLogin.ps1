@@ -410,9 +410,30 @@ function Invoke-WebView2MicrosoftLogin {
                     return $false
                 }
 
-                if (-not [string]::IsNullOrWhiteSpace($Script:PendingSubmitId)) {
-                    $SubmitId = $Script:PendingSubmitId
-                    $Script:PendingSubmitId = $null
+                # Every snippet above answers true when it found its element and acted on it, and
+                # false when it did not. That answer has to be read, because "the script ran" and
+                # "the page was driven" are not the same thing: an element Microsoft has renamed
+                # produces a script that executes perfectly and does nothing at all.
+                #
+                # Counting that as progress is what turns a renamed element into an endless loop.
+                # Progress clears the stall clock, so a click that silently did nothing would restart
+                # the clock on every tick, and Test-LoginAutomationStalled - the one thing that ends
+                # this - would never run out however long its timeout was.
+                $Acted = ($Script:LoginTask.Result -eq "true")
+                $SubmitId = $Script:PendingSubmitId
+                $Script:PendingSubmitId = $null
+
+                if (-not $Acted) {
+                    "Invoke-WebView2MicrosoftLogin - The page did not respond to the '{0}' step, leaving the stall clock running" -f $Script:CurrentScenario | Write-Verbose
+                    $Script:LoginTask = $null
+                    $Script:PageState = $null
+                    $Script:LoginState = "ReadingPage"
+                    return $false
+                }
+
+                # The field was filled in, so submit it. Reached only when the value was written -
+                # clicking submit over a field that stayed empty would send the empty value.
+                if (-not [string]::IsNullOrWhiteSpace($SubmitId)) {
                     $Script:LoginTask = $Script:WebView2.CoreWebView2.ExecuteScriptAsync("$ClickElementScript($(ConvertTo-JavaScriptLiteral $SubmitId))")
                     return $false
                 }
