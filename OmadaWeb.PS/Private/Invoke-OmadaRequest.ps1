@@ -159,11 +159,11 @@ function Invoke-OmadaRequest {
                 }
                 "Browser" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-BrowserAuthentication
+                    $RequestContext = Invoke-BrowserAuthentication -RequestContext $RequestContext
                 }
                 "WebView2" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
-                    Invoke-BrowserAuthentication
+                    $RequestContext = Invoke-BrowserAuthentication -RequestContext $RequestContext
                 }
                 "OAuth" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose

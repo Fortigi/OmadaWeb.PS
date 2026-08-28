@@ -1,6 +1,15 @@
 function Invoke-BrowserAuthentication {
     [CmdletBinding()]
-    param()
+    param(
+        [Parameter(Mandatory)]
+        [PSTypeName("OmadaWeb.PS.RequestContext")]$RequestContext
+    )
+
+    # The only helper that works on all three members: it adds the Cookie header to $BoundParams,
+    # adds the cookie to $Session's container, and reads and updates the per-session $SessionContext.
+    $BoundParams = $RequestContext.BoundParams
+    $Session = $RequestContext.Session
+    $SessionContext = $RequestContext.SessionContext
 
     "{0} - Set Browser authentication" -f $MyInvocation.MyCommand | Write-Verbose
 
@@ -132,4 +141,6 @@ function Invoke-BrowserAuthentication {
             $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
+
+    return $RequestContext
 }
