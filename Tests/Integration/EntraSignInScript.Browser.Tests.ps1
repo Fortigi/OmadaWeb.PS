@@ -87,8 +87,12 @@ $Body
     }
 
     try {
-        $Core = Join-Path $env:LOCALAPPDATA "OmadaWeb.PS\Bin\Core"
-        $WebDriverAssembly = Join-Path $Core "WebDriver.dll"
+        # Asked of the module rather than guessed, because the binaries live in a per-edition folder
+        # - Bin\Core under PowerShell 7, Bin\Desktop under Windows PowerShell 5.1. Hardcoding either
+        # makes this suite skip silently on the other engine, which reads exactly like passing.
+        $WebDriverAssembly = InModuleScope 'OmadaWeb.PS' { $Script:WebDriverPath }
+        $Core = Split-Path $WebDriverAssembly -Parent
+
         if (-not (Test-Path $WebDriverAssembly) -or -not (Test-Path (Join-Path $Core "msedgedriver.exe"))) {
             throw "Edge WebDriver is not installed in '$Core'."
         }
