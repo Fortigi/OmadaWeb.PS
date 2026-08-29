@@ -53,20 +53,16 @@ Describe 'StrictMode' -Tag 'Unit' {
             # covers everything else. This walks their syntax tree instead, which is what caught the
             # reads that made this file necessary.
             $Script:LoginFlowFiles = @(
-                @{ File = 'Get-DataFromWebDriver.ps1'; Skip = $false; Because = '' }
-                # Invoke-WebView2MicrosoftLogin.ps1 still reads an unassigned $MfaElementIds on line
-                # 789. The fix is already on the branch of PR #67, which rewrites this file, so it is
-                # not duplicated here - two edits to the same 800-line rewrite would only collide.
-                # Flip Skip to $false once #67 has merged; the check itself is ready for it.
-                @{ File = 'Invoke-WebView2MicrosoftLogin.ps1'; Skip = $true; Because = 'fixed by PR #67, which rewrites this file' }
+                @{ File = 'Get-DataFromWebDriver.ps1' }
+                @{ File = 'Invoke-WebView2MicrosoftLogin.ps1' }
+                @{ File = 'Resolve-EntraSignInScreen.ps1' }
+                @{ File = 'Select-EntraMfaMethod.ps1' }
+                @{ File = 'Show-EntraApprovalNumber.ps1' }
+                @{ File = 'Reset-LoginAutomationState.ps1' }
             )
         }
 
         It 'Should not read an unassigned variable in <File>' -ForEach $Script:LoginFlowFiles {
-            if ($Skip) {
-                Set-ItResult -Skipped -Because $Because
-            }
-
             $SourcePath = Join-Path (Split-Path (Split-Path $PSScriptRoot)) -ChildPath ('OmadaWeb.PS\Private\{0}' -f $File)
             Test-Path $SourcePath -PathType Leaf | Should -BeTrue -Because "$SourcePath should exist"
 

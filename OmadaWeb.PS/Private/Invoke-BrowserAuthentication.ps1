@@ -29,7 +29,7 @@ function Invoke-BrowserAuthentication {
     # everything else - the credential included - reaches them.
     $SessionContext.PreferredMfaMethod = $null
     if ($BoundParams.keys -contains "PreferredMfaMethod") {
-        $SessionContext.PreferredMfaMethod = $BoundParams.PreferredMfaMethod
+        $SessionContext.PreferredMfaMethod = $BoundParams['PreferredMfaMethod']
     }
     switch ($SessionContext.LastSessionType) {
         { $_ -eq "Normal" -and [bool]$BoundParams['InPrivate'] } {
