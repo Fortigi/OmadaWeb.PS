@@ -4,6 +4,21 @@ param(
     [hashtable]$Parameters
 )
 
+# StrictMode has to be set here rather than by the caller: it is scoped to the session state it is
+# set in, so a Set-StrictMode in the build script or in a Pester test reaches neither this file's
+# load-time code nor any function defined below. Without this line the module runs unstrict no
+# matter what the caller does, which is how the undefined-variable reads this guards against
+# survived for so long.
+#
+# Opt-in rather than always-on, because the browser login flows are the module's largest code paths
+# and CI cannot exercise them (they need a real interactive WebView2/Edge). Turning an unset-variable
+# read there into a terminating error in front of a user, without CI ever having run that path, trades
+# a silent null for a broken sign-in. The build sets this for every test run, so the bug class is
+# caught before it ships instead.
+if ($Env:OMADAWEBPS_STRICTMODE -eq "1") {
+    Set-StrictMode -Version Latest
+}
+
 $ModuleName = "OmadaWeb.PS"
 "Loading {0} Module" -f $ModuleName | Write-Verbose
 
@@ -456,25 +471,29 @@ Export-ModuleMember -Function $Public.Basename -Alias *
 "Validate version" | Write-Verbose
 try {
     $InstalledModule = Get-InstalledModuleInfo -ModuleName $ModuleName
-    if (-not $InstalledModule.RepositorySource -or $InstalledModule.RepositorySource -notlike "*powershellgallery.com*") {
+    # Get-InstalledModuleInfo returns $null whenever the module was imported from a path instead of
+    # installed - every build and every test run. Reading a member off that $null is an error under
+    # StrictMode, and the empty catch below swallowed it, so $Script:UserAgent kept its unformatted
+    # "OmadaWeb.PS/{0}" template and every request built from it was rejected as a malformed header.
+    if ($null -eq $InstalledModule -or -not $InstalledModule['RepositorySource'] -or $InstalledModule['RepositorySource'] -notlike "*powershellgallery.com*") {
         "Module '{0}' was not sourced from the PowerShell Gallery. Skipping version check." -f $ModuleName | Write-Verbose
         $Script:UserAgent = $Script:UserAgent -f "Development"
     }
     else {
-        $Script:UserAgent = $Script:UserAgent -f $($InstalledModule.Version)
+        $Script:UserAgent = $Script:UserAgent -f $($InstalledModule['Version'])
         $GalleryVersion = Get-GalleryModuleVersion -ModuleName $ModuleName
 
         if (-not $GalleryVersion) {
         }
         else {
-            if ([System.Version]$InstalledModule.Version -lt [System.Version]$GalleryVersion) {
-                "The installed version {0} of '{1}' is outdated. Latest version: {2}. Execute Update-Module {1} to update to the latest version!" -f ($($InstalledModule.Version)), $ModuleName, $GalleryVersion | Write-Warning
+            if ([System.Version]$InstalledModule['Version'] -lt [System.Version]$GalleryVersion) {
+                "The installed version {0} of '{1}' is outdated. Latest version: {2}. Execute Update-Module {1} to update to the latest version!" -f ($($InstalledModule['Version'])), $ModuleName, $GalleryVersion | Write-Warning
             }
-            elseif ([System.Version]$InstalledModule.Version -eq [System.Version]$GalleryVersion) {
-                "The installed version {0} of '{1}' is up-to-date." -f ($($InstalledModule.Version)) , $ModuleName | Write-Verbose
+            elseif ([System.Version]$InstalledModule['Version'] -eq [System.Version]$GalleryVersion) {
+                "The installed version {0} of '{1}' is up-to-date." -f ($($InstalledModule['Version'])) , $ModuleName | Write-Verbose
             }
             else {
-                "The installed version {0} of '{1}' is newer than the gallery version {2}." -f ($($InstalledModule.Version)), $ModuleName, $GalleryVersion | Write-Warning
+                "The installed version {0} of '{1}' is newer than the gallery version {2}." -f ($($InstalledModule['Version'])), $ModuleName, $GalleryVersion | Write-Warning
             }
         }
     }

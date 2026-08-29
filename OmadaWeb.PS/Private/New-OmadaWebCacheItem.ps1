@@ -52,10 +52,11 @@ function New-OmadaWebCacheItem {
         $Files = @()
     }
 
-    # Measure-Object returns $null for Sum over an empty collection, which would surface as a blank
-    # column instead of a zero.
+    # Over an empty collection Measure-Object emits nothing at all rather than an object whose Sum is
+    # $null, so $Measured itself has to be tested before its Sum is read - otherwise the empty-cache
+    # case, which is the one this guard exists for, faults instead of reporting a zero.
     $Measured = $Files | Measure-Object -Property Length -Sum
-    if ($null -ne $Measured.Sum) {
+    if ($null -ne $Measured -and $null -ne $Measured.Sum) {
         $SizeBytes = $Measured.Sum
     }
 

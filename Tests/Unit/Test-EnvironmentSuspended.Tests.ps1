@@ -66,7 +66,10 @@ Describe 'Test-EnvironmentSuspended' -Tag 'Unit' {
     Context 'Function Definition' {
         It 'Should have Url as a mandatory parameter' {
             InModuleScope 'OmadaWeb.PS' {
-                (Get-Command Test-EnvironmentSuspended).Parameters['Url'].Attributes.Mandatory | Should -Contain $true
+                # Filtered to the ParameterAttribute first: the collection also holds attributes that
+                # carry no Mandatory member, and enumerating the member across all of them is an error
+                # under StrictMode. Same idiom as the other parameter-metadata assertions.
+                (Get-Command Test-EnvironmentSuspended).Parameters['Url'].Attributes.Where({ $_ -is [System.Management.Automation.ParameterAttribute] }).Mandatory | Should -Contain $true
             }
         }
 

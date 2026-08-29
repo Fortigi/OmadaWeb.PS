@@ -11,8 +11,8 @@ function Invoke-WindowsAuthentication {
     if ($BoundParams.keys -notcontains "Credential") {
         $BoundParams.Add("Credential", (Get-Credential -Message "Please enter your authentication credentials"))
     }
-    if ($BoundParams.Keys -contains "Headers" -and $BoundParams.Headers.ContainsKey("Authorization")) {
-        $BoundParams.Headers.Remove("Authorization")
+    if ($BoundParams.Keys -contains "Headers" -and $BoundParams['Headers'].ContainsKey("Authorization")) {
+        $BoundParams['Headers'].Remove("Authorization")
     }
 
     return $RequestContext

@@ -103,7 +103,7 @@ function ConvertTo-RedactedLogValue {
     }
 
     if ($Value -is [Microsoft.PowerShell.Commands.WebRequestSession]) {
-        # $BoundParams.WebSession carries the authentication cookie, and the member name "WebSession"
+        # The WebSession bound parameter carries the authentication cookie, and the member name "WebSession"
         # matches none of the patterns above - so this needs a type rule rather than a name rule.
         # The cookie count and user agent are the diagnostic parts; nothing else here is.
         return "WebRequestSession(Cookies={0}, UserAgent={1})" -f $Value.Cookies.Count, $Value.UserAgent
