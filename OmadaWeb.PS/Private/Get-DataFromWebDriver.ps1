@@ -100,19 +100,14 @@ function Get-DataFromWebDriver {
                             $Script:UnmatchedPageSince = $null
                         }
 
-                        if ($IdAttributes -notcontains $UserNameElementId `
-                                -and $IdAttributes -notcontains $PasswordElementId `
-                                -and $IdAttributes -contains $SelectUserElementId
-                        ) {
-                            "Select logged-in account" | Write-Verbose
-                            if ($AccountElement.GetAttribute("data-test-id") -eq $SessionContext.Credential.UserName.Trim()) {
-                                $AccountElement.Click()
-                            }
-                        }
+                        # A "Select logged-in account" block used to sit here. It tested for an element
+                        # id that was never assigned and then clicked an element variable that was
+                        # never assigned either, so it could not run and would have thrown if it had.
+                        # The "Select logged-in user " block below already does that job, correctly,
+                        # by matching the data-test-id attribute against the supplied user name.
 
                         if ($IdAttributes -notcontains $UserNameElementId `
                                 -and $IdAttributes -notcontains $PasswordElementId `
-                                -and $IdAttributes -notcontains $SelectUserElementId `
                                 -and $IdAttributes -contains $ButtonBackId `
                                 -and $IdAttributes -contains $ButtonSubmitId `
                                 -and $EdgeDriver.FindElement([OpenQA.Selenium.By]::Id($ButtonBackId)).ComputedAccessibleLabel -eq "No" `
@@ -141,7 +136,8 @@ function Get-DataFromWebDriver {
                                 -and $IdAttributes -notcontains $UserNameElementId `
                                 -and $IdAttributes -notcontains $PasswordElementId `
                                 -and $IdAttributes -contains $MFAElementId `
-                                -and $IdAttributes -notcontains $MfaRetryId `
+                                -and $IdAttributes -notcontains $MfaRetryId1 `
+                                -and $IdAttributes -notcontains $MfaRetryId2 `
                                 -and ($EdgeDriver.FindElements([OpenQA.Selenium.By]::XPath("//*[@data-test-id]")) | Measure-Object).Count -eq 0
                         ) {
                             $Message = "`nWaiting for your approve this sign-in request."
