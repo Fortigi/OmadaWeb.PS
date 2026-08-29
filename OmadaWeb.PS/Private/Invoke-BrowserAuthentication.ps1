@@ -13,7 +13,7 @@ function Invoke-BrowserAuthentication {
 
     "{0} - Set Browser authentication" -f $MyInvocation.MyCommand | Write-Verbose
 
-    if ($BoundParams.ForceAuthentication) {
+    if ($BoundParams['ForceAuthentication']) {
         "{0} - ForceAuthentication used. Reset OmadaWebAuthCookie and reset Browser authentication engine to default" -f $MyInvocation.MyCommand | Write-Verbose
         $SessionContext.AuthCookie = $null
         $SessionContext.WebView2Used = $false
@@ -21,7 +21,7 @@ function Invoke-BrowserAuthentication {
     }
     $SessionContext.Credential = $null
     if ($BoundParams.keys -contains "Credential") {
-        $SessionContext.Credential = $BoundParams.Credential
+        $SessionContext.Credential = $BoundParams['Credential']
     }
 
     # Carried on the session rather than passed down: the WebView2 sign-in runs inside a blocking
@@ -32,12 +32,16 @@ function Invoke-BrowserAuthentication {
         $SessionContext.PreferredMfaMethod = $BoundParams.PreferredMfaMethod
     }
     switch ($SessionContext.LastSessionType) {
-        { $_ -eq "Normal" -and $($BoundParams.InPrivate).IsPresent -eq $true } {
+        { $_ -eq "Normal" -and [bool]$BoundParams['InPrivate'] } {
             "{0} - Reset OmadaWebAuthCookie because session has changed to InPrivate" -f $MyInvocation.MyCommand | Write-Verbose
             $SessionContext.AuthCookie = $null
             $SessionContext.LastSessionType = "InPrivate"
         }
-        { $_ -eq "InPrivate" -and $($BoundParams.InPrivate).IsPresent -eq $false } {
+        # ContainsKey rather than a plain negation, to keep the asymmetry this branch has always had:
+        # it fires only on an explicit -InPrivate:$false, not on -InPrivate being left off. The reads
+        # here used to go through .IsPresent on the bound value, which is $null when the switch was
+        # never supplied, and $null -eq $false is False - so an omitted switch never reached this arm.
+        { $_ -eq "InPrivate" -and $BoundParams.ContainsKey("InPrivate") -and -not [bool]$BoundParams['InPrivate'] } {
             "{0} - Reset OmadaWebAuthCookie because session has changed from InPrivate to not InPrivate" -f $MyInvocation.MyCommand | Write-Verbose
             $SessionContext.AuthCookie = $null
             $SessionContext.LastSessionType = "Normal"
@@ -47,11 +51,11 @@ function Invoke-BrowserAuthentication {
 
     if ($null -ne $($SessionContext.AuthCookie) -and ([System.Uri]::New($SessionContext.BaseUrl).host -eq $($SessionContext.AuthCookie.domain))) {
         "{0} - Using existing cookie for this domain: {1}" -f $MyInvocation.MyCommand, $SessionContext.BaseUrl | Write-Verbose
-        if ("Cookie" -notin $BoundParams.Headers.Keys) {
-            $BoundParams.Headers.Add("Cookie", ($($SessionContext.AuthCookie).Name, $($SessionContext.AuthCookie).Value -join "="))
+        if ("Cookie" -notin $BoundParams['Headers'].Keys) {
+            $BoundParams['Headers'].Add("Cookie", ($($SessionContext.AuthCookie).Name, $($SessionContext.AuthCookie).Value -join "="))
         }
         else {
-            $BoundParams.Headers.Cookie = ($($SessionContext.AuthCookie).Name, $($SessionContext.AuthCookie).Value -join "=")
+            $BoundParams['Headers'].Cookie = ($($SessionContext.AuthCookie).Name, $($SessionContext.AuthCookie).Value -join "=")
         }
         $Session.Cookies.Add((New-Object System.Net.Cookie("oisauthtoken", $($SessionContext.AuthCookie.Value), "/", $($SessionContext.AuthCookie.domain))))
     }
@@ -60,9 +64,9 @@ function Invoke-BrowserAuthentication {
 
         # Check if WebView2 should be used instead of Selenium
         $WebView2Authentication = $false
-        if (($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) -or $BoundParams.AuthenticationType -eq "WebView2") {
+        if (($BoundParams.ContainsKey('UseWebView2') -and $BoundParams['UseWebView2']) -or $BoundParams['AuthenticationType'] -eq "WebView2") {
             "{0} - UseWebView2 parameter used" -f $MyInvocation.MyCommand | Write-Verbose
-            if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2) {
+            if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams['UseWebView2']) {
                 "Parameter UseWebView2 is deprecated, please use AuthenticationType WebView2' instead." | Write-Warning
             }
             $WebView2Authentication = $true
@@ -76,39 +80,39 @@ function Invoke-BrowserAuthentication {
             "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
             # Get-DataFromWebView2 bridges $SessionContext into $Script:CurrentWebView2Session itself
             # (WebView2's .NET event-handler closures cannot see this call stack to read it directly).
-            Get-DataFromWebView2 -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+            Get-DataFromWebView2 -SessionContext $SessionContext -EdgeProfile $BoundParams['EdgeProfile'] -InPrivate:([bool]$BoundParams['InPrivate'])
             $BrowserData = @($SessionContext.AuthCookie, $Script:UserAgent)
             $SessionContext.WebView2Used = $true
         }
         else {
             "{0} - Using Selenium WebDriver for authentication" -f $MyInvocation.MyCommand | Write-Verbose
             Write-OmadaDeprecationWarning -Feature "SeleniumBrowserEngine"
-            $BrowserData = Get-DataFromWebDriver -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+            $BrowserData = Get-DataFromWebDriver -SessionContext $SessionContext -EdgeProfile $BoundParams['EdgeProfile'] -InPrivate:([bool]$BoundParams['InPrivate'])
         }
 
         "{0} - Setting OmadaWebAuthCookie and user agent" -f $MyInvocation.MyCommand | Write-Verbose
         $SessionContext.AuthCookie = $BrowserData[0]
-        $BoundParams.UserAgent = $Script:UserAgent
+        $BoundParams['UserAgent'] = $Script:UserAgent
         $Session.UserAgent = $Script:UserAgent
 
-        if ("Cookie" -notin $BoundParams.Headers.Keys) {
-            $BoundParams.Headers.Add("Cookie", ($($SessionContext.AuthCookie).Name, $($SessionContext.AuthCookie).Value -join "="))
+        if ("Cookie" -notin $BoundParams['Headers'].Keys) {
+            $BoundParams['Headers'].Add("Cookie", ($($SessionContext.AuthCookie).Name, $($SessionContext.AuthCookie).Value -join "="))
         }
         else {
-            $BoundParams.Headers.Cookie = ($($SessionContext.AuthCookie).Name, $($SessionContext.AuthCookie).Value -join "=")
+            $BoundParams['Headers'].Cookie = ($($SessionContext.AuthCookie).Name, $($SessionContext.AuthCookie).Value -join "=")
         }
         $Session.Cookies.Add((New-Object System.Net.Cookie("oisauthtoken", $($SessionContext.AuthCookie.Value), "/", $($SessionContext.AuthCookie.domain))))
     }
 
-    if (![string]::IsNullOrEmpty($($BoundParams.CookiePath))) {
-        "{0} - Export cookie to: {1}" -f $MyInvocation.MyCommand, $BoundParams.CookiePath | Write-Verbose
+    if (![string]::IsNullOrEmpty($($BoundParams['CookiePath']))) {
+        "{0} - Export cookie to: {1}" -f $MyInvocation.MyCommand, $BoundParams['CookiePath'] | Write-Verbose
 
         # Uses the same helper as the read path in Invoke-OmadaRequest.ps1 to guarantee an identical
         # filename (previously this used the cookie's own .domain attribute, which may lack the port,
         # producing a different filename than what the read path looked for). Built from
-        # $BoundParams.Uri directly rather than relying on the caller's $Uri local.
-        $CookieFileName = Get-OmadaCookieFileName -Uri ([System.Uri]::new($BoundParams.Uri)) -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
-        $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath $CookieFileName)
+        # $BoundParams['Uri'] directly rather than relying on the caller's $Uri local.
+        $CookieFileName = Get-OmadaCookieFileName -Uri ([System.Uri]::new($BoundParams['Uri'])) -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
+        $CookiePath = (Join-Path $($BoundParams['CookiePath']) -ChildPath $CookieFileName)
         $CookieObject = [PSCustomObject]@{
             OmadaWebAuthCookie = $SessionContext.AuthCookie
         }
@@ -118,7 +122,7 @@ function Invoke-BrowserAuthentication {
             "Cookie file exported to: {0}" -f $CookiePath | Write-Verbose
         }
         catch [System.UnauthorizedAccessException] {
-            "Unable to export the cookie file due to insufficient permissions in folder {0}" -f $($BoundParams.CookiePath) | Write-Warning
+            "Unable to export the cookie file due to insufficient permissions in folder {0}" -f $($BoundParams['CookiePath']) | Write-Warning
         }
         catch {
             $PSCmdlet.ThrowTerminatingError($PSItem)

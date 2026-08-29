@@ -19,7 +19,7 @@ function Invoke-OmadaRequest {
             }
             else {
                 $Script:UserAgentParameterUsed = $true
-                $Script:UserAgent = $BoundParams.UserAgent
+                $Script:UserAgent = $BoundParams['UserAgent']
             }
 
             if ("DebugWebView2" -in $BoundParams.Keys) {
@@ -41,15 +41,15 @@ function Invoke-OmadaRequest {
             }
 
             $RetryPolicy = @{
-                MaximumRetryCount = [int]$BoundParams.MaximumRetryCount
-                RetryIntervalSec  = [int]$BoundParams.RetryIntervalSec
+                MaximumRetryCount = [int]$BoundParams['MaximumRetryCount']
+                RetryIntervalSec  = [int]$BoundParams['RetryIntervalSec']
             }
 
             if ("Headers" -notin $BoundParams.Keys) {
                 $BoundParams.Add("Headers", @{})
             }
 
-            $Uri = [System.Uri]::new($BoundParams.Uri)
+            $Uri = [System.Uri]::new($BoundParams['Uri'])
             if ($null -ne $Uri) {
                 $BaseUrl = $Uri.GetLeftPart([System.UriPartial]::Authority)
 
@@ -79,7 +79,7 @@ function Invoke-OmadaRequest {
                 }
             }
             else {
-                "Could not determine the base URL from '{0}', is the URL correct?" -f $BoundParams.Uri | Write-Error -ErrorAction "Stop"
+                "Could not determine the base URL from '{0}', is the URL correct?" -f $BoundParams['Uri'] | Write-Error -ErrorAction "Stop"
             }
 
             $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
@@ -92,7 +92,7 @@ function Invoke-OmadaRequest {
             # Reusable session state (cookie, base URL, WebView2 profile, etc.) is keyed by
             # (tenant base URL, auth type, identity) instead of single unkeyed module variables,
             # so concurrent sessions to different tenants/users don't clobber each other.
-            $SessionKey = Get-OmadaSessionKey -Uri $Uri -AuthenticationType $BoundParams.AuthenticationType -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
+            $SessionKey = Get-OmadaSessionKey -Uri $Uri -AuthenticationType $BoundParams['AuthenticationType'] -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
             $SessionContext = Get-OmadaSessionContext -Key $SessionKey -AuthorityHost $Uri.Host
             $SessionContext.BaseUrl = $BaseUrl
             # Computed unconditionally (not just lazily inside the encrypted-cache branch below) so it's
@@ -108,8 +108,8 @@ function Invoke-OmadaRequest {
             if ($BoundParams.Keys -contains "CookiePath") {
                 # -CookiePath is authoritative on every call (not just when no cookie is cached yet),
                 # so callers can force a specific session's cookie to be used for a given call.
-                $CookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
-                $CookiePath = (Join-Path $($BoundParams.CookiePath) -ChildPath $CookieFileName)
+                $CookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
+                $CookiePath = (Join-Path $($BoundParams['CookiePath']) -ChildPath $CookieFileName)
                 "{0} - Loading custom cookie: {1}" -f $MyInvocation.MyCommand, $CookiePath | Write-Verbose
                 if (!(Test-Path $CookiePath -PathType Leaf)) {
                     # -CookiePath is authoritative, so a missing file must not leave a stale in-memory
@@ -151,25 +151,25 @@ function Invoke-OmadaRequest {
                 }
             }
 
-            "{0} - Authentication type: {1}" -f $MyInvocation.MyCommand, $($BoundParams.AuthenticationType) | Write-Verbose
+            "{0} - Authentication type: {1}" -f $MyInvocation.MyCommand, $($BoundParams['AuthenticationType']) | Write-Verbose
 
             # -PreferredMfaMethod drives the Entra ID sign-in screens, which only the WebView2 engine
             # automates. Every other authentication type would accept the parameter and quietly do
             # nothing with it, so it is refused here rather than silently ignored.
-            if ("PreferredMfaMethod" -in $BoundParams.Keys -and -not [string]::IsNullOrWhiteSpace($BoundParams.PreferredMfaMethod)) {
+            if ("PreferredMfaMethod" -in $BoundParams.Keys -and -not [string]::IsNullOrWhiteSpace($BoundParams['PreferredMfaMethod'])) {
                 # The three ways a sign-in ends up on WebView2, which is what Invoke-BrowserAuthentication
                 # itself checks: the authentication type, the deprecated switch, and a session that
                 # has already used WebView2 - after which -AuthenticationType Browser keeps using it
                 # without either of the first two being supplied again. Leaving that last one out
                 # refused the parameter on exactly the sign-in it would have applied to.
-                $UsesWebView2 = $BoundParams.AuthenticationType -eq "WebView2" -or
-                    ($BoundParams.AuthenticationType -eq "Browser" -and (($BoundParams.ContainsKey("UseWebView2") -and $BoundParams.UseWebView2) -or $SessionContext.WebView2Used))
+                $UsesWebView2 = $BoundParams['AuthenticationType'] -eq "WebView2" -or
+                    ($BoundParams['AuthenticationType'] -eq "Browser" -and (($BoundParams.ContainsKey("UseWebView2") -and $BoundParams['UseWebView2']) -or $SessionContext.WebView2Used))
                 if (-not $UsesWebView2) {
-                    "{0} - -PreferredMfaMethod only applies to -AuthenticationType WebView2, got '{1}'" -f $MyInvocation.MyCommand, $BoundParams.AuthenticationType | Write-Error -ErrorAction "Stop"
+                    "{0} - -PreferredMfaMethod only applies to -AuthenticationType WebView2, got '{1}'" -f $MyInvocation.MyCommand, $BoundParams['AuthenticationType'] | Write-Error -ErrorAction "Stop"
                 }
             }
 
-            switch ($BoundParams.AuthenticationType) {
+            switch ($BoundParams['AuthenticationType']) {
                 "Windows" {
                     "{0} - {1} Authentication" -f $MyInvocation.MyCommand, $_ | Write-Verbose
                     $RequestContext = Invoke-WindowsAuthentication -RequestContext $RequestContext
@@ -202,8 +202,8 @@ function Invoke-OmadaRequest {
                 }
             }
 
-            if ($BoundParams.Method -in @('PUT', 'POST', 'PATCH')) {
-                "{0} - {1} - Add Body" -f $MyInvocation.MyCommand, $BoundParams.Method | Write-Verbose
+            if ($BoundParams['Method'] -in @('PUT', 'POST', 'PATCH')) {
+                "{0} - {1} - Add Body" -f $MyInvocation.MyCommand, $BoundParams['Method'] | Write-Verbose
                 $RequestContext = Set-Body -RequestContext $RequestContext
             }
 
@@ -215,9 +215,9 @@ function Invoke-OmadaRequest {
             }
 
             $Paged = $false
-            if ("Paged" -in $BoundParams.Keys -and [bool]$BoundParams.Paged) {
-                if ("Method" -in $BoundParams.Keys -and $BoundParams.Method -ne "GET") {
-                    "{0} - -Paged only supports HTTP GET requests, got -Method '{1}'" -f $MyInvocation.MyCommand, $BoundParams.Method | Write-Error -ErrorAction "Stop"
+            if ("Paged" -in $BoundParams.Keys -and [bool]$BoundParams['Paged']) {
+                if ("Method" -in $BoundParams.Keys -and $BoundParams['Method'] -ne "GET") {
+                    "{0} - -Paged only supports HTTP GET requests, got -Method '{1}'" -f $MyInvocation.MyCommand, $BoundParams['Method'] | Write-Error -ErrorAction "Stop"
                 }
                 $Paged = $true
             }
@@ -246,16 +246,16 @@ function Invoke-OmadaRequest {
                 switch ($Script:FunctionName) {
                     "Invoke-RestMethod" {
 
-                        if ("Accept" -notin $BoundParams.Headers.Keys) {
-                            $BoundParams.Headers.Add("Accept", "application/json")
+                        if ("Accept" -notin $BoundParams['Headers'].Keys) {
+                            $BoundParams['Headers'].Add("Accept", "application/json")
                         }
 
                         if ("ContentType" -in $BoundParams.Keys) {
-                            $BoundParams.Headers.Add("Content-Type", $BoundParams.ContentType)
+                            $BoundParams['Headers'].Add("Content-Type", $BoundParams['ContentType'])
                             $BoundParams.Remove("ContentType") | Out-Null
                         }
-                        elseif ("Content-Type" -notin $BoundParams.Headers.Keys) {
-                            $BoundParams.Headers.Add("Content-Type", "application/json")
+                        elseif ("Content-Type" -notin $BoundParams['Headers'].Keys) {
+                            $BoundParams['Headers'].Add("Content-Type", "application/json")
                         }
                         $Parameters = Set-RequestParameter -RequestContext $RequestContext
 
@@ -293,7 +293,11 @@ function Invoke-OmadaRequest {
                                     if ($null -ne $NextPage -and $NextPage.PSObject.Properties['value']) {
                                         $ValueList.AddRange(@($NextPage.value))
                                     }
-                                    $NextLink = if ($null -ne $NextPage) { $NextPage.'@odata.nextLink' } else { $null }
+                                    # The property test matches the guard on the entry condition above.
+                                    # The last page is precisely the one that carries no @odata.nextLink,
+                                    # so reading it unguarded faults on the final iteration of every
+                                    # paged request rather than ending the loop.
+                                    $NextLink = if ($null -ne $NextPage -and $NextPage.PSObject.Properties['@odata.nextLink']) { $NextPage.'@odata.nextLink' } else { $null }
                                 }
                                 $Return.value = $ValueList.ToArray()
                                 $Return.PSObject.Properties.Remove('@odata.nextLink')
@@ -304,7 +308,7 @@ function Invoke-OmadaRequest {
                         }
 
                         #To support -SkipHttpErrorCheck
-                        if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and $Return -is [System.Xml.XmlDocument]) {
+                        if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams['AuthenticationType']) -in ("Browser", "WebView2") -and $Return -is [System.Xml.XmlDocument]) {
                             $NamespaceManager = New-Object System.Xml.XmlNamespaceManager($Return.NameTable)
                             $NamespaceManager.AddNamespace("xhtml", "http://www.w3.org/1999/xhtml")
                             if ($Return.SelectSingleNode('//xhtml:html/xhtml:head/xhtml:title', $NamespaceManager).'#text' -like "401 *") {
@@ -327,7 +331,7 @@ function Invoke-OmadaRequest {
                         $Return = Invoke-OmadaRetryableRequest -CommandInfo $CommandInfo -Parameters $Parameters @RetryPolicy
 
                         #To support -SkipHttpErrorCheck
-                        if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and $Return -is [Microsoft.PowerShell.Commands.WebResponseObject] -and $Return.StatusCode -eq 401) {
+                        if ($BoundParams.Keys -contains "SkipHttpErrorCheck" -and ($BoundParams['AuthenticationType']) -in ("Browser", "WebView2") -and $Return -is [Microsoft.PowerShell.Commands.WebResponseObject] -and $Return.StatusCode -eq 401) {
                             throw $CustomErrorTrigger
                         }
                         $SessionContext.LoginCount++
@@ -353,7 +357,7 @@ function Invoke-OmadaRequest {
                     $Script:RecheckEnvironmentSuspended = $true
                     "{0} - Received HTTP 502; environment suspension will be re-checked on the next request." -f $MyInvocation.MyCommand | Write-Verbose
                 }
-                if (($BoundParams.AuthenticationType) -in ("Browser", "WebView2") -and ($StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
+                if (($BoundParams['AuthenticationType']) -in ("Browser", "WebView2") -and ($StatusCode -eq 401 -or $_.Exception.Message -eq $CustomErrorTrigger)) {
 
                     # The exception comes from Invoke-RestMethod/Invoke-WebRequest or the browser stack
                     # and routinely quotes the request that failed, headers included. There is no
@@ -370,7 +374,7 @@ function Invoke-OmadaRequest {
                         "Re-authentication failed!" | Write-Host
                     }
                     $WebView2Authentication = $false
-                    if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams.UseWebView2 -or $BoundParams.AuthenticationType -eq "WebView2") {
+                    if ($BoundParams.ContainsKey('UseWebView2') -and $BoundParams['UseWebView2'] -or $BoundParams['AuthenticationType'] -eq "WebView2") {
                         $WebView2Authentication = $true
                     }
                     elseif ($SessionContext.WebView2Used) {
@@ -379,12 +383,12 @@ function Invoke-OmadaRequest {
                     }
                     if ($WebView2Authentication) {
                         "{0} - Using WebView2 for authentication" -f $MyInvocation.MyCommand | Write-Verbose
-                        Get-DataFromWebView2 -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        Get-DataFromWebView2 -SessionContext $SessionContext -EdgeProfile $BoundParams['EdgeProfile'] -InPrivate:([bool]$BoundParams['InPrivate'])
                         $BrowserData = @($SessionContext.AuthCookie, $Script:UserAgent)
                         $SessionContext.WebView2Used = $true
                     }
                     else {
-                        $BrowserData = Get-DataFromWebDriver -SessionContext $SessionContext -EdgeProfile $BoundParams.EdgeProfile -InPrivate:$($BoundParams.InPrivate).IsPresent
+                        $BrowserData = Get-DataFromWebDriver -SessionContext $SessionContext -EdgeProfile $BoundParams['EdgeProfile'] -InPrivate:([bool]$BoundParams['InPrivate'])
                     }
                     $SessionContext.AuthCookie = $BrowserData[0]
 
@@ -393,8 +397,8 @@ function Invoke-OmadaRequest {
                         # so the freshly re-authenticated cookie must be persisted here first - otherwise the
                         # recursive call below would immediately reload and clobber it with the stale cookie
                         # still on disk (the one that caused this 401 in the first place), looping forever.
-                        $RetryCookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams.Credential -SessionKey $BoundParams.SessionKey
-                        $RetryCookiePath = Join-Path $BoundParams.CookiePath -ChildPath $RetryCookieFileName
+                        $RetryCookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
+                        $RetryCookiePath = Join-Path $BoundParams['CookiePath'] -ChildPath $RetryCookieFileName
                         try {
                             [PSCustomObject]@{ OmadaWebAuthCookie = $SessionContext.AuthCookie } | Export-Clixml $RetryCookiePath -Force
                         }

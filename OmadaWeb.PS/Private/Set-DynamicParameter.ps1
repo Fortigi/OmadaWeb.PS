@@ -36,16 +36,29 @@ function Set-DynamicParameter {
     )
 
     $ParameterObjects = @()
+    # The names are tracked separately rather than read back off $ParameterObjects. Reading a property
+    # from an array enumerates its elements, and doing that to the empty array of the first iteration
+    # is an error under StrictMode - which is how this function used to fail before a single dynamic
+    # parameter had been built.
+    [string[]]$SeenParameterNames = @()
     foreach ($ParameterSet in $FunctionObject.ParameterSets) {
         foreach ($Parameter in $ParameterSet.Parameters) {
             if ($Parameter.Name -notin $ExcludedParameters) {
-                if ($Parameter.Name -notin $ParameterObjects.Name) {
+                if ($Parameter.Name -notin $SeenParameterNames) {
+                    $SeenParameterNames += $Parameter.Name
                     $ParameterSetName = @($($ParameterSet.Name))
                     $ParameterObjects += @{
                         Name                            = $Parameter.Name
                         Type                            = $Parameter.ParameterType
                         Alias                           = $Parameter.Aliases
-                        ValidateSet                     = $Parameter.ValidateSet
+                        # No ValidateSet is copied across. CommandParameterInfo has no such member -
+                        # the validate sets live in its Attributes collection - so the read that used
+                        # to sit here yielded $null for every parameter and no inherited parameter has
+                        # ever carried one. It is left that way deliberately rather than derived from
+                        # Attributes: the value is splatted on to the real Invoke-RestMethod /
+                        # Invoke-WebRequest, which enforces its own validation, so deriving it here
+                        # would only move the same rejection earlier and could reject values the
+                        # module accepts today.
                         Mandatory                       = $Parameter.IsMandatory
                         ParameterSetName                = $ParameterSetName
                         Position                        = $Parameter.Position
@@ -62,12 +75,20 @@ function Set-DynamicParameter {
     }
 
     [string[]]$ParameterObjectSetNames = $null
-    if (($ParameterObjects.ParameterSetName | Select-Object -Unique | Measure-Object).Count -eq 1 -and [string]::IsNullOrWhiteSpace($ParameterObjects.ParameterSetName)) {
+    # Same reason as above: $ParameterObjects is empty when every parameter of the wrapped cmdlet was
+    # excluded, so the set names are materialised once behind a count check rather than read off the
+    # array twice inline.
+    [string[]]$DeclaredParameterSetNames = @()
+    if ($ParameterObjects.Count -gt 0) {
+        $DeclaredParameterSetNames = @($ParameterObjects.ParameterSetName)
+    }
+
+    if (($DeclaredParameterSetNames | Select-Object -Unique | Measure-Object).Count -eq 1 -and [string]::IsNullOrWhiteSpace($DeclaredParameterSetNames)) {
         $ParameterObjectSetNames += "__AllParameterSets"
         $ParameterObjects | ForEach-Object { $_.ParameterSetName = "__AllParameterSets" }
     }
     else {
-        $ParameterObjectSetNames += $ParameterObjects.ParameterSetName | Select-Object -Unique
+        $ParameterObjectSetNames += $DeclaredParameterSetNames | Select-Object -Unique
     }
 
     foreach ($ParameterObject in $ParameterObjects) {
