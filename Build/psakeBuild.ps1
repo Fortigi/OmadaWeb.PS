@@ -334,12 +334,13 @@ Task ImportModule -depends Build {
                 # Set-StrictMode here would only cover this scope. The module runs in its own session
                 # state, so neither its load-time code nor its functions inherit it - the module reads
                 # OMADAWEBPS_STRICTMODE and sets StrictMode on itself instead.
+                $PreviousStrictMode = $Env:OMADAWEBPS_STRICTMODE
                 $Env:OMADAWEBPS_STRICTMODE = "1"
                 try {
                     $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
                 }
                 finally {
-                    $Env:OMADAWEBPS_STRICTMODE = $null
+                    $Env:OMADAWEBPS_STRICTMODE = $PreviousStrictMode
                 }
 
                 if ($Test) {
@@ -396,12 +397,15 @@ Task Test -depends ImportModule {
     # up itself (see OmadaWeb.PS.psm1) because StrictMode does not cross into a module's session
     # state from here. It covers the InModuleScope blocks in the tests as well, so a test fixture that
     # reads a member no real caller would get is caught too.
+    # Restored rather than cleared: the build runs in the developer's own session, so blanking it
+    # would discard a value they had set for themselves.
+    $PreviousStrictMode = $Env:OMADAWEBPS_STRICTMODE
     $Env:OMADAWEBPS_STRICTMODE = "1"
     try {
         $Result = Invoke-Pester -Configuration $PesterConfiguration
     }
     finally {
-        $Env:OMADAWEBPS_STRICTMODE = $null
+        $Env:OMADAWEBPS_STRICTMODE = $PreviousStrictMode
     }
 
     if ($Result.FailedCount -gt 0) {
