@@ -331,9 +331,17 @@ Task ImportModule -depends Build {
             try {
                 Test-ModuleManifest -Path "$OutputDir\$ModuleName.psd1"
 
-                Set-StrictMode -Version Latest
+                # Set-StrictMode here would only cover this scope. The module runs in its own session
+                # state, so neither its load-time code nor its functions inherit it - the module reads
+                # OMADAWEBPS_STRICTMODE and sets StrictMode on itself instead.
+                $Env:OMADAWEBPS_STRICTMODE = "1"
+                try {
+                    $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
+                }
+                finally {
+                    $Env:OMADAWEBPS_STRICTMODE = $null
+                }
 
-                $Test = Import-Module "$OutputDir\$ModuleName.psd1" -Force -PassThru
                 if ($Test) {
                     "Module loaded successfully" | Write-Verbose
                     Remove-Module -name $Test.Name -Force
@@ -341,7 +349,6 @@ Task ImportModule -depends Build {
                 else {
                     "Module failed to load" | Write-Error -ErrorAction Stop
                 }
-                Set-StrictMode -Off
             }
             catch {
                 $PSCmdlet.ThrowTerminatingError($PSItem)
@@ -385,7 +392,18 @@ Task Test -depends ImportModule {
     # E2E tests need a real Edge/WebView2 install and are slow; they are opt-in and run on a separate scheduled pipeline instead of every build.
     $PesterConfiguration.Filter.ExcludeTag = 'E2E'
 
-    $Result = Invoke-Pester -Configuration $PesterConfiguration
+    # Every test run exercises the module under Set-StrictMode -Version Latest. The module picks this
+    # up itself (see OmadaWeb.PS.psm1) because StrictMode does not cross into a module's session
+    # state from here. It covers the InModuleScope blocks in the tests as well, so a test fixture that
+    # reads a member no real caller would get is caught too.
+    $Env:OMADAWEBPS_STRICTMODE = "1"
+    try {
+        $Result = Invoke-Pester -Configuration $PesterConfiguration
+    }
+    finally {
+        $Env:OMADAWEBPS_STRICTMODE = $null
+    }
+
     if ($Result.FailedCount -gt 0) {
         Write-Error -Message ("{0} Pester test(s) failed." -f $Result.FailedCount) -ErrorAction Stop
     }
