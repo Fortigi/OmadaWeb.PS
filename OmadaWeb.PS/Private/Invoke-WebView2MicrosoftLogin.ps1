@@ -1,6 +1,40 @@
 function Invoke-WebView2MicrosoftLogin {
-    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'KeepMeSignedInId', Justification = 'Added for later use in the function')]
+    <#
+    .SYNOPSIS
+        Drives the Microsoft Entra ID sign-in page from the supplied credential, one timer tick at a
+        time.
+
+    .DESCRIPTION
+        Called from the 150 ms WebView2 timer while the browser is on login.microsoftonline.com. Each
+        tick does one small piece of work and returns, because everything here runs on the UI thread
+        of an open window: blocking it would freeze the browser the user may still have to type in.
+
+        The work is split in three so that the part worth testing can be tested. Reading the page is
+        one asynchronous script - the one Get-EntraSignInProbeScript builds - which returns a snapshot
+        carrying no rendered text at all. Deciding what that snapshot means is Resolve-EntraSignInScreen,
+        an ordinary function with no browser behind it. Acting on the decision is this function, and
+        it is deliberately dull: fill a field, click an element, read a number, or stop.
+
+        Two of those outcomes end the sign-in rather than continuing it, and the difference matters:
+
+          - Stop. Entra ID reported a failure that no retry can change - a Conditional Access block,
+            a locked account, a refused password. Stop-OmadaLogin records why and closes the window,
+            and the driver reports that instead of opening another one. A wrong password belongs
+            here: sending it again is what drives an account into smart lockout.
+          - Wait. The page is one this module cannot drive, or has never seen. Nothing happens
+            immediately, because a page caught mid-navigation looks exactly the same; only when
+            Test-LoginAutomationStalled says the page has stopped changing does Switch-ToManualLogin
+            hand the sign-in to the user, quoting what the decision said about it.
+
+        The credential's password is read here and nowhere else. It is passed to the page through
+        ConvertTo-JavaScriptLiteral, which is what keeps a password containing a quote from ending the
+        string literal it is written into (issue #19).
+
+    .OUTPUTS
+        System.Boolean. True when this tick moved the sign-in forward, false otherwise.
+    #>
     [CmdletBinding()]
+    [OutputType([System.Boolean])]
     param()
 
     try {
@@ -11,119 +45,29 @@ function Invoke-WebView2MicrosoftLogin {
         }
 
         if (!$Script:MicrosoftOnlineLogin) {
-            return
+            return $false
         }
 
         if ($null -eq $Script:WebView2 -or $null -eq $Script:WebView2.CoreWebView2) {
-            return
+            return $false
         }
 
-        # Element IDs used by Microsoft login
-        $UserNameElementId = "i0116"
-        $PasswordElementId = "i0118"
-        $SubmitButtonId = "idSIButton9"
-        $CantAccessAccountId = "cantAccessAccount"
-        $MfaElementId1 = "idRichContext_DisplaySign"
-        $MfaElementId2 = "idRemoteNGC_DisplaySign"
-        $MfaRetryId1 = "idA_SAASTO_Resend"
-        $MfaRetryId2 = "idA_SAASDS_Resend"
-        $ButtonBackId = "idBtn_Back"
-        $KeepMeSignedInId = "KmsiCheckboxField"
-
-        # Everything the scenarios below recognize a page by, and so everything a diagnostic has to
-        # be able to report as absent.
-        $KnownElementId = @($UserNameElementId, $PasswordElementId, $SubmitButtonId, $ButtonBackId, $CantAccessAccountId, $MfaElementId1, $MfaElementId2, $MfaRetryId1, $MfaRetryId2, $KeepMeSignedInId)
-
-        # JavaScript to get all element details on the page
-        $getAllIdsScript = @"
-(function() {
-    var idsToFind = [
-        'i0116',
-        'i0118',
-        'idSIButton9',
-        'cantAccessAccount',
-        'idRichContext_DisplaySign',
-        'idA_SAASTO_Resend',
-        'idA_SAASDS_Resend',
-        'idBtn_Back',
-        'i0281',
-        'idA_PWD_ForgotPassword',
-        'passwordError',
-        'idRemoteNGC_DisplaySign',
-        'KmsiCheckboxField'
-    ];
-
-    var foundElements = [];
-    for (var i = 0; i < idsToFind.length; i++) {
-        var element = document.getElementById(idsToFind[i]);
-        if (element) {
-            foundElements.push({
-                id: idsToFind[i],
-                tagName: element.tagName,
-                type: element.type || null,
-                name: element.name || null,
-                className: element.className || null,
-                outerHTML: element.outerHTML
-            });
-        }
-    }
-    return JSON.stringify(foundElements);
-})();
-"@
-
-        #         $getAllNameElementsScript = @"
-        # (function() {
-        #     var namesToFind = [
-        #         'login'
-        #     ];
-        #     var foundElements = [];
-        #     for (var i = 0; i < namesToFind.length; i++) {
-        #         var element = document.getElementsByName(namesToFind[i]);
-        #         if (element != null && element[0].value != null) {
-        #             foundElements.push({
-        #                 name: element[0].name,
-        #                 value: element[0].value
-        #              });
-        #         }
-        #     }
-        #     return foundElements;
-        # })();
-        # "@
-
-        # JavaScript to get element property
-        $getElementPropertyScript = @"
-(function(elementId, property) {
-    var element = document.getElementById(elementId);
-    if (element) {
-        return element[property] || element.getAttribute(property);
-    }
-    return null;
-})
-"@
-
-
-        $getMfaElementPropertyScript = @"
-(function() {
-    var idsToFind = [
-        'idRichContext_DisplaySign',
-        'idRemoteNGC_DisplaySign'
-    ];
-    var foundElements = [];
-    for (var i = 0; i < idsToFind.length; i++) {
-        var element = document.getElementById(idsToFind[i]);
-        if (element != null) {
-            foundElements.push(element.childNodes[0] != null ? element.childNodes[0].data : null);
-        }
-    }
-    return JSON.stringify(foundElements);
-})();
-"@
-
-        # JavaScript to set element value and trigger events
-        $setElementValueScript = @"
+        # Every one of these answers true only when it acted on something the user could have acted
+        # on themselves, and that is what the driver reads to decide whether the page moved.
+        #
+        # Checking again here, after the probe already reported the element as visible, is not
+        # redundant. The probe's answer is a snapshot, and several ticks pass between taking it and
+        # acting on it - the page can navigate in between. Without the second check the script would
+        # report success for typing into a field that had gone, the driver would count that as
+        # progress and restart the stall clock, and the sign-in would sit on a page nothing was
+        # happening to. The predicate is the shared one, so it cannot disagree with the probe's.
+        #
+        # Applied to its arguments by the call site, so it stays a bare function expression.
+        $SetElementValueScript = @"
 (function(elementId, value) {
+$(Get-EntraElementVisibilityScript)
     var element = document.getElementById(elementId);
-    if (element) {
+    if (element && isVisible(element)) {
         element.value = value;
         element.dispatchEvent(new Event('input', { bubbles: true }));
         element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -133,11 +77,11 @@ function Invoke-WebView2MicrosoftLogin {
 })
 "@
 
-        # JavaScript to click element
-        $clickElementScript = @"
+        $ClickElementScript = @"
 (function(elementId) {
+$(Get-EntraElementVisibilityScript)
     var element = document.getElementById(elementId);
-    if (element) {
+    if (element && isVisible(element)) {
         element.click();
         return true;
     }
@@ -145,31 +89,20 @@ function Invoke-WebView2MicrosoftLogin {
 })
 "@
 
-        # JavaScript to check if element is visible and enabled
-        $isElementVisibleScript = @"
-(function(elementId) {
-    var element = document.getElementById(elementId);
-    if (!element) return false;
-
-    var style = window.getComputedStyle(element);
-    var isVisible = style.display !== 'none' &&
-                    style.visibility !== 'hidden' &&
-                    style.opacity !== '0' &&
-                    element.offsetWidth > 0 &&
-                    element.offsetHeight > 0;
-
-    var isEnabled = !element.disabled && !element.readOnly;
-
-    return isVisible && isEnabled;
-})
-"@
-
-        # JavaScript to get element by data-test-id
-        $getElementByDataTestIdScript = @"
+        # 'Pick an account' identifies each tile by the account name in its data-test-id.
+        #
+        # The visibility test is not decoration: Get-EntraSignInProbeScript reports only visible
+        # tiles, so the resolver can only ever choose one. Clicking the first element carrying the
+        # id regardless would let a hidden namesake take the click instead, and that failure is
+        # invisible from here - the click reports success, which restarts the stall clock, so the
+        # driver would sit on the same page clicking nothing for as long as the window is open.
+        $ClickAccountTileScript = @"
 (function(dataTestId) {
+$(Get-EntraElementVisibilityScript)
     var elements = document.querySelectorAll('[data-test-id]');
     for (var i = 0; i < elements.length; i++) {
-        if (elements[i].getAttribute('data-test-id') != null && elements[i].getAttribute('data-test-id').toLowerCase() === dataTestId.toLowerCase()) {
+        var value = elements[i].getAttribute('data-test-id');
+        if (value != null && value.toLowerCase() === dataTestId.toLowerCase() && isVisible(elements[i])) {
             elements[i].click();
             return true;
         }
@@ -178,53 +111,51 @@ function Invoke-WebView2MicrosoftLogin {
 })
 "@
 
-        # JavaScript to click "Use another account" option
-        $clickUseAnotherAccountScript = @"
+        # The tile that leads away from the remembered accounts. Its label is localized; the id of
+        # the element that labels it is not.
+        $ClickUseAnotherAccountScript = @"
 (function() {
-    // Try by aria-labelledby first
+$(Get-EntraElementVisibilityScript)
     var otherAccount = document.querySelector('[aria-labelledby="otherTileText"]');
-    if (otherAccount) {
+    if (otherAccount && isVisible(otherAccount)) {
         otherAccount.click();
         return true;
+    }
+    var otherTileText = document.getElementById('otherTileText');
+    if (otherTileText) {
+        var clickable = otherTileText.closest('[role="button"], button, a, div');
+        if (clickable && isVisible(clickable)) {
+            clickable.click();
+            return true;
+        }
     }
     return false;
 })();
 "@
 
-        # JavaScript to check for error messages
-        $checkForErrorScript = @"
-(function() {
-    // Check for common error element IDs and classes
-    var errorIds = ['passwordError', 'usernameError'];
-    var errorTexts = ['incorrect', 'invalid', 'wrong password', 'wrong username', 'not recognized'];
-
-    // Check by ID
-    for (var i = 0; i < errorIds.length; i++) {
-        var elem = document.getElementById(errorIds[i]);
-        if (elem && elem.offsetHeight > 0) {
-            return elem.textContent || elem.innerText;
-        }
+        # Verification methods on 'choose a way to sign in' are clicked by position, because the
+        # options carry nothing that names which method they are. Resolve-EntraSignInScreen only
+        # produces an index after checking that the options and the methods line up.
+        #
+        # Which makes counting the same options the probe counted the whole safety of it. A hidden
+        # template option included here and not there - or the reverse - shifts every index after it,
+        # and the failure is silent in the worst possible way: the click succeeds, so nothing reports
+        # an error, and the account is sent a weaker verification method than the one that was
+        # chosen. Both sides filter through the same isVisible.
+        $ClickProofOptionScript = @"
+(function(containerId, index) {
+$(Get-EntraElementVisibilityScript)
+    var container = document.getElementById(containerId);
+    if (!container) { return false; }
+    var options = container.querySelectorAll('[data-value], [role="button"], [role="listitem"]');
+    var counted = [];
+    for (var i = 0; i < options.length; i++) {
+        if (counted.indexOf(options[i]) === -1 && isVisible(options[i])) { counted.push(options[i]); }
     }
-
-    // Check by role and aria-live
-    var alerts = document.querySelectorAll('[role="alert"], [aria-live="assertive"], [aria-live="polite"]');
-    for (var i = 0; i < alerts.length; i++) {
-        if (alerts[i].offsetHeight > 0) {
-            var text = alerts[i].textContent || alerts[i].innerText;
-            if (text && text.trim().length > 0) {
-                // Check if it contains error keywords
-                var lowerText = text.toLowerCase();
-                for (var j = 0; j < errorTexts.length; j++) {
-                    if (lowerText.indexOf(errorTexts[j]) !== -1) {
-                        return text;
-                    }
-                }
-            }
-        }
-    }
-
-    return null;
-})();
+    if (index < 0 || index >= counted.length) { return false; }
+    counted[index].click();
+    return true;
+})
 "@
 
         # Check if we're on the Microsoft login page
@@ -233,652 +164,321 @@ function Invoke-WebView2MicrosoftLogin {
             # Reset state when leaving login page
             $Script:LoginState = $null
             $Script:LoginTask = $null
-            $Script:IdAttributes = $null
-            $Script:PreviousAttributes = $null
+            $Script:PageState = $null
+            $Script:PendingSubmitId = $null
             $Script:LoginSubState = $null
-            $Script:BackButtonText = $null
             $Script:LoginFailed = $false
             $Script:CurrentScenario = $null
             $Script:PreviousScenario = $null
+            $Script:MfaWaitLastReported = $null
             Reset-LoginAutomationState
             return $false
         }
 
-        # Check if we have credentials - so we know whether to attempt login
-        if ($Script:CurrentWebView2Session.Credential -and -not [string]::IsNullOrWhiteSpace($Script:CurrentWebView2Session.Credential.UserName)) {
-            # Initialize login state if needed
-            if ($null -eq $Script:LoginState) {
-                $Script:LoginState = "GettingIds"
-                $Script:LoginTask = $null
-                $Script:LoginSubState = $null
-            }
+        # No user name means nothing to fill in, so the user signs in by hand in the open window.
+        if (-not $Script:CurrentWebView2Session.Credential -or [string]::IsNullOrWhiteSpace($Script:CurrentWebView2Session.Credential.UserName)) {
+            return $false
+        }
 
-            # State machine for non-blocking async operations
-            switch ($Script:LoginState) {
-                "GettingIds" {
-                    "GettingIds" | Write-Verbose
-                    if ($null -eq $Script:LoginTask) {
-                        # Start the async task to get IDs
-                        "Getting page element IDs..." | Write-Verbose
-                        $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($getAllIdsScript)
-                        return $false  # Come back on next timer tick
-                    }
+        if ($null -eq $Script:LoginState) {
+            $Script:LoginState = "ReadingPage"
+            $Script:LoginTask = $null
+            $Script:PageState = $null
+            $Script:PendingSubmitId = $null
+        }
 
-                    # Check if task is complete (non-blocking)
-                    if ($Script:LoginTask.IsCompleted) {
-                        if ($Script:LoginTask.IsFaulted) {
-                            "Failed to get element IDs: $($Script:LoginTask.Exception.Message)" | Write-Verbose
-                            $Script:LoginState = "GettingIds"
-                            $Script:LoginTask = $null
-                            return $false
-                        }
-
-                        $IdsJson = $Script:LoginTask.Result
-                        $Script:IdAttributes = $IdsJson | ConvertFrom-Json | ConvertFrom-Json
-
-                        if ($null -eq $Script:IdAttributes -or $Script:IdAttributes.Count -eq 0) {
-                            "No element IDs found on page, retrying..." | Write-Verbose
-                            # A sign-in page carrying none of the known IDs at all is the loudest
-                            # form of a selector break, and retrying it would otherwise never end.
-                            if (Test-LoginAutomationStalled -ElementId @()) {
-                                # Every known selector is missing here, so name them all rather than
-                                # leaving the diagnostic without a single selector in it.
-                                Switch-ToManualLogin -State "GettingIds" -MissingElementId $KnownElementId -FoundElementId @() -Url $Script:WebView2.Source.AbsoluteUri -Reason "The page carries none of the element IDs this module looks for." | Out-Null
-                                return $false
-                            }
-
-                            $Script:LoginState = "GettingIds"
-                            $Script:LoginTask = $null
-                            return $false
-                        }
-
-                        # Check if page has changed (different IDs) - if so, reset active scenario
-                        if ($null -ne $Script:PreviousAttributes) {
-                            $idsChanged = $false
-                            # Check if key elements changed
-                            $prevHadUsername = $UserNameElementId -in $Script:PreviousAttributes.id -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*'
-                            $prevHadPassword = $PasswordElementId -in $Script:PreviousAttributes.id -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*'
-                            $nowHasUsername = $UserNameElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*'
-                            $nowHasPassword = $PasswordElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*'
-
-                            if ($prevHadUsername -ne $nowHasUsername -or $prevHadPassword -ne $nowHasPassword) {
-                                $idsChanged = $true
-                                "Page changed detected - resetting active scenario" | Write-Verbose
-                            }
-
-                            if ($idsChanged) {
-                                $Script:LoginSubState = $null
-                            }
-                        }
-
-                        # Store current IDs for next comparison
-                        $Script:PreviousAttributes = $Script:IdAttributes
-
-                        # Move to processing scenarios
-                        "Found $($Script:IdAttributes.Count) element IDs on page" | Write-Verbose
-                        $Script:LoginState = "ProcessingScenarios"
-                        $Script:LoginTask = $null
-                        return $false  # Process scenarios on next tick
-                    }
-
-                    # Task still running, check again on next tick
+        switch ($Script:LoginState) {
+            "ReadingPage" {
+                if ($null -eq $Script:LoginTask) {
+                    "Invoke-WebView2MicrosoftLogin - Reading the sign-in page" | Write-Verbose
+                    $Script:LoginTask = $Script:WebView2.CoreWebView2.ExecuteScriptAsync((Get-EntraSignInProbeScript))
                     return $false
                 }
 
-                "ProcessingScenarios" {
-                    "ProcessingScenarios" | Write-Verbose
-                    # Now we have IdAttributes, process all scenarios
+                if (-not $Script:LoginTask.IsCompleted) {
+                    return $false
+                }
 
+                $Snapshot = $null
+                $UnreadableReason = $null
 
+                if ($Script:LoginTask.IsFaulted) {
+                    $UnreadableReason = $Script:LoginTask.Exception.Message
+                    "Invoke-WebView2MicrosoftLogin - Could not read the sign-in page: {0}" -f $UnreadableReason | Write-Verbose
+                }
+                else {
+                    try {
+                        # ExecuteScriptAsync hands back the script's return value as JSON, and the
+                        # script returns a JSON document - so the payload is decoded twice.
+                        $Snapshot = $Script:LoginTask.Result | ConvertFrom-Json | ConvertFrom-Json
+                    }
+                    catch {
+                        $UnreadableReason = $_.Exception.Message
+                        "Invoke-WebView2MicrosoftLogin - The sign-in page snapshot could not be read: {0}" -f $UnreadableReason | Write-Verbose
+                    }
 
-                    # Debug: Log what IDs we found
-                    "Page IDs found: $($Script:IdAttributes.id -join ', ')" | Write-Verbose
-                    "Looking for username: $UserNameElementId, password: $PasswordElementId, submit: $SubmitButtonId" | Write-Verbose
-                    "Username exists: $($UserNameElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
-                    "Password exists: $($PasswordElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
-                    "Username existed: $($UserNameElementId -in $Script:PreviousAttributes.id -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
-                    "Password existed: $($PasswordElementId -in $Script:PreviousAttributes.id -and ($Script:PreviousAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*')" | Write-Verbose
-                    "CantAccessAccount exists: $( $CantAccessAccountId -in $Script:IdAttributes.id)" | Write-Verbose
-                    "SubmitButton exists: $( $SubmitButtonId -in $Script:IdAttributes.id)" | Write-Verbose
-                    "ButtonBack exists: $( $ButtonBackId -in $Script:IdAttributes.id)" | Write-Verbose
-                    "MfaElementIds exists: $( $MfaElementId1 -in $Script:IdAttributes.id -or   $MfaElementId2 -in $Script:IdAttributes.id)" | Write-Verbose
+                    if ($null -eq $Snapshot -and $null -eq $UnreadableReason) {
+                        $UnreadableReason = "The sign-in page did not answer the query this module reads it with."
+                    }
+                }
 
-                    # Every scenario below recognizes the page by the element IDs above. When
-                    # Microsoft changes that markup, either no scenario matches or the one that does
-                    # can no longer act, and the timer keeps re-evaluating the same page forever.
-                    # Detect that and let the user sign in by hand instead - the window is open and
-                    # for a tenant that is not on Entra typing the credentials there is the normal
-                    # path anyway (issue #32).
-                    $WaitingForApproval = $Script:MfaRequestDisplayed -and ($MfaElementId1 -in $Script:IdAttributes.id -or $MfaElementId2 -in $Script:IdAttributes.id)
-                    if (Test-LoginAutomationStalled -ElementId $Script:IdAttributes.id -WaitingForApproval:$WaitingForApproval) {
-                        $MissingElementId = @($KnownElementId | Where-Object { $_ -notin $Script:IdAttributes.id })
-                        $ScenarioName = "NoMatchingScenario"
-                        if (-not [string]::IsNullOrWhiteSpace($Script:CurrentScenario)) {
-                            $ScenarioName = $Script:CurrentScenario
+                $Script:LoginTask = $null
+
+                if ($null -eq $Snapshot) {
+                    # A page that cannot be read is the loudest form of a selector break - and a
+                    # script that cannot even be executed is no different from here. Both retry on
+                    # the next tick, because a page mid-navigation produces exactly this; the stall
+                    # clock is what ends the retrying, and leaving it unarmed on either path would
+                    # loop until the window is closed by hand.
+                    if (Test-LoginAutomationStalled -ElementId @()) {
+                        Switch-ToManualLogin -State "ReadingPage" -MissingElementId @($Script:EntraSignInElementId.Values) -FoundElementId @() -Url $Script:WebView2.Source.AbsoluteUri -Reason $UnreadableReason | Out-Null
+                    }
+
+                    return $false
+                }
+
+                $Script:PageState = $Snapshot
+                $Script:LoginState = "Deciding"
+                return $false
+            }
+
+            "Deciding" {
+                $HasPassword = $false
+                $NetworkCredential = $Script:CurrentWebView2Session.Credential.GetNetworkCredential()
+                if (-not [string]::IsNullOrEmpty($NetworkCredential.Password)) {
+                    $HasPassword = $true
+                }
+
+                $PreferredMfaMethod = $null
+                if ($null -ne $Script:CurrentWebView2Session.PreferredMfaMethod) {
+                    $PreferredMfaMethod = [string]$Script:CurrentWebView2Session.PreferredMfaMethod
+                }
+
+                $Decision = Resolve-EntraSignInScreen -PageState $Script:PageState -UserName $Script:CurrentWebView2Session.Credential.UserName.Trim() -HasPassword:$HasPassword -PreferredMfaMethod $PreferredMfaMethod -MfaRequestDisplayed:$Script:MfaRequestDisplayed
+
+                "Invoke-WebView2MicrosoftLogin - Screen '{0}', action '{1}'" -f $Decision.Screen, $Decision.Action | Write-Verbose
+                $Script:PreviousScenario = $Script:CurrentScenario
+                $Script:CurrentScenario = $Decision.Screen
+
+                # Waiting for someone to reach for their phone is not a stall, and it is the one step
+                # that legitimately takes minutes.
+                # Read through the property bag: Set-StrictMode turns a plain access on a member the
+                # snapshot does not carry into a terminating error, and a partly readable page is
+                # exactly the case this diagnostic exists for.
+                $Present = @()
+                $IdProperty = $Script:PageState.PSObject.Properties["ids"]
+                if ($null -ne $IdProperty) {
+                    $Present = @($IdProperty.Value)
+                }
+
+                $WaitingForApproval = $Script:MfaRequestDisplayed -and $Decision.Screen -eq "ApprovalNumber"
+                if (Test-LoginAutomationStalled -ElementId $Present -WaitingForApproval:$WaitingForApproval) {
+                    $MissingElementId = @($Script:EntraSignInElementId.Values | Where-Object { $_ -notin $Present })
+                    $ScenarioName = "NoMatchingScreen"
+                    if (-not [string]::IsNullOrWhiteSpace($Decision.Screen) -and $Decision.Screen -ne "Unknown") {
+                        $ScenarioName = $Decision.Screen
+                    }
+
+                    Switch-ToManualLogin -State ("Deciding/{0}" -f $ScenarioName) -MissingElementId $MissingElementId -FoundElementId $Present -Url $Script:WebView2.Source.AbsoluteUri -Reason $Decision.Reason | Out-Null
+                    return $false
+                }
+
+                switch ($Decision.Action) {
+                    "Stop" {
+                        $Message = $Decision.Reason
+                        if ([string]::IsNullOrWhiteSpace($Message)) {
+                            $Message = "Entra ID refused this sign-in."
                         }
 
-                        Switch-ToManualLogin -State ("ProcessingScenarios/{0}" -f $ScenarioName) -MissingElementId $MissingElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri | Out-Null
+                        Stop-OmadaLogin -Message $Message -Code $Decision.Code -Reason $Decision.Reason -Url $Script:WebView2.Source.AbsoluteUri -Engine "WebView2" | Out-Null
+
+                        # The watchdog counters belong to the window that is closing, not to the next.
+                        $Script:OmadaWatchdogStart = $null
+                        $Script:OmadaWatchdogRunning = $false
+                        $Script:ProgressCounter = 0
+                        $Script:LastFiredSecond = -1
+
+                        try {
+                            if ($null -ne $Script:WebView2) {
+                                $LoginForm = $Script:WebView2.FindForm()
+                                if ($null -ne $LoginForm) {
+                                    $LoginForm.Close()
+                                }
+                            }
+                        }
+                        catch {
+                            "Invoke-WebView2MicrosoftLogin - Could not close the sign-in window: {0}" -f $_.Exception.Message | Write-Verbose
+                        }
+
                         return $false
                     }
 
-                    # Scenario 1: Username entry page
-                    # Check if username field exists - we'll verify visibility in the sub-state
-                    if (  $UserNameElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $UserNameElementId }).outerHTML -notlike '*aria-hidden="true"*' -and $SubmitButtonId -in $Script:IdAttributes.id) {
-                        "Scenario 1: Username entry page" | Write-Verbose
-                        $Script:CurrentScenario = "UsernameEntry"
-                        "Scenario 1: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose
-
-                        # Sub-state machine for username entry
-                        switch ($Script:LoginSubState) {
-                            $null {
-                                # First check for error messages
-                                "Checking for error messages on page..." | Write-Verbose
-                                $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($checkForErrorScript)
-                                $Script:LoginSubState = "CheckingForError"
-                                return $false
-                            }
-                            "CheckingForError" {
-                                "Scenario 1: CheckingForError" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $errorMessage = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
-                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
-                                            Write-Warning "Login error detected: $errorMessage"
-                                            Write-Warning "Please verify your credentials and try again. Automatic login aborted."
-                                            $Script:LoginFailed = $true
-                                            $Script:LoginState = $null
-                                            $Script:LoginSubState = $null
-                                            $Script:IdAttributes = $null
-                                            $Script:LoginTask = $null
-                                            $Script:MicrosoftOnlineLogin = $false
-                                            return $false
-                                        }
-                                    }
-                                    # No error, proceed to check username field visibility
-                                    $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$isElementVisibleScript($(ConvertTo-JavaScriptLiteral $UserNameElementId))")
-                                    $Script:LoginSubState = "CheckingUsernameField"
-                                }
-                                return $false
-                            }
-                            "CheckingUsernameField" {
-                                "Scenario 1: CheckingUsernameField" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $isVisible = $Script:LoginTask.Result
-                                        "Username field visibility check result: $isVisible" | Write-Verbose
-                                        if ($isVisible -eq "true") {
-                                            "Matched Scenario 1: Username entry page" | Write-Verbose
-                                            "Username field is visible, entering username..." | Write-Verbose
-                                            $UserName = $Script:CurrentWebView2Session.Credential.UserName.Trim()
-                                            $usernameScript = "$setElementValueScript($(ConvertTo-JavaScriptLiteral $UserNameElementId), $(ConvertTo-JavaScriptLiteral $UserName))"
-                                            $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($usernameScript)
-                                            $Script:LoginSubState = "SettingUsername"
-                                        }
-                                        else {
-                                            # Field not visible, not username page - reset to check other scenarios
-                                            "Username field not visible, trying other scenarios..." | Write-Verbose
-                                            $Script:LoginSubState = $null
-                                            # Don't return - let other scenarios be checked
-                                        }
-                                    }
-                                    else {
-                                        # The visibility check could not run at all, so autofill is
-                                        # over for this sign-in. Say so instead of going quiet.
-                                        Switch-ToManualLogin -State "Scenario1/CheckingUsernameField" -MissingElementId $UserNameElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
-                                    }
-                                }
-                                return $false
-                            }
-                            "SettingUsername" {
-                                "Scenario 1: SettingUsername" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        "Username set, clicking submit..." | Write-Verbose
-                                        Start-Sleep -Milliseconds 200
-                                        $clickScript = "$clickElementScript($(ConvertTo-JavaScriptLiteral $SubmitButtonId))"
-                                        $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
-                                        $Script:LoginSubState = "ClickingSubmit"
-                                    }
-                                    else {
-                                        # The username could not be written into the field, so the
-                                        # user has to type it. Tell them, rather than stopping mute.
-                                        Switch-ToManualLogin -State "Scenario1/SettingUsername" -MissingElementId $UserNameElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
-                                    }
-                                }
-                                return $false
-                            }
-                            "ClickingSubmit" {
-                                "Scenario 1: ClickingSubmit" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    "Clicked submit, waiting for page change..." | Write-Verbose
-                                    # Reset state to detect next page
-                                    # Clicking counts as progress, so restart the stall clock. The
-                                    # username and password pages carry the same element IDs, so
-                                    # without this the clock would keep running across the step.
-                                    $Script:UnmatchedPageSince = $null
-                                    $Script:LoginState = "GettingIds"
-                                    $Script:LoginSubState = $null
-                                    $Script:IdAttributes = $null
-                                    $Script:LoginTask = $null
-                                    Start-Sleep -Milliseconds 500
-                                    return $true
-                                }
-                                return $false
-                            }
+                    "Manual" {
+                        # Entra ID named its own error, and it is one only the person at the keyboard
+                        # can resolve - registering security information, completing an extra
+                        # verification step. Waiting out the stall timeout first would add a silent
+                        # minute to a message that is already known, so hand over now.
+                        $Reason = $Decision.Reason
+                        if (-not [string]::IsNullOrWhiteSpace($Decision.Code)) {
+                            $Reason = "{0}: {1}" -f $Decision.Code, $Reason
                         }
+
+                        Switch-ToManualLogin -State ("Deciding/{0}" -f $Decision.Screen) -FoundElementId $Present -Url $Script:WebView2.Source.AbsoluteUri -Reason $Reason | Out-Null
+                        return $false
                     }
 
-                    # Scenario 2: Password entry page
-                    # Check if password field exists - we'll verify visibility in the sub-state
-                    if (  $PasswordElementId -in $Script:IdAttributes.id -and ($Script:IdAttributes | Where-Object { $_.id -eq $PasswordElementId }).outerHTML -notlike '*aria-hidden="true"*' -and $SubmitButtonId -in $Script:IdAttributes.id) {
-
-                        "Scenario 2: Password entry page" | Write-Verbose
-                        $Script:CurrentScenario = "PasswordEntry"
-                        "Scenario 2: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose
-                        # Sub-state machine for password entry
-                        switch ($Script:LoginSubState) {
-                            $null {
-                                # First check for error messages
-                                "Checking for error messages on page..." | Write-Verbose
-                                $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($checkForErrorScript)
-                                $Script:LoginSubState = "CheckingForError"
-                                return $false
-                            }
-                            "CheckingForError" {
-                                "Scenario 2: CheckingForError" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $errorMessage = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
-                                        if (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
-                                            "Login error detected: $errorMessage" | Write-Warning
-                                            "Please verify your credentials and try again. Automatic login aborted." | Write-Warning
-                                            $Script:LoginFailed = $true
-                                            $Script:LoginState = $null
-                                            $Script:LoginSubState = $null
-                                            $Script:IdAttributes = $null
-                                            $Script:LoginTask = $null
-                                            $Script:MicrosoftOnlineLogin = $false
-                                            return $false
-                                        }
-                                    }
-                                    # No error, proceed to check password field visibility
-                                    $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$isElementVisibleScript($(ConvertTo-JavaScriptLiteral $PasswordElementId))")
-                                    $Script:LoginSubState = "CheckingPasswordField"
-                                }
-                                return $false
-                            }
-                            "CheckingPasswordField" {
-                                "Scenario 2: CheckingPasswordField" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $isVisible = $Script:LoginTask.Result
-                                        "Password field visibility check result: $isVisible" | Write-Verbose
-                                        if ($isVisible -eq "true") {
-                                            "Matched Scenario 2: Password entry page" | Write-Verbose
-                                            "Password field is visible, entering password..." | Write-Verbose
-                                            $password = $Script:CurrentWebView2Session.Credential.GetNetworkCredential().Password
-                                            $passwordScript = "$setElementValueScript($(ConvertTo-JavaScriptLiteral $PasswordElementId), $(ConvertTo-JavaScriptLiteral $password))"
-                                            $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($passwordScript)
-                                            $Script:LoginSubState = "SettingPassword"
-                                        }
-                                        else {
-                                            # Field not visible, not password page - reset to check other scenarios
-                                            "Password field not visible, trying other scenarios..." | Write-Verbose
-                                            $Script:LoginSubState = $null
-                                            # Don't return - let other scenarios be checked
-                                        }
-                                    }
-                                    else {
-                                        Switch-ToManualLogin -State "Scenario2/CheckingPasswordField" -MissingElementId $PasswordElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
-                                    }
-                                }
-                                return $false
-                            }
-                            "SettingPassword" {
-                                "Scenario 2: SettingPassword" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        "Password set, clicking submit..." | Write-Verbose
-                                        Start-Sleep -Milliseconds 200
-                                        $clickScript = "$clickElementScript($(ConvertTo-JavaScriptLiteral $SubmitButtonId))"
-                                        $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
-                                        $Script:LoginSubState = "ClickingSubmit"
-                                    }
-                                    else {
-                                        Switch-ToManualLogin -State "Scenario2/SettingPassword" -MissingElementId $PasswordElementId -FoundElementId $Script:IdAttributes.id -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
-                                    }
-                                }
-                                return $false
-                            }
-                            "ClickingSubmit" {
-                                "Scenario 2: ClickingSubmit" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    "Clicked submit, waiting for page change..." | Write-Verbose
-                                    # Reset state to detect next page
-                                    $Script:UnmatchedPageSince = $null
-                                    $Script:LoginState = "GettingIds"
-                                    $Script:LoginSubState = $null
-                                    $Script:IdAttributes = $null
-                                    $Script:LoginTask = $null
-                                    return $true
-                                }
-                                return $false
-                            }
-                        }
-                    }
-
-                    # Scenario 3: "Stay signed in?" page - Click "No"
-                    if ($Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and $ButtonBackId -in $Script:IdAttributes.id -and $SubmitButtonId -in $Script:IdAttributes.id -and $Script:IdAttributes.id -notcontains $MfaElementId1 -and $Script:IdAttributes.id -notcontains $MfaElementId2) {
-
-                        "Scenario 3: 'Stay signed in?' page" | Write-Verbose
-                        $Script:CurrentScenario = "StaySignedIn"
-                        "Scenario 3: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose
-                        # Sub-state machine for "Stay signed in?" prompt
-                        switch ($Script:LoginSubState) {
-                            $null {
-                                # Start checking back button text
-                                "Detected 'Stay signed in?' page, checking button labels..." | Write-Verbose
-                                $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript($(ConvertTo-JavaScriptLiteral $ButtonBackId), $(ConvertTo-JavaScriptLiteral 'textContent'))")
-                                $Script:LoginSubState = "CheckingBackButton"
-                                return $false
-                            }
-                            "CheckingBackButton" {
-                                "Scenario 3: CheckingBackButton" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $Script:BackButtonText = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
-                                        # Now check submit button
-                                        $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$getElementPropertyScript($(ConvertTo-JavaScriptLiteral $SubmitButtonId), $(ConvertTo-JavaScriptLiteral 'textContent'))")
-                                        $Script:LoginSubState = "CheckingSubmitButton"
-                                    }
-                                    else {
-                                        $Script:LoginSubState = $null
-                                    }
-                                }
-                                return $false
-                            }
-                            "CheckingSubmitButton" {
-                                "Scenario 3: CheckingSubmitButton" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $submitText = ConvertFrom-JavaScriptResult $Script:LoginTask.Result
-                                        if ($Script:BackButtonText -like "*No*" -and $submitText -like "*Yes*") {
-                                            "Clicking 'No' to stay signed in prompt..." | Write-Verbose
-                                            $clickScript = "$clickElementScript($(ConvertTo-JavaScriptLiteral $ButtonBackId))"
-                                            $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickScript)
-                                            $Script:LoginSubState = "ClickingNo"
-                                        }
-                                        else {
-                                            # Buttons don't match expected text, reset
-                                            $Script:LoginSubState = $null
-                                            $Script:BackButtonText = $null
-                                        }
-                                    }
-                                    else {
-                                        $Script:LoginSubState = $null
-                                        $Script:BackButtonText = $null
-                                    }
-                                }
-                                return $false
-                            }
-                            "ClickingNo" {
-                                "Scenario 3: ClickingNo" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    "Clicked No, waiting for page change..." | Write-Verbose
-                                    # Reset state to detect next page
-                                    $Script:UnmatchedPageSince = $null
-                                    $Script:LoginState = "GettingIds"
-                                    $Script:LoginSubState = $null
-                                    $Script:IdAttributes = $null
-                                    $Script:LoginTask = $null
-                                    $Script:BackButtonText = $null
-                                    return $true
-                                }
-                                return $false
-                            }
-                        }
-                    }
-
-                    # Scenario 4: Select account by data-test-id
-                    if ($Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and $Script:IdAttributes.id -notcontains $ButtonBackId) {
-
-                        "Scenario 4: Account selection page" | Write-Verbose
-                        "Scenario 4: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose
-
-                        $Script:CurrentScenario = "AccountSelection"
-                        # Sub-state for account selection
-                        switch ($Script:LoginSubState) {
-                            $null {
-                                # Try to click account with matching data-test-id
-                                "Attempting to select account..." | Write-Verbose
-                                $UserName = $Script:CurrentWebView2Session.Credential.UserName.Trim()
-                                $clickAccountScript = "$getElementByDataTestIdScript($(ConvertTo-JavaScriptLiteral $UserName))"
-                                $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickAccountScript)
-                                $Script:LoginSubState = "ClickingAccount"
-                                $Script:AccountSelectionAttempted = $false
-                                return $false
-                            }
-                            "ClickingAccount" {
-                                "Scenario 4: ClickingAccount" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $result = $Script:LoginTask.Result
-                                        if ($result -eq "true") {
-                                            "Selected logged-in account" | Write-Verbose
-                                            # Reset state to detect next page
-                                            $Script:UnmatchedPageSince = $null
-                                            $Script:LoginState = "GettingIds"
-                                            $Script:LoginSubState = $null
-                                            $Script:IdAttributes = $null
-                                            $Script:LoginTask = $null
-                                            $Script:AccountSelectionAttempted = $false
-                                            return $true
-                                        }
-                                        else {
-                                            # Account not found - try "Use another account" if not already attempted
-                                            if (-not $Script:AccountSelectionAttempted) {
-                                                "Account not found in list, clicking 'Use another account'..." | Write-Verbose
-                                                $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($clickUseAnotherAccountScript)
-                                                $Script:LoginSubState = "ClickingUseAnotherAccount"
-                                                $Script:AccountSelectionAttempted = $true
-                                            }
-                                            else {
-                                                # Already tried, reset and wait
-                                                "Could not find 'Use another account' option" | Write-Verbose
-                                                $Script:LoginSubState = $null
-                                                $Script:AccountSelectionAttempted = $false
-                                            }
-                                        }
-                                    }
-                                    else {
-                                        # Task faulted, reset
-                                        $Script:LoginSubState = $null
-                                        $Script:AccountSelectionAttempted = $false
-                                    }
-                                }
-                                return $false
-                            }
-                            "ClickingUseAnotherAccount" {
-                                "Scenario 4: ClickingUseAnotherAccount" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $result = $Script:LoginTask.Result
-                                        if ($result -eq "true") {
-                                            "Clicked 'Use another account', going to username entry..." | Write-Verbose
-                                            # Reset state to detect username page
-                                            $Script:UnmatchedPageSince = $null
-                                            $Script:LoginState = "GettingIds"
-                                            $Script:LoginSubState = $null
-                                            $Script:IdAttributes = $null
-                                            $Script:LoginTask = $null
-                                            $Script:AccountSelectionAttempted = $false
-                                            return $true
-                                        }
-                                        else {
-                                            "'Use another account' option not found" | Write-Verbose
-                                        }
-                                    }
-                                    # Failed or not found, reset
-                                    $Script:LoginSubState = $null
-                                    $Script:AccountSelectionAttempted = $false
-                                }
-                                return $false
-                            }
-                        }
-                    }
-
-                    # Scenario 5: MFA request
-                    if (-not $Script:MfaRequestDisplayed -and $Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and (  $MfaElementId1 -in $Script:IdAttributes.id -or $MfaElementId2 -in $Script:IdAttributes.id) -and $Script:IdAttributes.id -notcontains $MfaRetryId1 -and $Script:IdAttributes.id -notcontains $MfaRetryId2) {
-
-                        "Scenario 5: MFA request page" | Write-Verbose
-                        "Scenario 5: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose
-
-                        $Script:CurrentScenario = "MfaRequest"
-                        # Sub-state for MFA code retrieval
-                        switch ($Script:LoginSubState) {
-                            $null {
-                                # Get MFA code
-                                "Detected MFA page, retrieving code..." | Write-Verbose
-                                $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync("$getMfaElementPropertyScript")
-                                $Script:LoginSubState = "GettingMfaCode"
-                                return $false
-                            }
-                            "GettingMfaCode" {
-                                "Scenario 5: GettingMfaCode" | Write-Verbose
-                                if ($Script:LoginTask.IsCompleted) {
-                                    if (-not $Script:LoginTask.IsFaulted) {
-                                        $MfaText = $Script:LoginTask.Result | ConvertFrom-Json | ConvertFrom-Json
-
-                                        if (-not [string]::IsNullOrWhiteSpace($MfaText)) {
-                                            $Message = "`nWaiting for you to approve this sign-in request."
-
-                                            # Check if PhoneLink is active
-                                            $PhoneLinkActive = $false
-                                            if ((Get-Process | Where-Object { $_.ProcessName -eq "PhoneExperienceHost" } | Measure-Object).Count -gt 0) {
-                                                $PhoneLinkActive = $true
-                                            }
-
-                                            if ($PhoneLinkActive) {
-                                                if ($null -ne $MfaText) {
-                                                    $Message = "{0}: {1} (This value is now in your clipboard so you can paste it into your Authenticator app using PhoneLink)." -f $Message.TrimEnd("."), $MfaText
-                                                    $MfaText | Set-Clipboard
-                                                }
-                                                else {
-                                                    $Message = "Failed to set clipboard with message: {0}." -f $Message.TrimEnd(".")
-                                                }
-                                            }
-                                            else {
-                                                $Message = "{0} {1}" -f $Message.TrimEnd("."), $MfaText
-                                            }
-
-                                            $Message | Write-Host -ForegroundColor Yellow
-                                            $Script:MfaRequestDisplayed = $true
-                                            $Script:LoginSubState = $null
-                                            return $true
-                                        }
-                                    }
-                                    # Failed or empty MFA code, reset
-                                    $Script:LoginSubState = $null
-                                }
-                                return $false
-                            }
-                        }
-                    }
-
-                    # Scenario 6: MFA retry
-                    if ($Script:MfaRequestDisplayed -and $Script:IdAttributes.id -notcontains $UserNameElementId -and $Script:IdAttributes.id -notcontains $PasswordElementId -and $Script:IdAttributes.id -notin $MfaElementIds -and (  $MfaRetryId1 -in $Script:IdAttributes.id -or $MfaRetryId2 -in $Script:IdAttributes.id)) {
-
-                        "Scenario 6: MFA retry page" | Write-Verbose
-                        "Scenario 6: PreviousScenario {0}" -f $Script:PreviousScenario | Write-Verbose
-
-                        $Script:CurrentScenario = "MfaRetry"
+                    "Retry" {
                         "`nMFA failed! Please retry!" | Write-Warning
                         $Script:MfaRequestDisplayed = $false
-                        # Reset state to detect next page
+                        $Script:MfaWaitLastReported = $null
                         $Script:UnmatchedPageSince = $null
-                        $Script:LoginState = "GettingIds"
-                        $Script:IdAttributes = $null
+                        $Script:LoginState = "ReadingPage"
+                        $Script:PageState = $null
                         return $true
                     }
 
-                    # No scenario matched. Re-read the page on the next tick rather than
-                    # re-evaluating attributes that are already stale, so that a page which is only
-                    # mid-navigation is picked up as soon as it settles. The stall check above ends
-                    # this loop when the same page keeps not matching.
-                    # Nothing on this page is being acted on, so the scenario the previous page was
-                    # in no longer describes anything - keep it for the verbose trail, but do not
-                    # let the stall diagnostic report it as the current state.
-                    $Script:PreviousScenario = $Script:CurrentScenario
-                    $Script:CurrentScenario = $null
-                    $Script:LoginState = "GettingIds"
-                    $Script:LoginTask = $null
-                    $Script:IdAttributes = $null
-                    return $false
+                    "ReadNumber" {
+                        $Shown = Show-EntraApprovalNumber -Number $Decision.Value
 
+                        # Read the page again on the next tick. Nothing is clicked here - the user
+                        # approves on their phone - so this screen is left by the page changing, and
+                        # deciding from the snapshot already in hand would never see that happen.
+                        $Script:LoginState = "ReadingPage"
+                        $Script:PageState = $null
+                        return $Shown
+                    }
+
+                    "SetValueAndClick" {
+                        $Value = $Decision.Value
+                        if ($Decision.ValueSource -eq "Password") {
+                            # Read here and nowhere else, so the secret never travels in the decision.
+                            $Value = $NetworkCredential.Password
+                        }
+
+                        $SetScript = "$SetElementValueScript($(ConvertTo-JavaScriptLiteral $Decision.ElementId), $(ConvertTo-JavaScriptLiteral $Value))"
+                        $Script:LoginTask = $Script:WebView2.CoreWebView2.ExecuteScriptAsync($SetScript)
+                        $Script:PendingSubmitId = $Decision.SubmitId
+                        $Script:LoginState = "Acting"
+                        return $false
+                    }
+
+                    "Click" {
+                        $Script:LoginTask = $Script:WebView2.CoreWebView2.ExecuteScriptAsync("$ClickElementScript($(ConvertTo-JavaScriptLiteral $Decision.ElementId))")
+                        $Script:PendingSubmitId = $null
+                        $Script:LoginState = "Acting"
+                        return $false
+                    }
+
+                    "ClickAccountTile" {
+                        $Script:LoginTask = $Script:WebView2.CoreWebView2.ExecuteScriptAsync("$ClickAccountTileScript($(ConvertTo-JavaScriptLiteral $Decision.Value))")
+                        $Script:PendingSubmitId = $null
+                        $Script:LoginState = "Acting"
+                        return $false
+                    }
+
+                    "ClickUseAnotherAccount" {
+                        $Script:LoginTask = $Script:WebView2.CoreWebView2.ExecuteScriptAsync($ClickUseAnotherAccountScript)
+                        $Script:PendingSubmitId = $null
+                        $Script:LoginState = "Acting"
+                        return $false
+                    }
+
+                    "ClickProofOption" {
+                        $Script:LoginTask = $Script:WebView2.CoreWebView2.ExecuteScriptAsync("$ClickProofOptionScript($(ConvertTo-JavaScriptLiteral $Script:EntraSignInElementId.ProofsContainer), $($Decision.Index))")
+                        $Script:PendingSubmitId = $null
+                        $Script:LoginState = "Acting"
+                        return $false
+                    }
+
+                    default {
+                        # 'Wait'. The stall clock above decides when waiting has gone on long enough;
+                        # until then, read the page again on the next tick so a page that is only
+                        # mid-navigation is picked up as soon as it settles.
+                        if (-not [string]::IsNullOrWhiteSpace($Decision.Reason)) {
+                            "Invoke-WebView2MicrosoftLogin - Waiting: {0}" -f $Decision.Reason | Write-Verbose
+                        }
+
+                        $Script:LoginState = "ReadingPage"
+                        $Script:PageState = $null
+                        return $false
+                    }
                 }
             }
+
+            "Acting" {
+                if ($null -eq $Script:LoginTask) {
+                    $Script:LoginState = "ReadingPage"
+                    return $false
+                }
+
+                if (-not $Script:LoginTask.IsCompleted) {
+                    return $false
+                }
+
+                if ($Script:LoginTask.IsFaulted) {
+                    # The page could not be driven at all, so autofill is over for this sign-in. Say
+                    # so rather than going quiet.
+                    $FoundElementId = @()
+                    if ($null -ne $Script:PageState) {
+                        $IdProperty = $Script:PageState.PSObject.Properties["ids"]
+                        if ($null -ne $IdProperty) {
+                            $FoundElementId = @($IdProperty.Value)
+                        }
+                    }
+
+                    Switch-ToManualLogin -State ("Acting/{0}" -f $Script:CurrentScenario) -FoundElementId $FoundElementId -Url $Script:WebView2.Source.AbsoluteUri -Reason $Script:LoginTask.Exception.Message | Out-Null
+                    $Script:LoginTask = $null
+                    $Script:PendingSubmitId = $null
+                    return $false
+                }
+
+                # Every snippet above answers true when it found its element and acted on it, and
+                # false when it did not. That answer has to be read, because "the script ran" and
+                # "the page was driven" are not the same thing: an element Microsoft has renamed
+                # produces a script that executes perfectly and does nothing at all.
+                #
+                # Counting that as progress is what turns a renamed element into an endless loop.
+                # Progress clears the stall clock, so a click that silently did nothing would restart
+                # the clock on every tick, and Test-LoginAutomationStalled - the one thing that ends
+                # this - would never run out however long its timeout was.
+                $Acted = ($Script:LoginTask.Result -eq "true")
+                $SubmitId = $Script:PendingSubmitId
+                $Script:PendingSubmitId = $null
+
+                if (-not $Acted) {
+                    "Invoke-WebView2MicrosoftLogin - The page did not respond to the '{0}' step, leaving the stall clock running" -f $Script:CurrentScenario | Write-Verbose
+                    $Script:LoginTask = $null
+                    $Script:PageState = $null
+                    $Script:LoginState = "ReadingPage"
+                    return $false
+                }
+
+                # The field was filled in, so submit it. Reached only when the value was written -
+                # clicking submit over a field that stayed empty would send the empty value.
+                if (-not [string]::IsNullOrWhiteSpace($SubmitId)) {
+                    $Script:LoginTask = $Script:WebView2.CoreWebView2.ExecuteScriptAsync("$ClickElementScript($(ConvertTo-JavaScriptLiteral $SubmitId))")
+                    return $false
+                }
+
+                # Something was clicked, which counts as progress even when the next page happens to
+                # carry the same element ids - the username and the password screen do.
+                $Script:UnmatchedPageSince = $null
+                $Script:LoginTask = $null
+                $Script:PageState = $null
+                $Script:LoginState = "ReadingPage"
+                return $true
+            }
         }
-        else {
 
-            # TODO: Add support for grabbing the username and use it later at re-authentication
-            # # Initialize login state if needed
-            # if ($null -eq $Script:LoginState) {
-            #     $Script:LoginState = "GettingNames"
-            #     $Script:LoginTask = $null
-            #     $Script:LoginSubState = $null
-            # }
-
-            # # When not, check if we can grab the username and password
-            # switch ($Script:LoginState) {
-            #     "GettingNames" {
-            #         if ($null -eq $Script:LoginTask) {
-            #             "Starting to get element names..." | Write-Verbose
-            #             $Script:LoginTask = $WebView2.CoreWebView2.ExecuteScriptAsync($getAllNamesScript)
-            #         }
-            #         else {
-            #             if ($Script:LoginTask.IsCompleted) {
-
-            #                 if (-not $Script:LoginTask.IsFaulted) {
-            #                     $NamesJson = $Script:LoginTask.Result
-
-            #                     $NamesJson|Write-Verbose
-            #                     $Script:NameObjects = $NamesJson | ConvertFrom-Json | ConvertFrom-Json
-            #                     if ($null -ne $Script:NameObjects) {
-            #                         "Retrieved element names, switching to processing state..." | Write-Verbose
-            #                         $Script:LoginState = "Processing"
-            #                         $Script:LoginTask = $null
-            #                         return $true
-            #                     }
-            #                     else {
-            #                         "Failed to parse element names JSON." | Write-Verbose
-            #                         # Failed to parse, reset task to try again
-            #                         $Script:LoginTask = $null
-            #                     }
-            #                 }
-            #                 else {
-            #                     "Failed to get element names: $($Script:LoginTask.Exception.Message)" | Write-Verbose
-            #                     # Task faulted, reset to try again
-            #                     $Script:LoginTask = $null
-            #                 }
-            #             }
-            #         }
-            #         return $false
-            #     }
-            # }
-        }
-        $Script:PreviousScenario = $Script:CurrentScenario
-
-        # Shouldn't reach here, but return false just in case
         return $false
     }
     catch {
         [Console]::WriteLine("Error in Invoke-WebView2MicrosoftLogin: $_")
         # Reset state on error
-        $Script:LoginState = "GettingIds"
+        $Script:LoginState = "ReadingPage"
         $Script:LoginTask = $null
-        $Script:IdAttributes = $null
-        $Script:LoginSubState = $null
-        $Script:BackButtonText = $null
+        $Script:PageState = $null
+        $Script:PendingSubmitId = $null
         return $false
     }
 }

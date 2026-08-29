@@ -228,49 +228,49 @@ Clear-OmadaWebCache [-Scope {All | Cookies | BrowserProfiles | Binaries | Sessio
 ### Invoke-OmadaRestMethod (StandardMethod)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (StandardMethodNoProxy)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (CustomMethod)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (CustomMethodNoProxy)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (StandardMethod)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (StandardMethodNoProxy)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (CustomMethod)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (CustomMethodNoProxy)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 <!-- END GENERATED SYNTAX -->
@@ -682,6 +682,34 @@ The wait in seconds before the first retry, doubled for each attempt after that.
 
 ```yaml
         Type: System.Int32
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+#### -PreferredMfaMethod <string>
+The multi-factor authentication method to select when Entra ID asks which way to sign in, and the account has more than one method registered. Without this parameter the most secure method the account offers is chosen automatically, preferring an Authenticator approval over a code that has to be typed, a code over a text message, and a text message over a voice call.
+
+The values are the method identifiers Entra ID itself uses, so they mean the same thing whatever language the sign-in page is served in:
+- `PhoneAppNotification`: Microsoft Authenticator approval, including number matching.
+- `PhoneAppOTP`: A verification code from Microsoft Authenticator.
+- `OneWaySMS`: A code sent by text message.
+- `TwoWayVoiceMobile`: A call to the registered mobile number.
+- `TwoWayVoiceAlternateMobile`: A call to the registered alternate mobile number.
+- `TwoWayVoiceOffice`: A call to the registered office number.
+- `ConsolidatedTelephony`: The consolidated telephony method.
+
+When the account does not offer the requested method, a warning is written and the most secure method it does offer is used instead, so a preference never fails a sign-in that would otherwise succeed.
+
+> [!IMPORTANT]
+> This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. Supplying it with any other authentication type raises a terminating error.
+
+```yaml
+        Type: System.String
         Required: false
         Position: Named
         Accept pipeline input: false

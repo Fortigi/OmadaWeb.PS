@@ -168,7 +168,6 @@ $Script:OmadaSessions = @{}
 # Bridges the blocking WinForm/WebView2 dialog's .NET event-handler closures (which cannot see the
 # Invoke-OmadaRequest call stack) to the session context driving the current interactive login.
 $Script:CurrentWebView2Session = $null
-$Script:AccountSelectionAttempted = $false
 # Deprecation warnings are shown once per session rather than once per request - see
 # Write-OmadaDeprecationWarning.ps1. Module scope means Import-Module -Force resets the set.
 $Script:DeprecationWarningsShown = @{}
@@ -178,7 +177,6 @@ $Script:DeprecationUtcNow = $null
 $Script:DebugWebView2 = $false
 $Script:CurrentScenario = $null
 $Script:FunctionName = $null
-$Script:IdAttributes = $null
 $Script:InstalledEdgeFilePath = $null
 $Script:LastCheckedHost = $null
 $Script:LastLoggedSecond = -1
@@ -187,10 +185,56 @@ $Script:LoginFailed = $false
 $Script:LoginState = $null
 $Script:LoginSubState = $null
 $Script:LoginTask = $null
+# The snapshot of the sign-in page the current decision is being made from, and the submit
+# button still to be clicked once a field has been filled in.
+$Script:PageState = $null
+$Script:PendingSubmitId = $null
 # Seconds the sign-in automation may sit on the same page without making progress before it stops
 # filling in credentials and lets the user sign in manually - see Switch-ToManualLogin.ps1. Generous
 # on purpose: a slow round trip to Entra must not be mistaken for a changed sign-in page.
 $Script:LoginAutomationFallbackTimeout = 60
+# Every element the Microsoft sign-in automation recognizes a screen by, in one place so that the
+# JavaScript that reads the page (Get-EntraSignInProbeScript) and the rule set that judges what it
+# read (Resolve-EntraSignInScreen) cannot drift apart on a selector.
+#
+# These ids are what makes the automation language agnostic: the Entra sign-in app is served fully
+# localized, but its element ids are the same in every language, so a screen is identified by an id
+# and never by the words on it. They are, however, internal to Microsoft's sign-in app and not a
+# contracted API - which is why Resolve-EntraSignInScreen keeps structural fallbacks behind them and
+# ends in Switch-ToManualLogin rather than in a guess when none of them match.
+$Script:EntraSignInElementId = [ordered]@{
+    UserName           = "i0116"
+    Password           = "i0118"
+    Submit             = "idSIButton9"
+    Back               = "idBtn_Back"
+    KeepMeSignedIn     = "KmsiCheckboxField"
+    PasswordlessNumber = "idRemoteNGC_DisplaySign"
+    NumberMatch        = "idRichContext_DisplaySign"
+    OneTimeCode        = "idTxtBx_SAOTCC_OTC"
+    OneTimeCodeSubmit  = "idSubmit_SAOTCC_Continue"
+    ProofsContainer    = "idDiv_SAOTCS_Proofs"
+    MethodPicker       = "i0281"
+    SwitchToCredPicker = "idA_PWD_SwitchToCredPicker"
+    SignInAnotherWay   = "signInAnotherWay"
+    ForgotPassword     = "idA_PWD_ForgotPassword"
+    PasswordError      = "passwordError"
+    CantAccessAccount  = "cantAccessAccount"
+    MfaResendTotp      = "idA_SAASTO_Resend"
+    MfaResendDs        = "idA_SAASDS_Resend"
+}
+# The JavaScript built from the table above, kept because it is built from nothing else: the same
+# table produces the same script, and the sign-in reads the page over and over while a user works
+# through it. Reset here rather than only inside the function so that Import-Module -Force rebuilds
+# it - otherwise an edited selector table would keep serving the script made from the old one.
+$Script:EntraSignInProbeScript = $null
+# Set once per sign-in when -PreferredMfaMethod named a verification method the account does not
+# offer, so the 150 ms timer reports that once instead of on every tick.
+$Script:PreferredMfaMethodWarningIssued = $false
+# Wall clock of the last "still waiting for approval" line, so a multi-minute wait for someone to
+# reach for their phone reports progress without filling the verbose stream at 150 ms intervals.
+$Script:MfaWaitLastReported = $null
+# Seconds between two of those lines.
+$Script:MfaWaitReportInterval = 10
 $Script:ManualLoginFallbackActive = $false
 $Script:UnmatchedPageSignature = $null
 $Script:UnmatchedPageSince = $null
@@ -218,7 +262,6 @@ $Script:OmadaWatchdogTimeout = 600
 # Only used to seed the first session context created in this Runspace when the module is imported
 # with -ArgumentList @{ Parameters = @{ OmadaWebAuthCookie = ... } } - see Get-OmadaSessionContext.ps1.
 $Script:OmadaWebAuthCookie = $null
-$Script:PreviousAttributes = $null
 $Script:PreviousScenario = $null
 $Script:ProgressCounter = 0
 $Script:StopError = $false

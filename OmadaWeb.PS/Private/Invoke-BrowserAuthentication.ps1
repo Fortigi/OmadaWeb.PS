@@ -23,6 +23,14 @@ function Invoke-BrowserAuthentication {
     if ($BoundParams.keys -contains "Credential") {
         $SessionContext.Credential = $BoundParams.Credential
     }
+
+    # Carried on the session rather than passed down: the WebView2 sign-in runs inside a blocking
+    # WinForm dialog whose event handlers cannot see this call stack, and the session context is how
+    # everything else - the credential included - reaches them.
+    $SessionContext.PreferredMfaMethod = $null
+    if ($BoundParams.keys -contains "PreferredMfaMethod") {
+        $SessionContext.PreferredMfaMethod = $BoundParams.PreferredMfaMethod
+    }
     switch ($SessionContext.LastSessionType) {
         { $_ -eq "Normal" -and $($BoundParams.InPrivate).IsPresent -eq $true } {
             "{0} - Reset OmadaWebAuthCookie because session has changed to InPrivate" -f $MyInvocation.MyCommand | Write-Verbose
