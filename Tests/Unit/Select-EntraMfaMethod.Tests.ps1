@@ -64,6 +64,33 @@ Describe 'Select-EntraMfaMethod' -Tag 'Unit' {
             }
         }
 
+        It 'Returns nothing when no offered method says which method it is' {
+            # Clicking one of these would be choosing by position alone - the guessing this function
+            # exists not to do - and the caller cannot tell a bad choice from a good one afterwards.
+            InModuleScope 'OmadaWeb.PS' {
+                $Proof = @(
+                    [pscustomobject]@{ authMethodId = ''; isDefault = $true }
+                    [pscustomobject]@{ authMethodId = $null; isDefault = $false }
+                )
+
+                Select-EntraMfaMethod -Proof $Proof | Should -BeNullOrEmpty
+            }
+        }
+
+        It 'Ignores an unidentifiable entry rather than letting it win on position' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Proof = @(
+                    [pscustomobject]@{ authMethodId = ''; isDefault = $true }
+                    [pscustomobject]@{ authMethodId = 'OneWaySMS'; isDefault = $false }
+                )
+
+                $Chosen = Select-EntraMfaMethod -Proof $Proof
+
+                $Chosen.AuthMethodId | Should -Be 'OneWaySMS'
+                $Chosen.Index | Should -Be 1
+            }
+        }
+
         It 'Returns nothing when the page offered no methods' {
             InModuleScope 'OmadaWeb.PS' {
                 Select-EntraMfaMethod -Proof @() | Should -BeNullOrEmpty

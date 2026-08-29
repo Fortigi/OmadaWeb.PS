@@ -364,6 +364,28 @@ Describe 'Resolve-EntraSignInScreen' -Tag 'Unit' {
             }
         }
 
+        It 'Refuses to click when no offered method says which method it is' {
+            # The count check passes here - two methods, two options - so this is the case that
+            # check cannot catch. Clicking anyway would select a method by position alone.
+            $PageState = New-PageState @{
+                ids              = @('idDiv_SAOTCS_Proofs')
+                visibleIds       = @('idDiv_SAOTCS_Proofs')
+                proofs           = @(
+                    [pscustomobject]@{ authMethodId = ''; isDefault = $true }
+                    [pscustomobject]@{ authMethodId = ''; isDefault = $false }
+                )
+                proofOptionCount = 2
+            }
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PageState = $PageState } {
+                $Decision = Resolve-EntraSignInScreen -PageState $PageState -UserName 'someone@contoso.com'
+
+                $Decision.Screen | Should -Be 'MethodPicker'
+                $Decision.Action | Should -Be 'Wait'
+                $Decision.Reason | Should -Not -BeNullOrEmpty
+            }
+        }
+
         It 'Refuses to click by position when the options and the methods do not line up' {
             # The option elements carry no identifier naming the method, so position is the only
             # link between them. A page where that link is broken is a page to leave alone.

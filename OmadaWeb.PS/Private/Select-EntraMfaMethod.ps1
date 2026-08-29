@@ -110,9 +110,19 @@ function Select-EntraMfaMethod {
         }
     }
 
+    # An entry that does not say which method it is cannot be chosen. Ranking it merely as "unknown"
+    # would let it win on position alone, and the caller would then click a method by index without
+    # anything having decided it was the right one - the guessing this whole function exists not to
+    # do. When that leaves nothing, nothing is what is returned: Resolve-EntraSignInScreen reads
+    # that as a page it cannot drive and hands the sign-in over.
+    $Identified = @($Candidate | Where-Object { -not [string]::IsNullOrWhiteSpace($_.AuthMethodId) })
+    if ($Identified.Count -eq 0) {
+        return $null
+    }
+
     # Sorting on Index as well keeps the choice reproducible when two methods share a rank, which is
     # what an account with two unknown methods produces.
-    $Chosen = $Candidate | Sort-Object -Property Rank, Index | Select-Object -First 1
+    $Chosen = $Identified | Sort-Object -Property Rank, Index | Select-Object -First 1
 
     return ($Chosen | Select-Object -Property Index, AuthMethodId, IsPreferred, IsDefault)
 }
