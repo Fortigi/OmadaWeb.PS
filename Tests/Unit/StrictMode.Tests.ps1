@@ -95,9 +95,21 @@ Describe 'StrictMode' -Tag 'Unit' {
             Get-ChildItem -Path (Join-Path (Split-Path (Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS') -Recurse -Include '*.ps1', '*.psm1' |
                 ForEach-Object {
                     $ModuleFileAst = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$null)
-                    $ModuleFileAst.FindAll({ $args[0] -is [System.Management.Automation.Language.VariableExpressionAst] }, $true) |
-                        Where-Object { $_.VariablePath.IsScript -or $_.VariablePath.IsGlobal } |
-                        ForEach-Object { $null = $Assigned.Add(($_.VariablePath.UserPath -split ':', 2)[-1]) }
+                    $ModuleFileAst.FindAll({ $args[0] -is [System.Management.Automation.Language.AssignmentStatementAst] }, $true) |
+                        ForEach-Object {
+                            # Assignment targets only, never plain reads: counting a $Script: read as a
+                            # definition would let a module-scoped name that nothing ever assigns vouch
+                            # for an unqualified read of the same name, which is the bug this looks for.
+                            $ScopedTarget = $_.Left
+                            while ($ScopedTarget -is [System.Management.Automation.Language.AttributedExpressionAst]) {
+                                $ScopedTarget = $ScopedTarget.Child
+                            }
+
+                            if ($ScopedTarget -is [System.Management.Automation.Language.VariableExpressionAst] -and
+                                ($ScopedTarget.VariablePath.IsScript -or $ScopedTarget.VariablePath.IsGlobal)) {
+                                $null = $Assigned.Add(($ScopedTarget.VariablePath.UserPath -split ':', 2)[-1])
+                            }
+                        }
                 }
 
             $Ast.FindAll({ $args[0] -is [System.Management.Automation.Language.ForEachStatementAst] }, $true) |

@@ -43,7 +43,11 @@
         $OAuthScope = $BoundParams['OAuthScope']
     }
     else {
-        "{0} - Using custom OAuth2 scope: {1}" -f $MyInvocation.MyCommand, $BoundParams['OAuthScope'] | Write-Verbose
+        # Reports $OAuthScope, the default derived above. This branch is the one where no OAuthScope
+        # was supplied, so it used to announce a "custom" scope and then print the empty value of the
+        # parameter that was not passed - the opposite of what happened, on the path where a reader
+        # most needs to know which scope was actually requested.
+        "{0} - No OAuthScope parameter used, defaulting to: {1}" -f $MyInvocation.MyCommand, $OAuthScope | Write-Verbose
     }
 
     $RequestBody = @{

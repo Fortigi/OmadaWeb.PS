@@ -83,7 +83,12 @@ function Set-DynamicParameter {
         $DeclaredParameterSetNames = @($ParameterObjects.ParameterSetName)
     }
 
-    if (($DeclaredParameterSetNames | Select-Object -Unique | Measure-Object).Count -eq 1 -and [string]::IsNullOrWhiteSpace($DeclaredParameterSetNames)) {
+    # The uniqued list is indexed rather than passed whole to IsNullOrWhiteSpace, which would rely on
+    # an array-to-string conversion to say anything at all. The Count test in front of it means there
+    # is exactly one element to look at, so this asks the question the condition actually means: the
+    # wrapped cmdlet declared a single, unnamed parameter set.
+    $UniqueParameterSetNames = @($DeclaredParameterSetNames | Select-Object -Unique)
+    if ($UniqueParameterSetNames.Count -eq 1 -and [string]::IsNullOrWhiteSpace($UniqueParameterSetNames[0])) {
         $ParameterObjectSetNames += "__AllParameterSets"
         $ParameterObjects | ForEach-Object { $_.ParameterSetName = "__AllParameterSets" }
     }
