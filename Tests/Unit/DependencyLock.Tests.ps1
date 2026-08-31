@@ -12,6 +12,7 @@ BeforeAll {
     $Script:Artifacts = @($Script:Lock.Artifacts)
 
     $Script:UpdateScript = Join-Path $Script:RepositoryRoot -ChildPath 'Build\Update-DependencyLock.ps1'
+    $Script:DependabotConfig = @(Get-Content -Path (Join-Path $Script:RepositoryRoot -ChildPath '.github\dependabot.yml'))
     $Script:WorkFolder = Join-Path ([System.IO.Path]::GetTempPath()) ("OmadaWebLockTests_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
     $null = New-Item -Path $Script:WorkFolder -ItemType Directory -Force
 
@@ -31,6 +32,16 @@ BeforeAll {
         Copy-Item -Path $Script:PrivatePath -Destination (Join-Path $Root -ChildPath 'OmadaWeb.PS') -Recurse -Force
 
         return $Root
+    }
+
+    function Test-IgnoreRule {
+        # Asserts the rule, not its formatting. Update-DependencyLock.ps1 treats double-quoted,
+        # single-quoted and bare YAML scalars as the same string, so a test that insists on one of
+        # them would fail on a reformatting the script itself is happy with.
+        param([string]$PackageId)
+
+        $Pattern = '^\s*-\s+dependency-name\s*:\s*(?:"|'')?{0}(?:"|'')?\s*$' -f [regex]::Escape($PackageId)
+        return @($Script:DependabotConfig | Where-Object { $_ -match $Pattern }).Count -gt 0
     }
 
     function Get-PinnedVersion {
@@ -232,10 +243,8 @@ Describe 'Dependabot ignore policy' -Tag 'Unit' {
         $Closure = @($Script:Artifacts | Where-Object { $_.Group -eq 'SystemTextJson' })
         $Closure.Count | Should -BeGreaterThan 0 -Because 'the closure is what this rule protects'
 
-        $Config = Get-Content -Path (Join-Path $Script:RepositoryRoot -ChildPath '.github\dependabot.yml') -Raw
-
         foreach ($Artifact in $Closure) {
-            $Config | Should -BeLike "*dependency-name: `"$($Artifact.PackageId)`"*" -Because "Dependabot would otherwise propose bumping '$($Artifact.PackageId)' on its own"
+            Test-IgnoreRule $Artifact.PackageId | Should -BeTrue -Because "Dependabot would otherwise propose bumping '$($Artifact.PackageId)' on its own"
         }
     }
 
@@ -244,8 +253,7 @@ Describe 'Dependabot ignore policy' -Tag 'Unit' {
         $Desktop = @($Script:Artifacts | Where-Object { $_.Id -eq 'Selenium.Desktop' })
         $Desktop.Count | Should -Be 1
 
-        $Config = Get-Content -Path (Join-Path $Script:RepositoryRoot -ChildPath '.github\dependabot.yml') -Raw
-        $Config | Should -BeLike '*dependency-name: "Selenium.WebDriver"*'
+        Test-IgnoreRule 'Selenium.WebDriver' | Should -BeTrue -Because 'a newer Selenium cannot be loaded by Windows PowerShell 5.1 at all'
     }
 }
 

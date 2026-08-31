@@ -436,7 +436,15 @@ foreach ($Artifact in ($Artifacts | Where-Object { $_.Group -eq "SystemTextJson"
 
 if ($PSCmdlet.ParameterSetName -eq "Refresh") {
     $Line = @(Get-Content -Path $LockPath)
-    $InventoryLine = @(Get-Content -Path $InventoryPath)
+
+    # A missing inventory was already reported as a problem by the offline checks, which makes the run
+    # fail at the end with that message. Reading it unguarded here would pre-empt that with a bare
+    # file-not-found instead.
+    $InventoryLine = @()
+    if (Test-Path $InventoryPath -PathType Leaf) {
+        $InventoryLine = @(Get-Content -Path $InventoryPath)
+    }
+
     $Changed = 0
     $InventoryChanged = 0
 
@@ -491,7 +499,9 @@ if ($PSCmdlet.ParameterSetName -eq "Refresh") {
         "Updated {0} component(s) in '{1}'." -f $InventoryChanged, $InventoryPath | Write-Host -ForegroundColor Green
     }
 
-    if ($Changed -eq 0 -and $InventoryChanged -eq 0) {
+    # Only claim everything agrees when nothing was reported; otherwise this line would sit directly
+    # above the failure and contradict it.
+    if ($Changed -eq 0 -and $InventoryChanged -eq 0 -and $Problems.Count -eq 0) {
         "No changes; every pin already matches its manifest, its published bytes and the SBOM." | Write-Host -ForegroundColor Green
     }
 }
