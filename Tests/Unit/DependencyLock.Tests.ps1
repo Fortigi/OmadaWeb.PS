@@ -216,6 +216,26 @@ Describe 'Update-DependencyLock.ps1 -Check' -Tag 'Unit' {
         { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
     }
 
+    It 'Should fail when two SBOM components mirror the same lock artefact' {
+        # A duplicate LockId would leave the drift check comparing only one of them, so a stale
+        # version in the other could ship unnoticed.
+        $Root = New-LockSandbox
+        $InventoryFile = Join-Path $Root -ChildPath 'Build\Dependencies.psd1'
+        $Duplicate = @(
+            '        @{'
+            '            Name    = "Newtonsoft.Json (duplicate)"'
+            '            Version = "0.0.0"'
+            '            LockId  = "Newtonsoft.Json"'
+            '        }'
+        )
+        $Line = @(Get-Content -Path $InventoryFile)
+        $Anchor = [array]::IndexOf($Line, ($Line | Where-Object { $_ -match '^\s*Components\s*=\s*@\(\s*$' } | Select-Object -First 1))
+        $Anchor | Should -BeGreaterThan -1 -Because 'the duplicate has to be inserted into the component list'
+        @($Line[0..$Anchor]) + $Duplicate + @($Line[($Anchor + 1)..($Line.Count - 1)]) | Set-Content -Path $InventoryFile
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+
     It 'Should read the ignore list whichever way its YAML scalars are quoted' {
         # Double quotes, single quotes and bare scalars all mean the same string in YAML. Reading only
         # one form would turn a reformatting of dependabot.yml into a false build failure.

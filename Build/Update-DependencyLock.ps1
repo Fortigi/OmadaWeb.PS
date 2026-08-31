@@ -217,6 +217,15 @@ function Get-InventoryComponent {
         if ([string]::IsNullOrWhiteSpace($Component.LockId)) {
             continue
         }
+
+        # Keying by LockId silently keeps the last of any duplicates, which would leave the drift
+        # check comparing only one of them while -Refresh rewrites both. The lock refuses ambiguous
+        # ids for the same reason; so does this.
+        if ($ByLockId.ContainsKey($Component.LockId)) {
+            Add-Problem ("SBOM components '{0}' and '{1}' both mirror lock artefact '{2}'; each artefact must be mirrored once." -f $ByLockId[$Component.LockId].Name, $Component.Name, $Component.LockId)
+            continue
+        }
+
         $ByLockId[$Component.LockId] = $Component
     }
     return $ByLockId
