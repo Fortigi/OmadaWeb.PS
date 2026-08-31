@@ -115,30 +115,51 @@ puts them in this repository's dependency graph, which is what makes Dependabot 
 security-update pull requests possible for components that are never restored from a package
 manifest.
 
-The flow after a bump — whether Dependabot proposes it or a maintainer does — is:
+A bump touches three files, not one. The version lives in `Build/Dependencies`, the version and
+SHA-256 live in the lock file, and the SBOM inventory in `Build/Dependencies.psd1` reports the version
+that is actually loaded. The flow after a bump — whether Dependabot proposes it or a maintainer does
+— is:
 
 1. the version changes in `Build/Dependencies`;
-2. the pinned hash is refreshed on that branch — either by running
-   [`.github/workflows/dependency-lock-sync.yml`](.github/workflows/dependency-lock-sync.yml) from
-   the Actions tab against it, or locally with the command below. It is not automatic: workflows
-   triggered by Dependabot get a read-only token, and the alternative that works around that would
-   hand a write-scoped token to code from the branch being reviewed;
-3. PR Validation runs `Build/Update-DependencyLock.ps1 -Check`, which fails while the lock file and
-   the manifests disagree, or while a pinned hash no longer matches what the URL serves.
+2. [`.github/workflows/dependency-lock-sync.yml`](.github/workflows/dependency-lock-sync.yml)
+   refreshes the pinned hash and the SBOM version on that branch. It sweeps every open Dependabot pull
+   request weekly, and can be run from the Actions tab against a single branch — after a rebase, say.
+   The sweep checks out two trees and runs the script from the default branch against the pull request
+   branch as data, so nothing from the branch under review executes with a write-scoped token;
+3. PR Validation runs `Build/Update-DependencyLock.ps1 -Check`, which fails while the lock file, the
+   manifests and the SBOM disagree, or while a pinned hash no longer matches what the URL serves.
+
+Syncing a branch does not revalidate it — PR Validation is triggered by a `/validate` comment — so a
+maintainer still validates and merges deliberately. Only the mechanical part is automated. Note that
+pushing to a Dependabot branch also stops Dependabot rebasing it; `@dependabot recreate` gets a fresh
+one.
 
 To do it by hand:
 
 ```powershell
-./Build/Update-DependencyLock.ps1 -Refresh   # repin versions and hashes from Build/Dependencies
+./Build/Update-DependencyLock.ps1 -Refresh   # repin versions, hashes and SBOM from Build/Dependencies
 ./Build/Update-DependencyLock.ps1 -Check     # verify without changing anything
 ```
 
-Two pins are deliberately held back, both recorded with a `PinReason` in the lock file:
-`Selenium.WebDriver` for Windows PowerShell 5.1 stays at 4.11.0, the last release that still ships a
-`net4*` build, and `System.Text.Json` stays on the 8.x line, the last one that still targets
-`net462`. Both still receive advisories — the frozen Selenium pin has its own manifest under
-`Build/Dependencies/Legacy` for exactly that reason — but an advisory against either needs a human
-decision rather than an automatic bump.
+Some pins are deliberately held back, each recorded with a `PinReason` in the lock file, and each with
+a matching `ignore` rule in [`.github/dependabot.yml`](.github/dependabot.yml) so Dependabot does not
+keep proposing an update that cannot be taken:
+
+- `Selenium.WebDriver` for Windows PowerShell 5.1 stays at 4.11.0, the last release that still ships a
+  `net4*` build;
+- `System.Text.Json` stays on the 8.x line, the last one that still targets `net462`;
+- the rest of the System.Text.Json closure moves only when System.Text.Json does. The module loads
+  those assemblies with `Assembly.LoadFrom`, which applies no binding redirects, so the versions
+  loaded have to be the ones the pinned System.Text.Json resolves — bumping one on its own is not a
+  change this module can take.
+
+`-Check` asserts that last rule against the Dependabot configuration itself, so a closure member
+cannot be added to the lock without an ignore rule landing with it.
+
+All of them still receive advisories — the frozen Selenium pin has its own manifest under
+`Build/Dependencies/Legacy` for exactly that reason, and `ignore` suppresses version updates without
+suppressing alerts — but an advisory against any of them needs a human decision rather than an
+automatic bump.
 
 ### Why the WebView2 assemblies are bundled
 

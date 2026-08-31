@@ -120,7 +120,7 @@
             Group           = "SystemTextJson"
             TargetFramework = "Net4OrNetStandard"
             InstalledBy     = "Install-SystemTextJson"
-            PinReason       = "Member of the System.Text.Json 8.0.5 dependency closure."
+            PinReason       = "Member of the System.Text.Json dependency closure, held at the version that closure resolves. Assembly.LoadFrom applies no binding redirects, so it moves only when System.Text.Json moves; .github/dependabot.yml ignores version updates for it."
             Description     = "Transitive dependency of System.Text.Json on .NET Framework."
         }
         @{
@@ -134,7 +134,7 @@
             Group           = "SystemTextJson"
             TargetFramework = "Net4OrNetStandard"
             InstalledBy     = "Install-SystemTextJson"
-            PinReason       = "Member of the System.Text.Json 8.0.5 dependency closure."
+            PinReason       = "Member of the System.Text.Json dependency closure, held at the version that closure resolves. Assembly.LoadFrom applies no binding redirects, so it moves only when System.Text.Json moves; .github/dependabot.yml ignores version updates for it."
             Description     = "Transitive dependency of System.Text.Json on .NET Framework."
         }
         @{
@@ -148,7 +148,7 @@
             Group           = "SystemTextJson"
             TargetFramework = "Net4OrNetStandard"
             InstalledBy     = "Install-SystemTextJson"
-            PinReason       = "Member of the System.Text.Json 8.0.5 dependency closure."
+            PinReason       = "Member of the System.Text.Json dependency closure, held at the version that closure resolves. Assembly.LoadFrom applies no binding redirects, so it moves only when System.Text.Json moves; .github/dependabot.yml ignores version updates for it."
             Description     = "Transitive dependency of System.Text.Json on .NET Framework."
         }
         @{
@@ -162,7 +162,7 @@
             Group           = "SystemTextJson"
             TargetFramework = "Net4OrNetStandard"
             InstalledBy     = "Install-SystemTextJson"
-            PinReason       = "Member of the System.Text.Json 8.0.5 dependency closure."
+            PinReason       = "Member of the System.Text.Json dependency closure, held at the version that closure resolves. Assembly.LoadFrom applies no binding redirects, so it moves only when System.Text.Json moves; .github/dependabot.yml ignores version updates for it."
             Description     = "Transitive dependency of System.Text.Json on .NET Framework."
         }
         @{
@@ -176,7 +176,7 @@
             Group           = "SystemTextJson"
             TargetFramework = "Net4OrNetStandard"
             InstalledBy     = "Install-SystemTextJson"
-            PinReason       = "Member of the System.Text.Json 8.0.5 dependency closure."
+            PinReason       = "Member of the System.Text.Json dependency closure, held at the version that closure resolves. Assembly.LoadFrom applies no binding redirects, so it moves only when System.Text.Json moves; .github/dependabot.yml ignores version updates for it."
             Description     = "Transitive dependency of System.Text.Json on .NET Framework."
         }
         @{
@@ -190,7 +190,7 @@
             Group           = "SystemTextJson"
             TargetFramework = "Net4OrNetStandard"
             InstalledBy     = "Install-SystemTextJson"
-            PinReason       = "Member of the System.Text.Json 8.0.5 dependency closure."
+            PinReason       = "Member of the System.Text.Json dependency closure, held at the version that closure resolves. Assembly.LoadFrom applies no binding redirects, so it moves only when System.Text.Json moves; .github/dependabot.yml ignores version updates for it."
             Description     = "Transitive dependency of System.Text.Json on .NET Framework."
         }
         @{
@@ -204,7 +204,7 @@
             Group           = "SystemTextJson"
             TargetFramework = "Net4OrNetStandard"
             InstalledBy     = "Install-SystemTextJson"
-            PinReason       = "Member of the System.Text.Json 8.0.5 dependency closure."
+            PinReason       = "Member of the System.Text.Json dependency closure, held at the version that closure resolves. Assembly.LoadFrom applies no binding redirects, so it moves only when System.Text.Json moves; .github/dependabot.yml ignores version updates for it."
             Description     = "Transitive dependency of System.Text.Json on .NET Framework."
         }
         @{

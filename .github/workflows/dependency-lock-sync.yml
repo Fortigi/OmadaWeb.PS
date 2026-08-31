@@ -1,23 +1,35 @@
 name: Dependency Lock Sync
 
-# Refreshes OmadaWeb.PS/DependencyLock.psd1 after a version changed in Build/Dependencies.
+# Refreshes OmadaWeb.PS/DependencyLock.psd1 and Build/Dependencies.psd1 after a version changed in
+# Build/Dependencies.
 #
 # The module verifies every binary it downloads against the SHA-256 pinned in the lock file, so a
-# version bump is only half an update: the hash has to be recomputed from the newly published
-# package. PR Validation fails while the two disagree, so this is the step that makes such a pull
-# request mergeable.
+# version bump is only part of an update: the hash has to be recomputed from the newly published
+# package, and the SBOM has to report the version that is actually loaded. PR Validation fails while
+# any of the three disagree, so this is the step that makes such a pull request mergeable.
 #
-# Run it from the Actions tab against the branch that carries the bump - typically a Dependabot
-# branch - or do the same thing locally with:
+# It runs weekly, a few hours after Dependabot's Monday run, over every open Dependabot pull request
+# against Build/Dependencies - so a bump arrives already synced rather than waiting for someone to
+# notice a red pull request. It can also be started by hand from the Actions tab for a single branch,
+# which is what to use after a rebase. The same thing locally is:
 #
 #   ./Build/Update-DependencyLock.ps1 -Refresh
 #
-# Deliberately NOT triggered automatically on Dependabot's pull requests. Workflows triggered by
-# Dependabot run with a read-only GITHUB_TOKEN that the permissions key cannot elevate, so an
-# automatic push would fail with 403 on exactly the pull requests it is meant to serve. Making it
-# work anyway would mean pull_request_target with a checkout of the pull request head, which hands a
-# write-scoped token to code from the branch under review - not a trade this module should make to
-# save one click. The -Check gate in PR Validation still blocks an unsynced bump from merging.
+# Two things worth knowing before reading the jobs below.
+#
+# Trust. The sweep pushes to a branch it did not write, so it must not *execute* anything from that
+# branch. It checks out two trees - the default branch and the pull request branch - and runs the
+# script from the default branch against the other one as data, via -RepositoryRoot. Nothing from the
+# pull request branch runs with the write-scoped token. This is also why the workflow is triggered by
+# schedule and workflow_dispatch rather than by the pull request itself: both run in the context of
+# the default branch, so the token is a normal one and no pull_request_target is involved.
+#
+# Consequences on the pull request. Pushing to a Dependabot branch stops Dependabot from rebasing it
+# automatically; comment `@dependabot recreate` to get a fresh one. And because PR Validation is
+# triggered by an `/validate` comment rather than by a push, syncing the lock does not revalidate the
+# pull request - a maintainer still comments `/validate`, and the -Check gate still blocks an unsynced
+# bump from merging. The human decision to take a version is unchanged; only the mechanical part is
+# automated.
 
 on:
   workflow_dispatch:
@@ -26,41 +38,117 @@ on:
         description: 'Branch carrying the version bump (e.g. dependabot/nuget/Build/Dependencies/Selenium.WebDriver-4.48.0)'
         required: true
         type: string
+  schedule:
+    # Monday 06:00 UTC. Dependabot is scheduled for Monday in .github/dependabot.yml and opens its
+    # pull requests in the small hours, so by now there is something to sync.
+    - cron: '0 6 * * 1'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: dependency-lock-sync-${{ inputs.branch }}
-  cancel-in-progress: true
+  # A manual run for one branch is independent of the weekly sweep, so it gets its own group. Two
+  # runs are never cancelled in favour of each other: the loser would leave a branch half-synced.
+  group: dependency-lock-sync-${{ github.event.inputs.branch || 'sweep' }}
+  cancel-in-progress: false
 
 jobs:
-  sync:
-    name: Refresh pinned hashes
-    runs-on: windows-latest
+  discover:
+    name: Find branches to sync
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      branches: ${{ steps.list.outputs.branches }}
+      count: ${{ steps.list.outputs.count }}
 
     steps:
-      - name: Checkout the branch
+      - name: List the branches carrying a bump
+        id: list
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // workflow_dispatch names one branch explicitly and skips discovery entirely.
+            if (context.eventName === 'workflow_dispatch') {
+              const branch = context.payload.inputs.branch;
+              core.setOutput('branches', JSON.stringify([branch]));
+              core.setOutput('count', '1');
+              return;
+            }
+
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            // Only Dependabot's own branches, and only those touching the manifests this lock
+            // tracks. Anything else either has no pins to refresh or is not ours to push to.
+            const branches = pulls
+              .filter(pull => pull.user.login === 'dependabot[bot]')
+              .filter(pull => pull.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`)
+              .filter(pull => pull.head.ref.startsWith('dependabot/nuget/Build/Dependencies'))
+              .map(pull => pull.head.ref);
+
+            core.info(`Branches to sync: ${branches.length ? branches.join(', ') : '(none)'}`);
+            core.setOutput('branches', JSON.stringify(branches));
+            core.setOutput('count', String(branches.length));
+
+  sync:
+    name: Refresh pinned hashes
+    needs: discover
+    if: needs.discover.outputs.count != '0'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    strategy:
+      # One failing branch must not stop the others from being synced.
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJson(needs.discover.outputs.branches) }}
+
+    steps:
+      - name: Checkout the default branch
+        # The trusted tree. Only the script from here is ever executed.
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.branch }}
+          path: trusted
+          persist-credentials: false
 
-      - name: Refresh the dependency lock
-        shell: pwsh
-        run: ./Build/Update-DependencyLock.ps1 -Refresh
+      - name: Checkout the branch carrying the bump
+        # The untrusted tree. Read as data, written to, pushed - never executed.
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.branch }}
+          path: bump
 
-      - name: Commit the refreshed lock
+      - name: Refresh the dependency lock and the SBOM
         shell: pwsh
+        # The Dependabot configuration is read from the trusted tree rather than from the branch,
+        # because that is the copy Dependabot itself obeys: it only ever reads dependabot.yml from the
+        # default branch. Taking it from the branch would fail the closure ignore-policy check on any
+        # bump opened before those rules landed - refusing to sync a branch over a rule that does not
+        # apply to it. PR Validation still checks the branch's own copy, where it belongs.
+        run: >-
+          ./trusted/Build/Update-DependencyLock.ps1 -Refresh
+          -RepositoryRoot (Resolve-Path ./bump).Path
+          -DependabotConfigPath (Resolve-Path ./trusted/.github/dependabot.yml).Path
+
+      - name: Commit the refreshed pins
+        shell: pwsh
+        working-directory: bump
         run: |
           git config user.email "devops@fortigi.nl"
           git config user.name "GitHub Actions"
 
-          $changed = git status --porcelain -- OmadaWeb.PS/DependencyLock.psd1
+          $changed = git status --porcelain -- OmadaWeb.PS/DependencyLock.psd1 Build/Dependencies.psd1
           if ([string]::IsNullOrWhiteSpace($changed)) {
-            Write-Host "Lock file already matches the manifest; nothing to commit."
+            Write-Host "Pins already match the manifest; nothing to commit."
             exit 0
           }
 
-          git add OmadaWeb.PS/DependencyLock.psd1
-          git commit -m "deps: refresh pinned SHA-256 hashes for the bumped package"
-          git push origin HEAD:${{ inputs.branch }}
+          git add OmadaWeb.PS/DependencyLock.psd1 Build/Dependencies.psd1
+          git commit -m "deps: refresh pinned SHA-256 hashes and SBOM versions for the bumped package"
+          git push origin HEAD:${{ matrix.branch }}

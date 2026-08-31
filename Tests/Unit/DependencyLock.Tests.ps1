@@ -10,6 +10,34 @@ BeforeAll {
 
     $Script:Lock = Import-PowerShellDataFile -Path $Script:LockPath
     $Script:Artifacts = @($Script:Lock.Artifacts)
+
+    $Script:UpdateScript = Join-Path $Script:RepositoryRoot -ChildPath 'Build\Update-DependencyLock.ps1'
+    $Script:WorkFolder = Join-Path ([System.IO.Path]::GetTempPath()) ("OmadaWebLockTests_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
+    $null = New-Item -Path $Script:WorkFolder -ItemType Directory -Force
+
+    function New-LockSandbox {
+        # A throwaway copy of everything Update-DependencyLock.ps1 reads, so a test can doctor one
+        # file and assert the gate notices. The script itself is always run from the real repository,
+        # which is also how the scheduled sweep invokes it: trusted script, untrusted tree.
+        $Root = Join-Path $Script:WorkFolder -ChildPath ([System.Guid]::NewGuid().ToString('N'))
+        foreach ($Relative in @('OmadaWeb.PS', 'Build\Dependencies', '.github')) {
+            $null = New-Item -Path (Join-Path $Root -ChildPath $Relative) -ItemType Directory -Force
+        }
+
+        Copy-Item -Path $Script:LockPath -Destination (Join-Path $Root -ChildPath 'OmadaWeb.PS\DependencyLock.psd1')
+        Copy-Item -Path $Script:InventoryPath -Destination (Join-Path $Root -ChildPath 'Build\Dependencies.psd1')
+        Copy-Item -Path (Join-Path $Script:RepositoryRoot -ChildPath '.github\dependabot.yml') -Destination (Join-Path $Root -ChildPath '.github\dependabot.yml')
+        Copy-Item -Path (Join-Path $Script:RepositoryRoot -ChildPath 'Build\Dependencies') -Destination (Join-Path $Root -ChildPath 'Build') -Recurse -Force
+        Copy-Item -Path $Script:PrivatePath -Destination (Join-Path $Root -ChildPath 'OmadaWeb.PS') -Recurse -Force
+
+        return $Root
+    }
+}
+
+AfterAll {
+    if ($Script:WorkFolder -and (Test-Path $Script:WorkFolder)) {
+        Remove-Item -Path $Script:WorkFolder -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Describe 'DependencyLock.psd1' -Tag 'Unit' {
@@ -102,6 +130,83 @@ Describe 'Dependency manifests' -Tag 'Unit' {
             $Reference.Count | Should -Be 1 -Because "'$($Artifact.PackageId)' must appear once in '$($Artifact.Manifest)' to enter the dependency graph"
             $Reference[0].Version | Should -Be $Artifact.Version -Because "a pin that disagrees with the manifest means the hash was never refreshed"
         }
+    }
+}
+
+Describe 'Update-DependencyLock.ps1 -Check' -Tag 'Unit' {
+    # -SkipDownload throughout: these assert the offline gates, and a unit test must not depend on
+    # nuget.org being reachable.
+    It 'Should pass on the repository as it stands' {
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot (New-LockSandbox) } | Should -Not -Throw
+    }
+
+    It 'Should fail when the SBOM reports a version the lock does not pin' {
+        # The gap that kept every Dependabot pull request red even once its hashes were refreshed:
+        # Build/Dependencies.psd1 was the third file that had to move, and nothing moved it.
+        $Root = New-LockSandbox
+        $InventoryFile = Join-Path $Root -ChildPath 'Build\Dependencies.psd1'
+        (Get-Content -Path $InventoryFile -Raw).Replace('Version         = "13.0.4"', 'Version         = "13.0.3"') |
+            Set-Content -Path $InventoryFile -NoNewline
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+
+    It 'Should fail when a closure member has no Dependabot ignore rule' {
+        $Root = New-LockSandbox
+        $ConfigFile = Join-Path $Root -ChildPath '.github\dependabot.yml'
+        # Read fully before writing: streaming Get-Content straight back into Set-Content on the same
+        # path leaves the file open for reading while Set-Content wants it.
+        $Line = @(Get-Content -Path $ConfigFile | Where-Object { $_ -notmatch 'dependency-name: "System.Memory"' })
+        $Line | Set-Content -Path $ConfigFile
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+
+    It 'Should fail when the lock and the Dependabot manifest disagree on a version' {
+        $Root = New-LockSandbox
+        $ManifestFile = Join-Path $Root -ChildPath 'Build\Dependencies\Dependencies.csproj'
+        (Get-Content -Path $ManifestFile -Raw).Replace('"Newtonsoft.Json" Version="13.0.4"', '"Newtonsoft.Json" Version="13.0.3"') |
+            Set-Content -Path $ManifestFile -NoNewline
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+
+    It 'Should not accept an ignore rule that belongs to a different manifest directory' {
+        # Legacy/ has its own ignore list. A rule there must not satisfy a requirement about the main
+        # manifest, or the closure check would pass on a configuration that does not govern it.
+        $Root = New-LockSandbox
+        $ConfigFile = Join-Path $Root -ChildPath '.github\dependabot.yml'
+        $Line = @(Get-Content -Path $ConfigFile | Where-Object { $_ -notmatch 'dependency-name: "System.Memory"' })
+        # Re-add it under the Legacy directory block, which is the last one in the file.
+        ($Line + '      - dependency-name: "System.Memory"') | Set-Content -Path $ConfigFile
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+}
+
+Describe 'Dependabot ignore policy' -Tag 'Unit' {
+    # The System.Text.Json closure cannot be upgraded a member at a time: the module loads these
+    # assemblies with Assembly.LoadFrom, which applies no binding redirects, so the versions loaded
+    # have to be the ones the pinned System.Text.Json resolves. Dependabot has to be told, or it keeps
+    # opening pull requests that can never go green - which is what happened to #55 and #58.
+    It 'Should ignore version updates for every member of the System.Text.Json closure' {
+        $Closure = @($Script:Artifacts | Where-Object { $_.Group -eq 'SystemTextJson' })
+        $Closure.Count | Should -BeGreaterThan 0 -Because 'the closure is what this rule protects'
+
+        $Config = Get-Content -Path (Join-Path $Script:RepositoryRoot -ChildPath '.github\dependabot.yml') -Raw
+
+        foreach ($Artifact in $Closure) {
+            $Config | Should -BeLike "*dependency-name: `"$($Artifact.PackageId)`"*" -Because "Dependabot would otherwise propose bumping '$($Artifact.PackageId)' on its own"
+        }
+    }
+
+    It 'Should keep the frozen Selenium pin out of Dependabot version updates' {
+        # 4.11.0 is the last Selenium that ships a net4* build, so the Desktop pin must not move.
+        $Desktop = @($Script:Artifacts | Where-Object { $_.Id -eq 'Selenium.Desktop' })
+        $Desktop.Count | Should -Be 1
+
+        $Config = Get-Content -Path (Join-Path $Script:RepositoryRoot -ChildPath '.github\dependabot.yml') -Raw
+        $Config | Should -BeLike '*dependency-name: "Selenium.WebDriver"*'
     }
 }
 
