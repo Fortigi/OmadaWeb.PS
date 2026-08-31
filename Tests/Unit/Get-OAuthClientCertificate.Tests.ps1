@@ -61,6 +61,25 @@ Describe 'Get-OAuthClientCertificate' -Tag 'Unit' {
         }
     }
 
+    Context 'A password with nothing to open' {
+        It 'Should throw when a password accompanies a thumbprint' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Thumbprint = $Script:Thumbprint } {
+                # The thumbprint would resolve perfectly well, so the request would succeed and the
+                # password would be silently ignored - leaving the caller believing the certificate
+                # came from a file it never read.
+                { Get-OAuthClientCertificate -CertificateThumbprint $Thumbprint -CertificatePassword (ConvertTo-SecureString 'x' -AsPlainText -Force) -ErrorAction Stop } | Should -Throw '*without -OAuthCertificatePath*'
+            }
+        }
+
+        It 'Should throw when a password accompanies an already loaded certificate' {
+            {
+                InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:TestCertificate } {
+                    Get-OAuthClientCertificate -Certificate $Certificate -CertificatePassword (ConvertTo-SecureString 'x' -AsPlainText -Force) -ErrorAction Stop
+                }
+            } | Should -Throw '*without -OAuthCertificatePath*'
+        }
+    }
+
     Context 'More than one source' {
         It 'Should throw rather than pick one' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Thumbprint = $Script:Thumbprint; Path = $Script:CertificateFilePath } {

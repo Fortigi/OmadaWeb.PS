@@ -83,10 +83,15 @@ function Get-OAuthClientCertificate {
         "{0} - More than one client certificate was supplied ({1}). Provide exactly one of -OAuthCertificate, -OAuthCertificateThumbprint or -OAuthCertificatePath." -f $MyInvocation.MyCommand, ($SuppliedSources -join ", ") | Write-Error -ErrorAction "Stop"
     }
 
+    # Checked for every certificate source, not only for none of them. A password alongside a
+    # thumbprint or an already loaded certificate has nothing to open, and passing it is a sign the
+    # caller believes something about this call that is not true - most likely that the certificate
+    # is being read from a file. Silently ignoring it would let that belief stand.
+    if ($null -ne $CertificatePassword -and [string]::IsNullOrWhiteSpace($CertificatePath)) {
+        "{0} - OAuthCertificatePassword was supplied without -OAuthCertificatePath. The password only applies to a PKCS#12 file, so there is nothing to open with it." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+    }
+
     if ($SuppliedSources.Count -eq 0) {
-        if ($null -ne $CertificatePassword) {
-            "{0} - OAuthCertificatePassword was supplied without -OAuthCertificatePath, so there is no certificate file to open with it." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
-        }
         return $null
     }
 
