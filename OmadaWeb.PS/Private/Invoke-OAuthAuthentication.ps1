@@ -19,7 +19,7 @@
     $ClientCertificate = Get-OAuthClientCertificate -Certificate $BoundParams['OAuthCertificate'] -CertificateThumbprint $BoundParams['OAuthCertificateThumbprint'] -CertificatePath $BoundParams['OAuthCertificatePath'] -CertificatePassword $BoundParams['OAuthCertificatePassword']
 
     if ($null -eq $ClientCertificate -and $null -eq $BoundParams['Credential']) {
-        "{0} - Credentials not provided! This mandatory for OAuth authentication! Supply -Credential holding the client id and secret, or a client certificate with -OAuthCertificateThumbprint, -OAuthCertificatePath or -OAuthCertificate together with -ClientId." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+        "{0} - Credentials not provided! This is mandatory for OAuth authentication. Supply -Credential holding the client id and secret, or a client certificate with -OAuthCertificateThumbprint, -OAuthCertificatePath or -OAuthCertificate together with -ClientId." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
     }
 
     $ClientId = $null
@@ -47,7 +47,7 @@
     }
 
     if ($null -eq $BoundParams['EntraIdTenantId'] -and -not $BoundParams.Keys.Contains("OAuthUri")) {
-        "{0} - EntraIdTenantId not provided! This mandatory for Entra based OAuth authentication when no custom OAuthUri is provided!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+        "{0} - EntraIdTenantId not provided! This is mandatory for Entra based OAuth authentication when no custom OAuthUri is provided." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
     }
 
     $OAuthUri = $null

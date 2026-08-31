@@ -28,8 +28,15 @@ function Get-OAuthClientCertificate {
         here rather than at signing time, so the error names the certificate the caller asked for
         instead of a failure inside the token request.
 
+        Every error raised here reaches the user of Invoke-OmadaRestMethod or Invoke-OmadaWebRequest
+        unchanged, so the messages name the public parameters - -OAuthCertificate,
+        -OAuthCertificateThumbprint, -OAuthCertificatePath, -OAuthCertificatePassword - and not this
+        function's own, shorter ones. Telling somebody to supply -CertificatePath when no such
+        parameter exists on the command they called is worse than saying nothing.
+
     .PARAMETER Certificate
-        An already loaded certificate, including its private key.
+        An already loaded certificate, including its private key. Supplied by the caller from
+        -OAuthCertificate.
 
     .PARAMETER CertificateThumbprint
         The thumbprint of a certificate in 'CurrentUser\My' or 'LocalMachine\My'. Spaces and other
@@ -61,34 +68,34 @@ function Get-OAuthClientCertificate {
 
     [string[]]$SuppliedSources = @()
     if ($null -ne $Certificate) {
-        $SuppliedSources += "Certificate"
+        $SuppliedSources += "OAuthCertificate"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($CertificateThumbprint)) {
-        $SuppliedSources += "CertificateThumbprint"
+        $SuppliedSources += "OAuthCertificateThumbprint"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($CertificatePath)) {
-        $SuppliedSources += "CertificatePath"
+        $SuppliedSources += "OAuthCertificatePath"
     }
 
     if ($SuppliedSources.Count -gt 1) {
-        "{0} - More than one client certificate was supplied ({1}). Provide exactly one of -Certificate, -CertificateThumbprint or -CertificatePath." -f $MyInvocation.MyCommand, ($SuppliedSources -join ", ") | Write-Error -ErrorAction "Stop"
+        "{0} - More than one client certificate was supplied ({1}). Provide exactly one of -OAuthCertificate, -OAuthCertificateThumbprint or -OAuthCertificatePath." -f $MyInvocation.MyCommand, ($SuppliedSources -join ", ") | Write-Error -ErrorAction "Stop"
     }
 
     if ($SuppliedSources.Count -eq 0) {
         if ($null -ne $CertificatePassword) {
-            "{0} - CertificatePassword was supplied without CertificatePath, so there is no certificate file to open with it." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+            "{0} - OAuthCertificatePassword was supplied without -OAuthCertificatePath, so there is no certificate file to open with it." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
         }
         return $null
     }
 
     if ($null -ne $Certificate) {
         if (-not $Certificate.HasPrivateKey) {
-            "{0} - The certificate supplied to -Certificate (thumbprint {1}) has no private key, so it cannot sign a client assertion." -f $MyInvocation.MyCommand, $Certificate.Thumbprint | Write-Error -ErrorAction "Stop"
+            "{0} - The certificate supplied to -OAuthCertificate (thumbprint {1}) has no private key, so it cannot sign a client assertion." -f $MyInvocation.MyCommand, $Certificate.Thumbprint | Write-Error -ErrorAction "Stop"
         }
 
-        "{0} - Using the client certificate supplied to -Certificate. Thumbprint: {1}, subject: {2}" -f $MyInvocation.MyCommand, $Certificate.Thumbprint, $Certificate.Subject | Write-Verbose
+        "{0} - Using the client certificate supplied to -OAuthCertificate. Thumbprint: {1}, subject: {2}" -f $MyInvocation.MyCommand, $Certificate.Thumbprint, $Certificate.Subject | Write-Verbose
         return $Certificate
     }
 
@@ -129,7 +136,7 @@ function Get-OAuthClientCertificate {
         }
 
         if ($FoundCertificates.Count -eq 0) {
-            "{0} - No certificate with thumbprint {1} was found in 'CurrentUser\My' or 'LocalMachine\My'. Install the certificate for the account this runs under, or supply it with -CertificatePath." -f $MyInvocation.MyCommand, $NormalizedThumbprint | Write-Error -ErrorAction "Stop"
+            "{0} - No certificate with thumbprint {1} was found in 'CurrentUser\My' or 'LocalMachine\My'. Install the certificate for the account this runs under, or supply it with -OAuthCertificatePath." -f $MyInvocation.MyCommand, $NormalizedThumbprint | Write-Error -ErrorAction "Stop"
         }
 
         $CertificatesWithPrivateKey = @($FoundCertificates | Where-Object { $_.HasPrivateKey })
@@ -198,7 +205,7 @@ function Get-OAuthClientCertificate {
     }
 
     if ($null -eq $LoadedCertificate) {
-        "{0} - The certificate file '{1}' could not be opened with a usable private key: {2}. Check the password supplied to -CertificatePassword and that the file is a PKCS#12 (.pfx) export that includes the private key." -f $MyInvocation.MyCommand, $ResolvedCertificatePath, $LastLoadError | Write-Error -ErrorAction "Stop"
+        "{0} - The certificate file '{1}' could not be opened with a usable private key: {2}. Check the password supplied to -OAuthCertificatePassword and that the file is a PKCS#12 (.pfx) export that includes the private key." -f $MyInvocation.MyCommand, $ResolvedCertificatePath, $LastLoadError | Write-Error -ErrorAction "Stop"
     }
 
     "{0} - Using the client certificate from '{1}'. Thumbprint: {2}, subject: {3}, expires: {4}" -f $MyInvocation.MyCommand, $ResolvedCertificatePath, $LoadedCertificate.Thumbprint, $LoadedCertificate.Subject, $LoadedCertificate.NotAfter | Write-Verbose

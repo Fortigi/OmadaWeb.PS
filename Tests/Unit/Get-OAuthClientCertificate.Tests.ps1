@@ -54,7 +54,9 @@ Describe 'Get-OAuthClientCertificate' -Tag 'Unit' {
 
         It 'Should throw when a password is supplied without a file to open with it' {
             InModuleScope 'OmadaWeb.PS' {
-                { Get-OAuthClientCertificate -CertificatePassword (ConvertTo-SecureString 'x' -AsPlainText -Force) -ErrorAction Stop } | Should -Throw '*without CertificatePath*'
+                # The message names the public parameter, not this helper's own: it is what the user
+                # of Invoke-OmadaRestMethod sees, and -CertificatePath does not exist there.
+                { Get-OAuthClientCertificate -CertificatePassword (ConvertTo-SecureString 'x' -AsPlainText -Force) -ErrorAction Stop } | Should -Throw '*without -OAuthCertificatePath*'
             }
         }
     }
