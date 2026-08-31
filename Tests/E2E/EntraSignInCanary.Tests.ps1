@@ -65,37 +65,50 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
         $SecurePassword = ConvertTo-SecureString -String $Env:OMADAWEBPS_CANARY_PASSWORD -AsPlainText -Force
         $Credential = [System.Management.Automation.PSCredential]::new($Env:OMADAWEBPS_CANARY_USERNAME, $SecurePassword)
 
-        # -ForceAuthentication and -SkipCookieCache together are what make a scheduled run mean
-        # something. A cached cookie would satisfy the request without a sign-in page ever being
-        # drawn, so the canary would go green on the strength of yesterday's success.
         $Script:CanaryWarning = @()
         $Script:CanaryError = $null
         $Script:CanaryResponse = $null
 
-        # Declared before the call rather than left to -WarningVariable to create: the tests run
-        # under Set-StrictMode -Version Latest, where reading it in the catch block after a failure
-        # that produced no warning would be an unset-variable error masking the real one.
-        $CanaryWarningOutput = @()
-
+        # Warnings are captured by merging the warning stream into the success stream and sorting the
+        # records back out, rather than with -WarningVariable. Switch-ToManualLogin emits its
+        # diagnostic from a WinForms timer handler running inside the blocking ShowDialog call, not
+        # from Invoke-OmadaWebRequest's own pipeline, and -WarningVariable collects only the latter.
+        # A capture that quietly missed it would leave the canary reporting a failure with no reason
+        # attached, which is the failure this whole exercise is meant to prevent.
+        #
+        # -ForceAuthentication and -SkipCookieCache are what make a scheduled run mean anything: a
+        # cached cookie would satisfy the request without a sign-in page ever being drawn, so the
+        # canary would go green on the strength of yesterday's success.
         try {
-            $Script:CanaryResponse = Invoke-OmadaWebRequest -Uri $Script:RelyingParty.ResourceUrl `
+            $Output = Invoke-OmadaWebRequest -Uri $Script:RelyingParty.ResourceUrl `
                 -AuthenticationType WebView2 `
                 -Credential $Credential `
                 -ForceAuthentication `
                 -SkipCookieCache `
-                -ErrorAction Stop `
-                -WarningVariable CanaryWarningOutput
+                -ErrorAction Stop 3>&1
 
-            $Script:CanaryWarning = @($CanaryWarningOutput)
+            foreach ($Record in @($Output)) {
+                if ($Record -is [System.Management.Automation.WarningRecord]) {
+                    $Script:CanaryWarning += $Record.Message
+                }
+                else {
+                    $Script:CanaryResponse = $Record
+                }
+            }
         }
         catch {
             $Script:CanaryError = $_
-            $Script:CanaryWarning = @($CanaryWarningOutput)
         }
 
-        # The one diagnostic that names a broken selector. Switch-ToManualLogin writes it to the
-        # warning stream with the state, the selectors expected but absent, the ones present, and the
-        # page path - so it is reported verbatim rather than summarized.
+        # Third route to the same fact, and the one that cannot be lost in stream plumbing: the flag
+        # Switch-ToManualLogin sets in the module's own scope. Read after the fact it is only
+        # suggestive - a retry window calls Reset-LoginAutomationState and clears it again - so it is
+        # reported rather than asserted on, and the assertions below rest on whether the sign-in
+        # actually completed.
+        $Script:ManualFallbackFlag = InModuleScope 'OmadaWeb.PS' { $Script:ManualLoginFallbackActive }
+
+        # The diagnostic that names a broken selector: the state, the selectors expected but absent,
+        # the ones present, and the page path. Reported verbatim rather than summarized.
         $Script:FallbackWarning = @($Script:CanaryWarning | Where-Object { $_ -match 'Automated Microsoft sign-in could not continue' })
 
         if ($Script:FallbackWarning.Count -gt 0) {
@@ -116,13 +129,29 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
         Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
     }
 
-    It 'Still recognizes every Microsoft sign-in screen it was shown' {
-        # This is the assertion the whole canary exists for. Its message is what a maintainer reads
-        # first in a failed run, so it carries the diagnostic rather than pointing at a log.
-        $Script:FallbackWarning -join [System.Environment]::NewLine | Should -BeNullOrEmpty -Because (
-            "credential autofill fell back to manual sign-in, which means Microsoft changed a page this module recognizes by element id. " +
-            "The diagnostic above names the state and the missing selector; update `$Script:EntraSignInElementId in OmadaWeb.PS/OmadaWeb.PS.psm1 (issue #32)"
+    It 'Signed in with the credential, without falling back to manual entry' {
+        # The assertion the whole canary exists for, and the one that does not depend on catching a
+        # warning: nobody is at this browser, so if autofill stops filling fields the sign-in simply
+        # never completes. That makes "did the request succeed" the reliable signal, and the captured
+        # diagnostic an enrichment of it rather than the thing being tested.
+        $Message = if ($null -eq $Script:CanaryError) { "" } else { $Script:CanaryError.Exception.Message }
+        $Diagnostic = $Script:FallbackWarning -join [System.Environment]::NewLine
+        if ([string]::IsNullOrWhiteSpace($Diagnostic) -and $Script:ManualFallbackFlag) {
+            $Diagnostic = "The module reported that it had handed the sign-in back to the user, but the diagnostic naming the selector was not captured."
+        }
+
+        $Report = (@($Message, $Diagnostic) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [System.Environment]::NewLine
+
+        $Report | Should -BeNullOrEmpty -Because (
+            "credential autofill did not carry the sign-in through, which usually means Microsoft changed a page this module recognizes by element id. " +
+            "Update `$Script:EntraSignInElementId in OmadaWeb.PS/OmadaWeb.PS.psm1 from the diagnostic above (issue #32)"
         )
+    }
+
+    It 'Did not report a selector it no longer recognizes' {
+        # Separate from the assertion above so that a run which somehow completed the sign-in while
+        # still reporting an unrecognized page is not quietly passed over.
+        $Script:FallbackWarning -join [System.Environment]::NewLine | Should -BeNullOrEmpty
     }
 
     It 'Was not refused by Entra ID' {
@@ -130,13 +159,6 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
         # password or a Conditional Access block all land here instead, and all are tenant
         # configuration rather than a Microsoft DOM change.
         $Script:RelyingParty.CallbackError | Should -BeNullOrEmpty -Because "Entra returned this OAuth error code instead of an authorization code; see docs/entra-canary.md"
-    }
-
-    It 'Completed the sign-in without erroring' {
-        $Message = if ($null -eq $Script:CanaryError) { "" } else { $Script:CanaryError.Exception.Message }
-
-        $Message | Should -BeNullOrEmpty
-        $Script:CanaryError | Should -BeNullOrEmpty
     }
 
     It 'Actually travelled through Entra and back' {

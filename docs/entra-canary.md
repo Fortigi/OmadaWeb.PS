@@ -201,8 +201,14 @@ through a second literal replacement of all four values, because that text is ab
 1. **Read the diagnostic in the issue.** It is what `Switch-ToManualLogin` emitted, and it names the
    state, the elements that were expected but absent, the ones that were present, and the page path.
 2. **Decide which failure it is.** The canary asserts several things separately, on purpose:
-   - *"Still recognizes every Microsoft sign-in screen it was shown"* failed → a selector broke. This
-     is the one the canary exists for.
+   - *"Signed in with the credential, without falling back to manual entry"* failed → a selector
+     broke. This is the one the canary exists for. Note that it rests on whether the sign-in actually
+     completed rather than on catching the warning: nobody is at this browser, so if autofill stops
+     filling fields the sign-in simply never finishes. The diagnostic enriches that verdict; it does
+     not carry it.
+   - *"Did not report a selector it no longer recognizes"* failed on its own → the sign-in completed
+     but the module still reported a page it did not recognise. Worth reading: something changed that
+     the automation recovered from.
    - *"Was not refused by Entra ID"* failed → tenant configuration, not Microsoft. An OAuth error code
      is reported: a disabled account, an expired password, a Conditional Access block, or consent
      that was revoked.
