@@ -145,7 +145,12 @@ Describe 'New-OAuthClientAssertion' -Tag 'Unit' {
             # This is the check the identity provider itself performs. If it passes here, the only
             # thing between this token and a successful sign-in is the tenant configuration.
             $PublicKey = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($Script:TestCertificate)
-            $PublicKey.VerifyData($SigningInput, $Signature, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1) | Should -BeTrue
+            try {
+                $PublicKey.VerifyData($SigningInput, $Signature, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1) | Should -BeTrue
+            }
+            finally {
+                $PublicKey.Dispose()
+            }
         }
 
         It 'Should not verify against a tampered payload' {
@@ -158,7 +163,12 @@ Describe 'New-OAuthClientAssertion' -Tag 'Unit' {
             $Signature = ConvertFrom-Base64UrlText -Text $Segments[2]
 
             $PublicKey = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($Script:TestCertificate)
-            $PublicKey.VerifyData($TamperedInput, $Signature, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1) | Should -BeFalse
+            try {
+                $PublicKey.VerifyData($TamperedInput, $Signature, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1) | Should -BeFalse
+            }
+            finally {
+                $PublicKey.Dispose()
+            }
         }
     }
 
