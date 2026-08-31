@@ -172,7 +172,7 @@ AfterAll {
             $Script:CertificateStore.Remove($Script:StoreCertificate)
         }
         finally {
-            $Script:CertificateStore.Close()
+            $Script:CertificateStore.Dispose()
         }
     }
 
@@ -180,8 +180,12 @@ AfterAll {
         Remove-Item -LiteralPath $Script:CertificateFilePath -Force -ErrorAction SilentlyContinue
     }
 
-    if ($null -ne $Script:CreatedKey) {
-        $Script:CreatedKey.Dispose()
+    # Released after the store entry has been removed, not before: the removal needs the certificate
+    # it is matching on. Each of these holds a private key handle of its own.
+    foreach ($Disposable in @($Script:StoreCertificate, $Script:TestCertificate, $Script:PublicOnlyCertificate, $Script:CreatedKey)) {
+        if ($null -ne $Disposable) {
+            $Disposable.Dispose()
+        }
     }
 
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }

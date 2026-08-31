@@ -342,8 +342,10 @@ AfterAll {
         Remove-Item -LiteralPath $Script:CertificateFilePath -Force -ErrorAction SilentlyContinue
     }
 
-    if ($null -ne $Script:CertificateKey) {
-        $Script:CertificateKey.Dispose()
+    foreach ($Disposable in @($Script:ClientCertificate, $Script:CertificateKey)) {
+        if ($null -ne $Disposable) {
+            $Disposable.Dispose()
+        }
     }
 
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }

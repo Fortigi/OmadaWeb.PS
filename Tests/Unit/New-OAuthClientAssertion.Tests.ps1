@@ -171,8 +171,12 @@ Describe 'New-OAuthClientAssertion' -Tag 'Unit' {
 }
 
 AfterAll {
-    if ($null -ne $Script:SigningKey) {
-        $Script:SigningKey.Dispose()
+    # The certificates hold private key handles of their own, not just the key they were built from,
+    # so releasing only the RSA object would leave handles behind for the length of the whole suite.
+    foreach ($Disposable in @($Script:TestCertificate, $Script:PublicOnlyCertificate, $Script:SigningKey)) {
+        if ($null -ne $Disposable) {
+            $Disposable.Dispose()
+        }
     }
 
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
