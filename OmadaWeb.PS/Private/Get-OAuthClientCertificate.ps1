@@ -144,13 +144,36 @@ function Get-OAuthClientCertificate {
             "{0} - No certificate with thumbprint {1} was found in 'CurrentUser\My' or 'LocalMachine\My'. Install the certificate for the account this runs under, or supply it with -OAuthCertificatePath." -f $MyInvocation.MyCommand, $NormalizedThumbprint | Write-Error -ErrorAction "Stop"
         }
 
-        $CertificatesWithPrivateKey = @($FoundCertificates | Where-Object { $_.HasPrivateKey })
-        if ($CertificatesWithPrivateKey.Count -eq 0) {
-            $FoundCertificates | ForEach-Object { $_.Dispose() }
-            "{0} - The certificate with thumbprint {1} was found, but the account this runs under cannot reach its private key, so it cannot sign a client assertion. Grant that account read access to the private key, or import the certificate into its own 'CurrentUser\My' store." -f $MyInvocation.MyCommand, $NormalizedThumbprint | Write-Error -ErrorAction "Stop"
+        # HasPrivateKey answers a different question from the one that matters here: it says the
+        # certificate is associated with a key, not that this account can open it or that it is an
+        # RSA key at all. An ACL that excludes the service account, or a certificate on an ECDSA
+        # key, both report $true and then fail inside the signing call, where the error names a
+        # cryptographic operation rather than the certificate the caller chose. The key is opened
+        # here instead, which is the same check the file path already makes.
+        $UsableCertificates = @()
+        foreach ($Candidate in $FoundCertificates) {
+            if (-not $Candidate.HasPrivateKey) {
+                continue
+            }
+
+            try {
+                $CandidatePrivateKey = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($Candidate)
+                if ($null -ne $CandidatePrivateKey) {
+                    $CandidatePrivateKey.Dispose()
+                    $UsableCertificates += $Candidate
+                }
+            }
+            catch {
+                "{0} - The private key of the certificate found in the store could not be opened: {1}" -f $MyInvocation.MyCommand, $PSItem.Exception.Message | Write-Verbose
+            }
         }
 
-        $StoreCertificate = $CertificatesWithPrivateKey[0]
+        if ($UsableCertificates.Count -eq 0) {
+            $FoundCertificates | ForEach-Object { $_.Dispose() }
+            "{0} - The certificate with thumbprint {1} was found, but its private key cannot be used to sign a client assertion - the account this runs under cannot open it, or it is not an RSA key. Grant that account read access to the private key, import the certificate into its own 'CurrentUser\My' store, or use a certificate on an RSA key." -f $MyInvocation.MyCommand, $NormalizedThumbprint | Write-Error -ErrorAction "Stop"
+        }
+
+        $StoreCertificate = $UsableCertificates[0]
 
         # The same certificate can be installed in both locations, and the search does not stop at
         # the first hit, so everything that is not being returned is released here.

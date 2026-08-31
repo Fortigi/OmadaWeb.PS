@@ -27,6 +27,9 @@ BeforeAll {
     $Script:CertificateFilePath = Join-Path ([System.IO.Path]::GetTempPath()) ("OmadaWeb.PS-oauth-{0}.pfx" -f [guid]::NewGuid())
     [System.IO.File]::WriteAllBytes($Script:CertificateFilePath, $SelfSignedCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, 'omadaweb-test'))
 
+    # Its only purpose was to be exported from; both exports are done.
+    $SelfSignedCertificate.Dispose()
+
     function Script:ConvertFrom-JwtPayload {
         param(
             [string]$Assertion

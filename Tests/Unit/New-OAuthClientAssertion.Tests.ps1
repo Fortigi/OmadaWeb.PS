@@ -29,6 +29,9 @@ BeforeAll {
     # file looks like.
     $Script:PublicOnlyCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($Script:TestCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
 
+    # Its only purpose was to be exported from; both exports are done.
+    $SelfSignedCertificate.Dispose()
+
     function Script:ConvertFrom-Base64UrlText {
         param(
             [string]$Text

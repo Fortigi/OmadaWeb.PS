@@ -24,6 +24,9 @@ BeforeAll {
         [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
     $Script:PublicOnlyCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($SelfSignedCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
 
+    # Its only purpose was to be exported from; both exports are done.
+    $SelfSignedCertificate.Dispose()
+
     # The store lookup is the one path that cannot be exercised without touching the store, so the
     # test certificate is installed into the current user's personal store for the duration of the
     # run and removed again in AfterAll. CurrentUser needs no elevation, and the certificate is
