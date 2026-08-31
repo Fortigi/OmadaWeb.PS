@@ -12,23 +12,39 @@
     bumps a version there, this script recomputes the matching URL and hash, and PR validation fails
     for as long as the two disagree.
 
+    A bump touches three files, not one: the version in the Dependabot manifest, the version and
+    SHA-256 in the lock file, and the version the SBOM inventory in Build/Dependencies.psd1 reports
+    for the same component. This script keeps the second and third in step with the first.
+
     -Check validates the lock file and reports drift without changing anything. It is what runs in
     CI: schema and formatting, one entry per artefact, versions matching the manifests, every
-    -ArtifactId used in the module present in the lock, and - unless -SkipDownload is given - the
-    published bytes still hashing to what is pinned.
+    -ArtifactId used in the module present in the lock, the SBOM reporting the versions that are
+    actually pinned, every member of the System.Text.Json closure covered by an ignore rule in
+    .github/dependabot.yml, and - unless -SkipDownload is given - the published bytes still hashing to
+    what is pinned.
 
     -Refresh takes the versions from the manifests, downloads each artefact, and writes back the
-    version, URL and hash of anything that moved. Only those three values are rewritten, in place, so
-    comments and the descriptive fields are preserved.
+    version, URL and hash of anything that moved, plus the matching version in the SBOM inventory.
+    Only those values are rewritten, in place, so comments and the descriptive fields are preserved.
 .PARAMETER Check
     Report drift and exit non-zero if any is found. Changes nothing.
 .PARAMETER Refresh
-    Rewrite version, URL and SHA-256 for artefacts whose manifest version has moved.
+    Rewrite version, URL and SHA-256 for artefacts whose manifest version has moved, and the version
+    of the SBOM component that mirrors each of them.
 .PARAMETER SkipDownload
     Skip everything that needs the network, leaving only the offline consistency checks. Only valid
     with -Check.
 .PARAMETER LockPath
-    Path to the lock file. Defaults to OmadaWeb.PS/DependencyLock.psd1 next to this script.
+    Path to the lock file. Defaults to OmadaWeb.PS/DependencyLock.psd1 under -RepositoryRoot.
+.PARAMETER InventoryPath
+    Path to the SBOM inventory. Defaults to Build/Dependencies.psd1 under -RepositoryRoot.
+.PARAMETER DependabotConfigPath
+    Path to the Dependabot configuration the ignore policy is read from. Defaults to
+    .github/dependabot.yml under -RepositoryRoot.
+.PARAMETER RepositoryRoot
+    Working tree the manifests, lock file, SBOM inventory and module sources are read from. Defaults
+    to the repository this script lives in; the scheduled sweep in dependency-lock-sync.yml points it
+    at a second checkout so a trusted copy of this script refreshes a pull request branch.
 .EXAMPLE
     ./Build/Update-DependencyLock.ps1 -Check
 
@@ -47,12 +63,33 @@ param(
     [parameter(Mandatory = $false, ParameterSetName = "Check")]
     [switch]$SkipDownload,
     [parameter(Mandatory = $false)]
-    [string]$LockPath = (Join-Path $PSScriptRoot ".." | Join-Path -ChildPath "OmadaWeb.PS" | Join-Path -ChildPath "DependencyLock.psd1"),
+    [string]$LockPath,
+    [parameter(Mandatory = $false)]
+    [string]$InventoryPath,
+    [parameter(Mandatory = $false)]
+    [string]$DependabotConfigPath,
     [parameter(Mandatory = $false)]
     [string]$RepositoryRoot = (Join-Path $PSScriptRoot ".." | Convert-Path)
 )
 
 $ErrorActionPreference = "Stop"
+
+$Script:IsRefresh = $PSCmdlet.ParameterSetName -eq "Refresh"
+
+# All three files are resolved from -RepositoryRoot unless they are named explicitly, so pointing the
+# script at a second working tree - which is how the scheduled sweep in dependency-lock-sync.yml runs
+# a trusted copy of this script against a pull request branch - takes one parameter rather than four.
+if ([string]::IsNullOrWhiteSpace($LockPath)) {
+    $LockPath = Join-Path $RepositoryRoot "OmadaWeb.PS" | Join-Path -ChildPath "DependencyLock.psd1"
+}
+
+if ([string]::IsNullOrWhiteSpace($InventoryPath)) {
+    $InventoryPath = Join-Path $RepositoryRoot "Build" | Join-Path -ChildPath "Dependencies.psd1"
+}
+
+if ([string]::IsNullOrWhiteSpace($DependabotConfigPath)) {
+    $DependabotConfigPath = Join-Path $RepositoryRoot ".github" | Join-Path -ChildPath "dependabot.yml"
+}
 
 $Problems = [System.Collections.Generic.List[string]]::new()
 
@@ -61,6 +98,21 @@ function Add-Problem {
 
     $Problems.Add($Message)
     $Message | Write-Host -ForegroundColor Red
+}
+
+function Add-Drift {
+    # Drift between a manifest version and what the lock or the SBOM records is a build failure under
+    # -Check and the whole point of the run under -Refresh. Reporting it as a problem in both modes
+    # would make -Refresh exit non-zero on exactly the bumps it was invoked to resolve, which stops
+    # the caller - dependency-lock-sync.yml - from ever reaching its commit step.
+    param([string]$Message)
+
+    if ($Script:IsRefresh) {
+        $Message | Write-Host -ForegroundColor Yellow
+        return
+    }
+
+    Add-Problem $Message
 }
 
 function Get-ManifestVersion {
@@ -82,6 +134,136 @@ function Get-ManifestVersion {
         $Versions[$Reference.Include] = $Reference.Version
     }
     return $Versions
+}
+
+function Remove-YamlQuote {
+    # YAML scalars may be double-quoted, single-quoted or bare, and all three mean the same string.
+    # Reading only one of the forms would turn a harmless reformatting of dependabot.yml into a build
+    # failure, so the quotes are stripped rather than matched.
+    param([string]$Value)
+
+    $Trimmed = $Value.Trim()
+    if ($Trimmed.Length -ge 2) {
+        $Quote = $Trimmed[0]
+        if (($Quote -eq '"' -or $Quote -eq "'") -and $Trimmed[$Trimmed.Length - 1] -eq $Quote) {
+            return $Trimmed.Substring(1, $Trimmed.Length - 2)
+        }
+    }
+    return $Trimmed
+}
+
+function Get-IgnoredDependencyName {
+    # Collects the dependency-name entries Dependabot is told to ignore for one manifest directory.
+    #
+    # Parsed by hand rather than with a YAML module: this has to run on Windows PowerShell 5.1 in CI,
+    # where no YAML parser ships in the box, and the shape being read is a fixed two-level list this
+    # repository writes itself. Only entries under the requested directory are returned, so ignoring
+    # a package for Legacy/ does not silently satisfy a check about the main manifest.
+    param([string]$ConfigPath, [string]$Directory)
+
+    $Names = @()
+    if (-not (Test-Path $ConfigPath -PathType Leaf)) {
+        Add-Problem ("Dependabot configuration '{0}' does not exist, so the ignore policy cannot be verified." -f $ConfigPath)
+        return $Names
+    }
+
+    $InRequestedUpdate = $false
+    $InIgnoreList = $false
+    foreach ($Line in (Get-Content -Path $ConfigPath)) {
+        if ($Line -match '^\s*-\s+package-ecosystem\s*:') {
+            # A new update block ends whatever the previous one was saying.
+            $InRequestedUpdate = $false
+            $InIgnoreList = $false
+            continue
+        }
+
+        if ($Line -match '^\s*directory\s*:\s*(.+?)\s*$') {
+            # A directory line starts a new scope even without an intervening package-ecosystem, so
+            # an ignore list already being read ends here.
+            $InRequestedUpdate = ((Remove-YamlQuote $Matches[1]) -eq $Directory)
+            $InIgnoreList = $false
+            continue
+        }
+
+        if (-not $InRequestedUpdate) {
+            continue
+        }
+
+        if ($Line -match '^\s*ignore\s*:\s*$') {
+            $InIgnoreList = $true
+            continue
+        }
+
+        if ($InIgnoreList -and $Line -match '^\s*-\s+dependency-name\s*:\s*(.+?)\s*$') {
+            $Names += Remove-YamlQuote $Matches[1]
+        }
+    }
+    return $Names
+}
+
+function Get-InventoryComponent {
+    # Reads the SBOM inventory, keyed by the lock artefact each component mirrors. Components that
+    # name no LockId - the ones whose version is resolved at runtime - are not tracked here.
+    param([string]$Path)
+
+    $ByLockId = @{}
+    if (-not (Test-Path $Path -PathType Leaf)) {
+        Add-Problem ("SBOM inventory '{0}' does not exist." -f $Path)
+        return $ByLockId
+    }
+
+    $Inventory = Import-PowerShellDataFile -Path $Path
+    foreach ($Component in $Inventory.Components) {
+        if ([string]::IsNullOrWhiteSpace($Component.LockId)) {
+            continue
+        }
+
+        # Keying by LockId silently keeps the last of any duplicates, which would leave the drift
+        # check comparing only one of them while -Refresh rewrites both. The lock refuses ambiguous
+        # ids for the same reason; so does this.
+        if ($ByLockId.ContainsKey($Component.LockId)) {
+            Add-Problem ("SBOM components '{0}' and '{1}' both mirror lock artefact '{2}'; each artefact must be mirrored once." -f $ByLockId[$Component.LockId].Name, $Component.Name, $Component.LockId)
+            continue
+        }
+
+        $ByLockId[$Component.LockId] = $Component
+    }
+    return $ByLockId
+}
+
+function Set-InventoryVersion {
+    # Rewrites the Version of one SBOM component in place, leaving every other line untouched.
+    #
+    # Components are keyed by LockId, which sits *after* Version in the block, so the most recent
+    # Version line is remembered and rewritten once the matching LockId is reached. The @{ that opens
+    # each component resets that memory, so a component without a LockId can never have the Version of
+    # the block before it rewritten by mistake.
+    param(
+        [string[]]$Line,
+        [string]$LockId,
+        [string]$Version
+    )
+
+    $VersionIndex = -1
+    for ($Index = 0; $Index -lt $Line.Count; $Index++) {
+        if ($Line[$Index] -match '^\s*@\{\s*$') {
+            $VersionIndex = -1
+            continue
+        }
+        if ($Line[$Index] -match '^(\s*Version\s*=\s*)"[^"]*"\s*$') {
+            $VersionIndex = $Index
+            continue
+        }
+        if ($Line[$Index] -match '^\s*LockId\s*=\s*"([^"]+)"\s*$' -and $Matches[1] -eq $LockId) {
+            if ($VersionIndex -lt 0) {
+                Add-Problem ("SBOM component for lock artefact '{0}' has no Version line to update." -f $LockId)
+                continue
+            }
+            $Line[$VersionIndex] -match '^(\s*Version\s*=\s*)"[^"]*"\s*$' | Out-Null
+            $Line[$VersionIndex] = '{0}"{1}"' -f $Matches[1], $Version
+        }
+    }
+    return $Line
 }
 
 function Get-FlatContainerUrl {
@@ -205,7 +387,7 @@ foreach ($Artifact in $Artifacts) {
         Add-Problem ("Artefact '{0}' claims to be tracked by '{1}', but that manifest has no PackageReference for '{2}'. Without one it gets no Dependabot alerts." -f $Artifact.Id, $Artifact.Manifest, $Artifact.PackageId)
     }
     elseif ($Declared[$Artifact.PackageId] -ne $Artifact.Version) {
-        Add-Problem ("Artefact '{0}' is pinned at version '{1}' but '{2}' declares '{3}'. Run Build/Update-DependencyLock.ps1 -Refresh." -f $Artifact.Id, $Artifact.Version, $Artifact.Manifest, $Declared[$Artifact.PackageId])
+        Add-Drift ("Artefact '{0}' is pinned at version '{1}' but '{2}' declares '{3}'. Run Build/Update-DependencyLock.ps1 -Refresh." -f $Artifact.Id, $Artifact.Version, $Artifact.Manifest, $Declared[$Artifact.PackageId])
     }
 }
 
@@ -230,17 +412,58 @@ foreach ($Artifact in $Artifacts) {
     }
 }
 
+# The SBOM reports the versions the module actually downloads, so it is a third file that has to move
+# with a bump - and the one nothing used to update. Left unchecked it goes stale silently and the
+# module ships an inventory that disagrees with what it loads.
+$InventoryComponents = Get-InventoryComponent -Path $InventoryPath
+foreach ($Artifact in ($Artifacts | Where-Object { $_.Verification -eq "Sha256" })) {
+    if (-not $InventoryComponents.ContainsKey($Artifact.Id)) {
+        continue
+    }
+
+    $Component = $InventoryComponents[$Artifact.Id]
+    if ($Component.Version -ne $Artifact.Version) {
+        Add-Drift ("Artefact '{0}' is pinned at version '{1}' but the SBOM component '{2}' in '{3}' reports '{4}'. Run Build/Update-DependencyLock.ps1 -Refresh." -f $Artifact.Id, $Artifact.Version, $Component.Name, $InventoryPath, $Component.Version)
+    }
+}
+
+# Members of the System.Text.Json closure cannot be upgraded one at a time - Assembly.LoadFrom applies
+# no binding redirects, so the versions loaded have to be the ones the pinned System.Text.Json
+# resolves. .github/dependabot.yml therefore carries an ignore rule for each of them. Asserting that
+# here is what stops the two from drifting: adding a closure member to this lock without ignoring it
+# fails the build, instead of producing a pull request that can never go green.
+$IgnoredNames = Get-IgnoredDependencyName -ConfigPath $DependabotConfigPath -Directory "/Build/Dependencies"
+foreach ($Artifact in ($Artifacts | Where-Object { $_.Group -eq "SystemTextJson" })) {
+    if ($IgnoredNames -notcontains $Artifact.PackageId) {
+        Add-Problem ("Artefact '{0}' belongs to the System.Text.Json closure, but '{1}' has no ignore rule for '{2}'. Dependabot would propose bumping it on its own, which is not an update this module can take." -f $Artifact.Id, $DependabotConfigPath, $Artifact.PackageId)
+    }
+}
+
 #endregion
 
 #region network checks and refresh
 
 if ($PSCmdlet.ParameterSetName -eq "Refresh") {
     $Line = @(Get-Content -Path $LockPath)
+
+    # A missing inventory was already reported as a problem by the offline checks, which makes the run
+    # fail at the end with that message. Reading it unguarded here would pre-empt that with a bare
+    # file-not-found instead.
+    $InventoryLine = @()
+    if (Test-Path $InventoryPath -PathType Leaf) {
+        $InventoryLine = @(Get-Content -Path $InventoryPath)
+    }
+
     $Changed = 0
+    $InventoryChanged = 0
 
     foreach ($Artifact in ($Artifacts | Where-Object { $_.Verification -eq "Sha256" })) {
-        $ManifestPath = Join-Path $RepositoryRoot $Artifact.Manifest
-        $Declared = Get-ManifestVersion -ManifestPath $ManifestPath
+        # The offline checks above already parsed every manifest once, keyed by its relative path.
+        $Declared = @{}
+        if ($ManifestVersions.ContainsKey($Artifact.Manifest)) {
+            $Declared = $ManifestVersions[$Artifact.Manifest]
+        }
+
         $Version = $Artifact.Version
         if ($Declared.ContainsKey($Artifact.PackageId)) {
             $Version = $Declared[$Artifact.PackageId]
@@ -248,6 +471,14 @@ if ($PSCmdlet.ParameterSetName -eq "Refresh") {
 
         $Url = Get-FlatContainerUrl -PackageId $Artifact.PackageId -Version $Version
         $Sha256 = Get-RemoteSha256 -Url $Url
+
+        # The SBOM can be stale even when the pin is not - it was never refreshed before this - so it
+        # is reconciled against the version on every run, not only when the lock file moves.
+        if ($InventoryComponents.ContainsKey($Artifact.Id) -and $InventoryComponents[$Artifact.Id].Version -ne $Version) {
+            "  {0}: SBOM {1} -> {2}" -f $Artifact.Id, $InventoryComponents[$Artifact.Id].Version, $Version | Write-Host -ForegroundColor Yellow
+            $InventoryLine = Set-InventoryVersion -Line $InventoryLine -LockId $Artifact.Id -Version $Version
+            $InventoryChanged++
+        }
 
         if ($Version -eq $Artifact.Version -and $Url -eq $Artifact.Url -and $Sha256 -eq $Artifact.Sha256) {
             "  {0} {1} unchanged" -f $Artifact.Id, $Version | Write-Host
@@ -264,13 +495,23 @@ if ($PSCmdlet.ParameterSetName -eq "Refresh") {
         $Changed++
     }
 
+    # Written without a BOM and with CRLF, matching the rest of the repository.
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
     if ($Changed -gt 0) {
-        # Written without a BOM and with CRLF, matching the rest of the repository.
-        [System.IO.File]::WriteAllText($LockPath, (($Line -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+        [System.IO.File]::WriteAllText($LockPath, (($Line -join "`r`n") + "`r`n"), $Utf8NoBom)
         "Updated {0} artefact(s) in '{1}'." -f $Changed, $LockPath | Write-Host -ForegroundColor Green
     }
-    else {
-        "No changes; every pin already matches its manifest and its published bytes." | Write-Host -ForegroundColor Green
+
+    if ($InventoryChanged -gt 0) {
+        [System.IO.File]::WriteAllText($InventoryPath, (($InventoryLine -join "`r`n") + "`r`n"), $Utf8NoBom)
+        "Updated {0} component(s) in '{1}'." -f $InventoryChanged, $InventoryPath | Write-Host -ForegroundColor Green
+    }
+
+    # Only claim everything agrees when nothing was reported; otherwise this line would sit directly
+    # above the failure and contradict it.
+    if ($Changed -eq 0 -and $InventoryChanged -eq 0 -and $Problems.Count -eq 0) {
+        "No changes; every pin already matches its manifest, its published bytes and the SBOM." | Write-Host -ForegroundColor Green
     }
 }
 elseif (-not $SkipDownload) {

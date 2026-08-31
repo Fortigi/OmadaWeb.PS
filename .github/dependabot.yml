@@ -13,7 +13,13 @@
 # on every download instead.
 #
 # After Dependabot bumps a version in Build/Dependencies, .github/workflows/dependency-lock-sync.yml
-# refreshes the matching SHA-256 in the lock file. PR validation fails while the two disagree.
+# refreshes the matching SHA-256 in the lock file and the version the SBOM inventory in
+# Build/Dependencies.psd1 reports. It sweeps the open Dependabot pull requests weekly, so a bump
+# arrives already synced. PR validation fails while any of the three disagree.
+#
+# Note that GitHub reads this file from the default branch only, so an ignore rule added here takes
+# effect on Dependabot's next run - it does not retroactively close pull requests that are already
+# open. Those have to be closed by hand.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -48,6 +54,25 @@ updates:
       - dependency-name: "System.Text.Json"
         update-types:
           - "version-update:semver-major"
+
+      # The rest of the System.Text.Json closure - the Group = "SystemTextJson" artefacts in
+      # OmadaWeb.PS/DependencyLock.psd1. These are not independently upgradable: the module loads
+      # them with Assembly.LoadFrom, which applies no binding redirects, so the versions that get
+      # loaded have to be the ones the pinned System.Text.Json actually resolves. A bump of a single
+      # member is therefore never a change this module can take on its own - it moves when
+      # System.Text.Json moves, and Build/Update-DependencyLock.ps1 -Check enforces that these entries
+      # exist so a closure member can never be added to the lock without landing here too.
+      #
+      # Listing them without update-types ignores version updates only. They stay in the dependency
+      # graph and a published advisory against any of them still raises an alert, exactly as with
+      # Selenium.WebDriver in Legacy/ below.
+      - dependency-name: "Microsoft.Bcl.AsyncInterfaces"
+      - dependency-name: "System.Text.Encodings.Web"
+      - dependency-name: "System.Threading.Tasks.Extensions"
+      - dependency-name: "System.Runtime.CompilerServices.Unsafe"
+      - dependency-name: "System.Buffers"
+      - dependency-name: "System.Memory"
+      - dependency-name: "System.ValueTuple"
 
   - package-ecosystem: "nuget"
     directory: "/Build/Dependencies/Legacy"
