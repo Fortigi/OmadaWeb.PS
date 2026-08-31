@@ -153,7 +153,7 @@ $Identities = Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dat
     -Credential $ClientCredential
 ```
 
-The certificate is looked up in `CurrentUser\My` first and then in `LocalMachine\My`, so a scheduled task under a service account and an interactive session each find their own without being told where to look. Only the thumbprint appears in verbose output; the assertion and the secret never do.
+The certificate is looked up in `CurrentUser\My` first and then in `LocalMachine\My`, so a scheduled task under a service account and an interactive session each find their own without being told where to look. Verbose output names the certificate that signed the request - thumbprint, subject, expiry - along with the client id and the token endpoint, which is what diagnosing a refused sign-in needs. What never reaches any stream is the credential itself: not the client secret, not the private key, and not the signed assertion.
 
 `-ClientId` is required with a certificate and is never derived from `-Credential`, so a credential the script holds for something else cannot quietly sign an assertion for the wrong application.
 
