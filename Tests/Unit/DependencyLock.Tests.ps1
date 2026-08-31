@@ -34,14 +34,33 @@ BeforeAll {
         return $Root
     }
 
-    function Test-IgnoreRule {
-        # Asserts the rule, not its formatting. Update-DependencyLock.ps1 treats double-quoted,
-        # single-quoted and bare YAML scalars as the same string, so a test that insists on one of
-        # them would fail on a reformatting the script itself is happy with.
+    function Get-IgnoreRulePattern {
+        # Matches an ignore rule whatever its YAML quoting. Update-DependencyLock.ps1 treats
+        # double-quoted, single-quoted and bare scalars as the same string, so a test that insists on
+        # one of them would fail on a reformatting the script itself is happy with - or, worse, would
+        # quietly stop matching and leave the test exercising nothing.
         param([string]$PackageId)
 
-        $Pattern = '^\s*-\s+dependency-name\s*:\s*(?:"|'')?{0}(?:"|'')?\s*$' -f [regex]::Escape($PackageId)
+        return '^\s*-\s+dependency-name\s*:\s*(?:"|'')?{0}(?:"|'')?\s*$' -f [regex]::Escape($PackageId)
+    }
+
+    function Test-IgnoreRule {
+        param([string]$PackageId)
+
+        $Pattern = Get-IgnoreRulePattern $PackageId
         return @($Script:DependabotConfig | Where-Object { $_ -match $Pattern }).Count -gt 0
+    }
+
+    function Remove-IgnoreRule {
+        # Strips one ignore rule from a sandbox config, and asserts it was actually there - otherwise
+        # the test would go on to assert a failure that never had a cause.
+        param([string]$Path, [string]$PackageId)
+
+        $Pattern = Get-IgnoreRulePattern $PackageId
+        $Line = @(Get-Content -Path $Path)
+        $Kept = @($Line | Where-Object { $_ -notmatch $Pattern })
+        $Kept.Count | Should -BeLessThan $Line.Count -Because "'$PackageId' must have an ignore rule to remove"
+        $Kept | Set-Content -Path $Path
     }
 
     function Get-PinnedVersion {
@@ -184,10 +203,7 @@ Describe 'Update-DependencyLock.ps1 -Check' -Tag 'Unit' {
     It 'Should fail when a closure member has no Dependabot ignore rule' {
         $Root = New-LockSandbox
         $ConfigFile = Join-Path $Root -ChildPath '.github\dependabot.yml'
-        # Read fully before writing: streaming Get-Content straight back into Set-Content on the same
-        # path leaves the file open for reading while Set-Content wants it.
-        $Line = @(Get-Content -Path $ConfigFile | Where-Object { $_ -notmatch 'dependency-name: "System.Memory"' })
-        $Line | Set-Content -Path $ConfigFile
+        Remove-IgnoreRule -Path $ConfigFile -PackageId 'System.Memory'
 
         { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
     }
@@ -226,9 +242,9 @@ Describe 'Update-DependencyLock.ps1 -Check' -Tag 'Unit' {
         # manifest, or the closure check would pass on a configuration that does not govern it.
         $Root = New-LockSandbox
         $ConfigFile = Join-Path $Root -ChildPath '.github\dependabot.yml'
-        $Line = @(Get-Content -Path $ConfigFile | Where-Object { $_ -notmatch 'dependency-name: "System.Memory"' })
+        Remove-IgnoreRule -Path $ConfigFile -PackageId 'System.Memory'
         # Re-add it under the Legacy directory block, which is the last one in the file.
-        ($Line + '      - dependency-name: "System.Memory"') | Set-Content -Path $ConfigFile
+        Add-Content -Path $ConfigFile -Value '      - dependency-name: "System.Memory"'
 
         { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
     }
