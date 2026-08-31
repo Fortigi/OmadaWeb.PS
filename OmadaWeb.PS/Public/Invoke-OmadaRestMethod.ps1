@@ -10,10 +10,13 @@ function Invoke-OmadaRestMethod {
         changing the command name.
 
         Authentication is selected with -AuthenticationType. The default, WebView2, signs in with
-        an embedded Microsoft Edge browser and works for interactive use, including Entra ID and
-        multi-factor authentication. OAuth authenticates with a client credential and needs no
-        interaction, which is what unattended scripts and scheduled jobs should use. Browser,
-        Windows, Integrated and Basic cover Selenium-driven sign-in and the classic on-premises
+        an embedded Microsoft Edge browser and works for interactive use, at whichever identity
+        provider your Omada tenant uses, multi-factor authentication included. OAuth authenticates
+        as an application with the client-credentials grant and needs no browser, no desktop session
+        and no interaction at all, which is what unattended scripts, scheduled tasks and CI
+        pipelines should use - with a certificate (-ClientId together with one of the
+        -OAuthCertificate* parameters) in preference to a client secret. Browser, Windows,
+        Integrated and Basic cover Selenium-driven sign-in and the classic on-premises
         authentication schemes.
 
         After a successful interactive sign-in the session cookie is cached, encrypted with DPAPI
@@ -51,7 +54,23 @@ function Invoke-OmadaRestMethod {
         $Identities = Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity" -Paged -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -Credential $ClientCredential
 
         Extracts all identities without any interaction, authenticating to Entra ID with a client
-        id and secret. This is the form to use in unattended scripts and scheduled tasks.
+        id and secret.
+
+    .EXAMPLE
+        $Identities = Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity" -Paged -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -ClientId "a1b2c3d4-5e6f-7890-abcd-ef1234567890" -OAuthCertificateThumbprint "9A8B7C6D5E4F30211A2B3C4D5E6F708192A3B4C5"
+
+        The same unattended extraction, authenticating with a certificate from the Windows
+        certificate store instead of a client secret. The private key never leaves the machine, so
+        nothing reusable travels on the wire. This is the form to use in scheduled tasks, CI
+        pipelines and on servers without a desktop session. The certificate is looked for in
+        CurrentUser\My and then in LocalMachine\My.
+
+    .EXAMPLE
+        $CertificatePassword = ConvertTo-SecureString $env:OMADA_PFX_PASSWORD -AsPlainText -Force
+        Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -EntraIdTenantId "c1ec94c3-4a7a-4568-9321-79b0a74b8e70" -ClientId "a1b2c3d4-5e6f-7890-abcd-ef1234567890" -OAuthCertificatePath "C:\ProgramData\OmadaJobs\automation.pfx" -OAuthCertificatePassword $CertificatePassword
+
+        Authenticates with a certificate held in a password-protected PKCS#12 file, which is what a
+        container or a job running under an account without a certificate store needs.
 
     .EXAMPLE
         $Body = @{ FIRSTNAME = "Jane"; LASTNAME = "Doe" }
