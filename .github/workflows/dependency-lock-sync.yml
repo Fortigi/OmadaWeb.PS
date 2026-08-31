@@ -88,7 +88,7 @@ jobs:
             // tracks. Anything else either has no pins to refresh or is not ours to push to.
             const branches = pulls
               .filter(pull => pull.user.login === 'dependabot[bot]')
-              .filter(pull => pull.head.repo.full_name === `${context.repo.owner}/${context.repo.repo}`)
+              .filter(pull => pull.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`)
               .filter(pull => pull.head.ref.startsWith('dependabot/nuget/Build/Dependencies'))
               .map(pull => pull.head.ref);
 
@@ -139,6 +139,10 @@ jobs:
       - name: Commit the refreshed pins
         shell: pwsh
         working-directory: bump
+        # The branch name arrives through the environment rather than being interpolated into the
+        # script, so a branch whose name contains shell metacharacters cannot become code here.
+        env:
+          BUMP_BRANCH: ${{ matrix.branch }}
         run: |
           git config user.email "devops@fortigi.nl"
           git config user.name "GitHub Actions"
@@ -151,4 +155,4 @@ jobs:
 
           git add OmadaWeb.PS/DependencyLock.psd1 Build/Dependencies.psd1
           git commit -m "deps: refresh pinned SHA-256 hashes and SBOM versions for the bumped package"
-          git push origin HEAD:${{ matrix.branch }}
+          git push origin "HEAD:$env:BUMP_BRANCH"

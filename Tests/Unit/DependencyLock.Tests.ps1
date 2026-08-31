@@ -32,6 +32,26 @@ BeforeAll {
 
         return $Root
     }
+
+    function Get-PinnedVersion {
+        # Versions are read from the lock rather than written into the test, so a legitimate bump does
+        # not break a test that is really about "these two files disagree".
+        param([string]$Id)
+
+        $Artifact = @($Script:Artifacts | Where-Object { $_.Id -eq $Id })
+        $Artifact.Count | Should -Be 1 -Because "the tests below doctor the pin for '$Id'"
+        return $Artifact[0].Version
+    }
+
+    function Set-DoctoredVersion {
+        # Introduces one specific disagreement into a sandbox file, and asserts it actually landed -
+        # otherwise a renamed field would leave the test passing while exercising nothing.
+        param([string]$Path, [string]$Find, [string]$Replace)
+
+        $Content = Get-Content -Path $Path -Raw
+        $Content | Should -BeLike "*$Find*" -Because "the test needs '$Find' present in '$Path' to doctor it"
+        $Content.Replace($Find, $Replace) | Set-Content -Path $Path -NoNewline
+    }
 }
 
 AfterAll {
@@ -145,8 +165,7 @@ Describe 'Update-DependencyLock.ps1 -Check' -Tag 'Unit' {
         # Build/Dependencies.psd1 was the third file that had to move, and nothing moved it.
         $Root = New-LockSandbox
         $InventoryFile = Join-Path $Root -ChildPath 'Build\Dependencies.psd1'
-        (Get-Content -Path $InventoryFile -Raw).Replace('Version         = "13.0.4"', 'Version         = "13.0.3"') |
-            Set-Content -Path $InventoryFile -NoNewline
+        Set-DoctoredVersion -Path $InventoryFile -Find ('Version         = "{0}"' -f (Get-PinnedVersion 'Newtonsoft.Json')) -Replace 'Version         = "0.0.0"'
 
         { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
     }
@@ -165,8 +184,7 @@ Describe 'Update-DependencyLock.ps1 -Check' -Tag 'Unit' {
     It 'Should fail when the lock and the Dependabot manifest disagree on a version' {
         $Root = New-LockSandbox
         $ManifestFile = Join-Path $Root -ChildPath 'Build\Dependencies\Dependencies.csproj'
-        (Get-Content -Path $ManifestFile -Raw).Replace('"Newtonsoft.Json" Version="13.0.4"', '"Newtonsoft.Json" Version="13.0.3"') |
-            Set-Content -Path $ManifestFile -NoNewline
+        Set-DoctoredVersion -Path $ManifestFile -Find ('"Newtonsoft.Json" Version="{0}"' -f (Get-PinnedVersion 'Newtonsoft.Json')) -Replace '"Newtonsoft.Json" Version="0.0.0"'
 
         { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
     }
