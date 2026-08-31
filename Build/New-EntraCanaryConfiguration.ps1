@@ -179,6 +179,28 @@ function Assert-GraphSession {
     return $Context
 }
 
+function ConvertTo-ODataLiteral {
+    <#
+    .SYNOPSIS
+        Escapes a value for use inside a single-quoted OData string literal.
+    .DESCRIPTION
+        OData escapes an apostrophe by doubling it. Without this, a display name or a user principal
+        name containing one produces a filter Graph cannot parse, the lookup fails, and this script -
+        whose whole contract is to be idempotent - concludes the object does not exist and creates a
+        second one. A near-duplicate app registration in a tenant is a nuisance to unpick, and the
+        run that produced it reported success.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.String])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Value
+    )
+
+    return $Value.Replace("'", "''")
+}
+
 function New-CanaryPassword {
     <#
     .SYNOPSIS
@@ -247,7 +269,7 @@ function Set-CanaryUser {
         ForceChangePasswordNextSignIn = $false
     }
 
-    $Existing = @(Get-MgUser -Filter ("userPrincipalName eq '{0}'" -f $UserPrincipalName) -ErrorAction SilentlyContinue)
+    $Existing = @(Get-MgUser -Filter ("userPrincipalName eq '{0}'" -f (ConvertTo-ODataLiteral -Value $UserPrincipalName)) -ErrorAction SilentlyContinue)
     if ($Existing.Count -gt 0) {
         if ($PSCmdlet.ShouldProcess($UserPrincipalName, "Reset the canary account password")) {
             Update-MgUser -UserId $Existing[0].Id -PasswordProfile $PasswordProfile -PasswordPolicies "DisablePasswordExpiration" -AccountEnabled:$true
@@ -292,7 +314,7 @@ function Set-CanaryApplication {
         [hashtable]$RequiredResourceAccess
     )
 
-    $Existing = @(Get-MgApplication -Filter ("displayName eq '{0}'" -f $DisplayName) -ErrorAction SilentlyContinue)
+    $Existing = @(Get-MgApplication -Filter ("displayName eq '{0}'" -f (ConvertTo-ODataLiteral -Value $DisplayName)) -ErrorAction SilentlyContinue)
     if ($Existing.Count -gt 0) {
         $Application = $Existing[0]
         $RegisteredUri = @($Application.PublicClient.RedirectUris)
@@ -550,10 +572,25 @@ function Set-CanaryNamedLocation {
         "A named location can hold at most 2000 IP ranges; {0} were supplied. GitHub-hosted runners publish far more than that, which is why -AllowedIpRange is only practical with a self-hosted or fixed-egress runner." -f $IpRange.Count | Write-Error -ErrorAction "Stop"
     }
 
+    # The OData type has to match the address family. Sending an IPv6 range as an iPv4CidrRange is
+    # rejected by Graph with an error that names neither the range nor the reason, so the family is
+    # read from the address itself and a malformed entry is refused here, where it can be named.
     $IpRangeBody = @($IpRange | ForEach-Object {
+            $Cidr = $_
+            $Parts = $Cidr.Split("/")
+            $Address = $null
+            if ($Parts.Count -ne 2 -or -not [System.Net.IPAddress]::TryParse($Parts[0], [ref]$Address)) {
+                "'{0}' is not a CIDR range. Supply ranges such as '203.0.113.0/24' or '2001:db8::/32'." -f $Cidr | Write-Error -ErrorAction "Stop"
+            }
+
+            $ODataType = "#microsoft.graph.iPv4CidrRange"
+            if ($Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+                $ODataType = "#microsoft.graph.iPv6CidrRange"
+            }
+
             @{
-                "@odata.type" = "#microsoft.graph.iPv4CidrRange"
-                cidrAddress   = $_
+                "@odata.type" = $ODataType
+                cidrAddress   = $Cidr
             }
         })
 
