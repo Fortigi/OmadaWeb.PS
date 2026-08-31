@@ -411,6 +411,59 @@ function Start-CanaryRelyingParty {
     return $RelyingParty
 }
 
+function Get-CanaryRelyingPartyError {
+    <#
+    .SYNOPSIS
+        Everything that has gone wrong in the listener so far, readable while it is still running.
+
+    .DESCRIPTION
+        Two sources, because neither is complete on its own. The loop records what its own catch
+        block saw into ListenerError; anything that killed the loop before or outside that catch
+        lands in the runspace's error stream instead, and is only re-raised by EndInvoke - which
+        cannot be called until the listener is being torn down, and therefore not before the
+        assertions run.
+
+        Reading the error stream directly is what closes that gap. Without it a listener that died on
+        its first statement would serve nothing at all while the canary reported it as healthy, and
+        the sign-in failure would be blamed on Microsoft.
+
+    .PARAMETER RelyingParty
+        The object returned by Start-CanaryRelyingParty.
+
+    .OUTPUTS
+        System.String[]. Empty when nothing has gone wrong.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.String[]])]
+    param(
+        [AllowNull()]
+        $RelyingParty
+    )
+
+    if ($null -eq $RelyingParty) {
+        return @()
+    }
+
+    $Reported = [System.Collections.Generic.List[string]]::new()
+
+    if (-not [string]::IsNullOrWhiteSpace($RelyingParty.ListenerError)) {
+        $Reported.Add([string]$RelyingParty.ListenerError)
+    }
+
+    # Indexed, never enumerated. Streams.Error is a PSDataCollection, and its enumerator is a
+    # blocking one: while the invocation is still open it waits for the next item rather than ending,
+    # so "@($collection)" on a running listener never returns. Reading Count and indexing is the
+    # non-blocking form, and unlike ReadAll it leaves the records in place for EndInvoke to re-raise.
+    if ($null -ne $RelyingParty.PowerShellInstance) {
+        $ErrorStream = $RelyingParty.PowerShellInstance.Streams.Error
+        for ($Index = 0; $Index -lt $ErrorStream.Count; $Index++) {
+            $Reported.Add([string]$ErrorStream[$Index])
+        }
+    }
+
+    return $Reported.ToArray()
+}
+
 function Stop-CanaryRelyingParty {
     <#
     .SYNOPSIS
@@ -450,6 +503,28 @@ function Stop-CanaryRelyingParty {
     }
     catch {
         "Stop-CanaryRelyingParty - could not close the listener: {0}" -f $_.Exception.Message | Write-Verbose
+    }
+
+    # EndInvoke before Dispose. Disposing a PowerShell instance without ending its invocation leaves
+    # the async operation unobserved and can strand the thread, and EndInvoke is what re-raises a
+    # terminating error from the listener thread - one the loop's own catch never saw because it
+    # never got as far as the loop.
+    #
+    # Note that this runs from an AfterAll, which is after the assertions. Anything recorded here is
+    # for the log, not for a test; Get-CanaryRelyingPartyError is what the assertions read.
+    try {
+        if ($null -ne $RelyingParty.PowerShellInstance -and $null -ne $RelyingParty.AsyncResult) {
+            if ($RelyingParty.AsyncResult.AsyncWaitHandle.WaitOne([System.TimeSpan]::FromSeconds(10))) {
+                $null = $RelyingParty.PowerShellInstance.EndInvoke($RelyingParty.AsyncResult)
+            }
+            else {
+                $RelyingParty.ListenerError = "The listener thread did not finish within 10 seconds of the listener being closed."
+            }
+        }
+    }
+    catch {
+        $RelyingParty.ListenerError = $_.Exception.Message
+        "Stop-CanaryRelyingParty - the listener thread ended with an error: {0}" -f $_.Exception.Message | Write-Verbose
     }
 
     try {

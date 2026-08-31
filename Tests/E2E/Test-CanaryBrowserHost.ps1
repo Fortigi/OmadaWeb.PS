@@ -84,6 +84,13 @@ try {
                 Reason      = "The initialization event never fired."
             })
 
+        # A profile per run, because a shared one would let a previous run's state decide this one's
+        # answer. Held in a variable so the finally below can delete it: on a GitHub-hosted runner the
+        # VM is discarded anyway, but this is also run on self-hosted runners - which is exactly where
+        # the docs recommend it, for a fixed egress address - and by developers on their own machines.
+        # A daily job leaving a browser profile behind each time is a slow disk leak on both.
+        $UserDataFolder = (New-Item -ItemType Directory -Force -Path (Join-Path ([System.IO.Path]::GetTempPath()) ("OmadaWebCanaryHostCheck_{0}" -f [guid]::NewGuid().ToString("N")))).FullName
+
         $Form = New-Object System.Windows.Forms.Form
         try {
             $Form.Text = "OmadaWeb.PS canary browser host check"
@@ -97,7 +104,7 @@ try {
 
             $WebView2 = New-Object Microsoft.Web.WebView2.WinForms.WebView2
             $WebView2.CreationProperties = New-Object Microsoft.Web.WebView2.WinForms.CoreWebView2CreationProperties
-            $WebView2.CreationProperties.UserDataFolder = (New-Item -ItemType Directory -Force -Path (Join-Path ([System.IO.Path]::GetTempPath()) ("OmadaWebCanaryHostCheck_{0}" -f [guid]::NewGuid().ToString("N")))).FullName
+            $WebView2.CreationProperties.UserDataFolder = $UserDataFolder
             $WebView2.Dock = "Fill"
             $WebView2.Source = [System.Uri]::new("about:blank")
 
@@ -132,7 +139,34 @@ try {
             $Timer.Dispose()
         }
         finally {
+            # The control is disposed before the form, and before the delete below, because that is
+            # what tears down the CoreWebView2 and lets its browser process exit. Deleting first
+            # simply loses to the lock the process still holds on EBWebView\lockfile.
+            if ($null -ne $WebView2) {
+                $WebView2.Dispose()
+            }
+
             $Form.Dispose()
+
+            # Even after disposing, the browser process takes a moment to go away, so the delete is
+            # retried rather than attempted once. Best-effort throughout and deliberately not fatal:
+            # a profile left behind must not turn a machine that can host a browser into a reported
+            # failure, which is the one question this script exists to answer.
+            $Removed = $false
+            foreach ($Attempt in 1..10) {
+                try {
+                    Remove-Item -LiteralPath $UserDataFolder -Recurse -Force -ErrorAction Stop
+                    $Removed = $true
+                    break
+                }
+                catch {
+                    Start-Sleep -Milliseconds 500
+                }
+            }
+
+            if (-not $Removed) {
+                "Could not remove the temporary browser profile '{0}'. It is safe to delete by hand." -f $UserDataFolder | Write-Warning
+            }
         }
 
         return [pscustomobject]@{

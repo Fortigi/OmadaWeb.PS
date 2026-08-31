@@ -174,6 +174,9 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
     }
 
     It 'Kept the loopback stand-in healthy throughout' {
-        $Script:RelyingParty.ListenerError | Should -BeNullOrEmpty
+        # Reads the runspace's error stream as well as the loop's own record, so a listener that died
+        # before it ever served a request cannot be reported as healthy while the sign-in failure is
+        # blamed on Microsoft.
+        (Get-CanaryRelyingPartyError -RelyingParty $Script:RelyingParty) -join [System.Environment]::NewLine | Should -BeNullOrEmpty
     }
 }

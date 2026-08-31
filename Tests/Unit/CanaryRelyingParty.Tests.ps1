@@ -303,6 +303,24 @@ Describe 'Start-CanaryRelyingParty' -Tag 'Unit' {
         ($Response.Content | ConvertFrom-Json).canary | Should -Be "ok"
     }
 
+    It 'Reports the listener health without blocking on the still-open error stream' {
+        # Regression guard. Streams.Error is a PSDataCollection whose enumerator blocks while the
+        # invocation is open, waiting for the next record instead of ending - so reading it with
+        # "@($collection)" hangs for as long as the listener runs. In the canary that is a job that
+        # never finishes rather than a test that fails, which is far harder to diagnose.
+        $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $Reported = Get-CanaryRelyingPartyError -RelyingParty $Script:RelyingParty
+        $Stopwatch.Stop()
+
+        $Stopwatch.Elapsed.TotalSeconds | Should -BeLessThan 5
+        $Reported | Should -BeNullOrEmpty
+    }
+
+    It 'Returns nothing for a null relying party rather than throwing' {
+        # Called from an AfterAll that may run after Start-CanaryRelyingParty itself failed.
+        Get-CanaryRelyingPartyError -RelyingParty $null | Should -BeNullOrEmpty
+    }
+
     It 'Survives a client that abandons its request' {
         # The browser abandons requests routinely while it navigates; one of those must not take the
         # listener down and strand the sign-in window.
