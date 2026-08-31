@@ -170,30 +170,27 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
             $Payload.sub | Should -Be 'client'
         }
 
-        It 'Should take the client id from the credential when ClientId is not given' {
-            $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate; Credential = $Script:Credential } {
-                Mock Invoke-RestMethod {
-                    $Script:CapturedBody = $Body
-                    return [PSCustomObject]@{ access_token = 'token' }
+        It 'Should not take the client id from the credential when a certificate is used' {
+            {
+                InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate; Credential = $Script:Credential } {
+                    Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
+
+                    # A credential is present, so its user name could be read - and deliberately is
+                    # not. It may belong to something else entirely, and an assertion signed for the
+                    # wrong application fails with an error from the identity provider that names
+                    # neither cause nor cure.
+                    $BoundParams = @{ Credential = $Credential; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
+
+                    Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) -WarningAction SilentlyContinue -ErrorAction Stop
                 }
-
-                $BoundParams = @{ Credential = $Credential; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
-
-                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) -WarningAction SilentlyContinue | Out-Null
-
-                return $Script:CapturedBody
-            }
-
-            $Body.client_id | Should -Be 'client-id'
-            $Body.client_assertion | Should -Not -BeNullOrEmpty
-            $Body.ContainsKey('client_secret') | Should -BeFalse
+            } | Should -Throw '*No client id was provided*'
         }
 
         It 'Should warn that the client secret is ignored when both credentials are supplied' {
             $Warnings = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate; Credential = $Script:Credential } {
                 Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
 
-                $BoundParams = @{ Credential = $Credential; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
+                $BoundParams = @{ ClientId = 'client'; Credential = $Credential; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
 
                 Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) -WarningVariable CapturedWarnings -WarningAction SilentlyContinue | Out-Null
 

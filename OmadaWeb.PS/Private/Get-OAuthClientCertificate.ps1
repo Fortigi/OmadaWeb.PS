@@ -122,7 +122,9 @@ function Get-OAuthClientCertificate {
                 "{0} - The certificate store '{1}\My' could not be searched: {2}" -f $MyInvocation.MyCommand, $StoreLocation, $PSItem.Exception.Message | Write-Verbose
             }
             finally {
-                $Store.Close()
+                # Close() releases the store handle; Dispose() is what the type documents, and a
+                # request-scoped helper in a long-running job opens two stores on every call.
+                $Store.Dispose()
             }
         }
 
@@ -132,11 +134,18 @@ function Get-OAuthClientCertificate {
 
         $CertificatesWithPrivateKey = @($FoundCertificates | Where-Object { $_.HasPrivateKey })
         if ($CertificatesWithPrivateKey.Count -eq 0) {
+            $FoundCertificates | ForEach-Object { $_.Dispose() }
             "{0} - The certificate with thumbprint {1} was found, but the account this runs under cannot reach its private key, so it cannot sign a client assertion. Grant that account read access to the private key, or import the certificate into its own 'CurrentUser\My' store." -f $MyInvocation.MyCommand, $NormalizedThumbprint | Write-Error -ErrorAction "Stop"
         }
 
-        "{0} - Using the client certificate from the certificate store. Thumbprint: {1}, subject: {2}, expires: {3}" -f $MyInvocation.MyCommand, $CertificatesWithPrivateKey[0].Thumbprint, $CertificatesWithPrivateKey[0].Subject, $CertificatesWithPrivateKey[0].NotAfter | Write-Verbose
-        return $CertificatesWithPrivateKey[0]
+        $StoreCertificate = $CertificatesWithPrivateKey[0]
+
+        # The same certificate can be installed in both locations, and the search does not stop at
+        # the first hit, so everything that is not being returned is released here.
+        $FoundCertificates | Where-Object { -not [object]::ReferenceEquals($_, $StoreCertificate) } | ForEach-Object { $_.Dispose() }
+
+        "{0} - Using the client certificate from the certificate store. Thumbprint: {1}, subject: {2}, expires: {3}" -f $MyInvocation.MyCommand, $StoreCertificate.Thumbprint, $StoreCertificate.Subject, $StoreCertificate.NotAfter | Write-Verbose
+        return $StoreCertificate
     }
 
     if (-not (Test-Path -LiteralPath $CertificatePath -PathType Leaf)) {
@@ -159,6 +168,7 @@ function Get-OAuthClientCertificate {
     $LoadedCertificate = $null
     $LastLoadError = $null
     foreach ($KeyStorageFlag in $KeyStorageFlags) {
+        $CandidateCertificate = $null
         try {
             # The X509Certificate2 constructor is used rather than X509CertificateLoader, which only
             # exists on .NET 9 and later and would leave Windows PowerShell without a way to open the
@@ -176,6 +186,14 @@ function Get-OAuthClientCertificate {
         catch {
             $LastLoadError = $PSItem.Exception.Message
             "{0} - Opening '{1}' with {2} failed: {3}" -f $MyInvocation.MyCommand, $ResolvedCertificatePath, $KeyStorageFlag, $PSItem.Exception.Message | Write-Verbose
+        }
+        finally {
+            # The first flag combination is expected to fail on some runtimes, so this loop routinely
+            # produces a certificate that is thrown away. Left undisposed it would leak a key handle
+            # on every call of a job that opens the same file on every run.
+            if ($null -ne $CandidateCertificate -and -not [object]::ReferenceEquals($CandidateCertificate, $LoadedCertificate)) {
+                $CandidateCertificate.Dispose()
+            }
         }
     }
 

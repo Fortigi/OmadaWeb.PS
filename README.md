@@ -155,6 +155,8 @@ $Identities = Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dat
 
 The certificate is looked up in `CurrentUser\My` first and then in `LocalMachine\My`, so a scheduled task under a service account and an interactive session each find their own without being told where to look. Only the thumbprint appears in verbose output; the assertion and the secret never do.
 
+`-ClientId` is required with a certificate and is never derived from `-Credential`, so a credential the script holds for something else cannot quietly sign an assertion for the wrong application.
+
 #### Any identity provider, not only Entra ID
 
 `-EntraIdTenantId` is a shorthand that builds the Microsoft token endpoint for you. Where Omada is federated to something else, name the endpoint and the scope directly and no Entra-named parameter is involved at all:
@@ -833,7 +835,9 @@ The wait in seconds before the first retry, doubled for each attempt after that.
 #### -ClientId <string>
 The application (client) id of the service principal to authenticate as. This parameter is used for -AuthenticationType OAuth.
 
-Supply it with one of the -OAuthCertificate* parameters for certificate-based client credentials. For the client secret flow the client id is taken from the user name of -Credential instead, so -ClientId is not needed there; when both are given, -ClientId wins.
+It is required whenever one of the -OAuthCertificate* parameters is used. For the client secret flow the client id is taken from the user name of -Credential instead, so -ClientId is not needed there, and supplying it overrides the user name.
+
+With a certificate the client id is never derived from -Credential, even when one is supplied: a credential held for some other purpose would otherwise sign an assertion for the wrong application, and the identity provider's rejection would name neither cause nor cure.
 
 ```yaml
         Type: System.String

@@ -118,7 +118,9 @@ Supplying AuthenticationType overrides any Authorization headers supplied to Hea
 Together with -OAuthScope this is the provider-neutral way to reach any OpenID Connect or OAuth2 token endpoint, so an Omada tenant federated to Okta, Ping, ADFS or Keycloak needs no Entra-named parameter at all."
     New-DynamicParam -Name "ClientId" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The application (client) id of the service principal to authenticate as. This parameter is used for -AuthenticationType OAuth.
 
-Supply it with one of the -OAuthCertificate* parameters for certificate-based client credentials. For the client secret flow the client id is taken from the user name of -Credential instead, so -ClientId is not needed there; when both are given, -ClientId wins."
+It is required whenever one of the -OAuthCertificate* parameters is used. For the client secret flow the client id is taken from the user name of -Credential instead, so -ClientId is not needed there, and supplying it overrides the user name.
+
+With a certificate the client id is never derived from -Credential, even when one is supplied: a credential held for some other purpose would otherwise sign an assertion for the wrong application, and the identity provider's rejection would name neither cause nor cure."
     New-DynamicParam -Name "OAuthCertificate" -Type ([System.Security.Cryptography.X509Certificates.X509Certificate2]) -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "An already loaded certificate, including its private key, to authenticate the client with instead of a client secret. This parameter is used for -AuthenticationType OAuth in combination with -ClientId.
 
 Use this when the certificate comes from somewhere this module does not know about, such as Azure Key Vault or a SecretManagement vault. To take it from the Windows certificate store or from a file, use -OAuthCertificateThumbprint or -OAuthCertificatePath instead; exactly one of the three may be supplied.

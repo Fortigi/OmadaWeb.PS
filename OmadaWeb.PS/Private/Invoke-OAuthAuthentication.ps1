@@ -18,20 +18,25 @@
     # than insisting on the secret form of one.
     $ClientCertificate = Get-OAuthClientCertificate -Certificate $BoundParams['OAuthCertificate'] -CertificateThumbprint $BoundParams['OAuthCertificateThumbprint'] -CertificatePath $BoundParams['OAuthCertificatePath'] -CertificatePassword $BoundParams['OAuthCertificatePassword']
 
-    $ClientId = $null
-    if (-not [string]::IsNullOrWhiteSpace($BoundParams['ClientId'])) {
-        $ClientId = $BoundParams['ClientId'].Trim()
-    }
-    elseif ($null -ne $BoundParams['Credential']) {
-        $ClientId = $BoundParams['Credential'].UserName.Trim()
-    }
-
     if ($null -eq $ClientCertificate -and $null -eq $BoundParams['Credential']) {
         "{0} - Credentials not provided! This mandatory for OAuth authentication! Supply -Credential holding the client id and secret, or a client certificate with -OAuthCertificateThumbprint, -OAuthCertificatePath or -OAuthCertificate together with -ClientId." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
     }
 
+    $ClientId = $null
+    if (-not [string]::IsNullOrWhiteSpace($BoundParams['ClientId'])) {
+        $ClientId = $BoundParams['ClientId'].Trim()
+    }
+    elseif ($null -eq $ClientCertificate) {
+        # Only the secret flow reads the client id off the credential, and only because a secret has
+        # to arrive in a PSCredential anyway, where the user name is the client id by construction.
+        # The certificate flow deliberately does not fall back to it: a credential held for some
+        # other purpose would otherwise sign an assertion for the wrong application, and the sign-in
+        # would fail with an error from the identity provider that names neither cause nor cure.
+        $ClientId = $BoundParams['Credential'].UserName.Trim()
+    }
+
     if ([string]::IsNullOrWhiteSpace($ClientId)) {
-        "{0} - No client id was provided! Supply it with -ClientId, or as the user name of -Credential." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+        "{0} - No client id was provided! Supply the application (client) id with -ClientId. It is required whenever a client certificate is used, and is never taken from -Credential in that case." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
     }
 
     # Both forms at once is not an error - the credential may be there because the same script also
