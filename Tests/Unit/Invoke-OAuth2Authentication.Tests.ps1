@@ -23,6 +23,10 @@ BeforeAll {
         'omadaweb-test',
         [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
 
+    $Script:CertificateFilePassword = ConvertTo-SecureString 'omadaweb-test' -AsPlainText -Force
+    $Script:CertificateFilePath = Join-Path ([System.IO.Path]::GetTempPath()) ("OmadaWeb.PS-oauth-{0}.pfx" -f [guid]::NewGuid())
+    [System.IO.File]::WriteAllBytes($Script:CertificateFilePath, $SelfSignedCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, 'omadaweb-test'))
+
     function Script:ConvertFrom-JwtPayload {
         param(
             [string]$Assertion
@@ -200,6 +204,63 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
             $Warnings -join "`n" | Should -BeLike '*client secret in the credential is ignored*'
         }
 
+        It 'Should leave a caller-supplied certificate usable for the next request' {
+            # The module disposes a certificate it opened itself, once per request. One handed to it
+            # with -OAuthCertificate belongs to the caller, who will very likely pass the same object
+            # to the next call, so disposing that one would break the second request in every script
+            # that holds its certificate in a variable.
+            $Assertions = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate } {
+                Mock Invoke-RestMethod {
+                    $Script:CapturedBody = $Body
+                    return [PSCustomObject]@{ access_token = 'token' }
+                }
+
+                $BoundParams = @{ ClientId = 'client'; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+                $First = $Script:CapturedBody.client_assertion
+
+                $SecondBoundParams = @{ ClientId = 'client'; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $SecondBoundParams) | Out-Null
+
+                return @($First, $Script:CapturedBody.client_assertion)
+            }
+
+            $Assertions[0] | Should -Not -BeNullOrEmpty
+            $Assertions[1] | Should -Not -BeNullOrEmpty
+            $Script:ClientCertificate.HasPrivateKey | Should -BeTrue
+        }
+
+        It 'Should open a certificate file again on the next request after releasing the first' {
+            # The disposal branch the test above does not take. Two consecutive requests from the
+            # same file must both sign, which they cannot do if the first one released something the
+            # second still needed.
+            $Assertions = InModuleScope 'OmadaWeb.PS' -Parameters @{ Path = $Script:CertificateFilePath; Password = $Script:CertificateFilePassword } {
+                Mock Invoke-RestMethod {
+                    $Script:CapturedBody = $Body
+                    return [PSCustomObject]@{ access_token = 'token' }
+                }
+
+                $Signed = @()
+                foreach ($Attempt in 1..2) {
+                    $BoundParams = @{
+                        ClientId                 = 'client'
+                        OAuthCertificatePath     = $Path
+                        OAuthCertificatePassword = $Password
+                        EntraIdTenantId          = 'tenant'
+                        Headers                  = @{}
+                    }
+
+                    Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+                    $Signed += $Script:CapturedBody.client_assertion
+                }
+
+                return $Signed
+            }
+
+            $Assertions[0] | Should -Not -BeNullOrEmpty
+            $Assertions[1] | Should -Not -BeNullOrEmpty
+        }
+
         It 'Should still send a client secret when no certificate is supplied' {
             $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
                 Mock Invoke-RestMethod {
@@ -277,6 +338,10 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 }
 
 AfterAll {
+    if ($null -ne $Script:CertificateFilePath -and (Test-Path -LiteralPath $Script:CertificateFilePath)) {
+        Remove-Item -LiteralPath $Script:CertificateFilePath -Force -ErrorAction SilentlyContinue
+    }
+
     if ($null -ne $Script:CertificateKey) {
         $Script:CertificateKey.Dispose()
     }

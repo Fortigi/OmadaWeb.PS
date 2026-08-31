@@ -89,12 +89,28 @@
     }
 
     if ($null -ne $ClientCertificate) {
-        # RFC 7523. The assertion is bound to this exact token endpoint through its 'aud' claim, which
-        # is why it is built here, after the endpoint has been resolved, rather than alongside the
-        # certificate.
-        $RequestBody['client_assertion_type'] = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
-        $RequestBody['client_assertion'] = New-OAuthClientAssertion -ClientId $ClientId -Audience $OAuthUri -Certificate $ClientCertificate
-        "{0} - Authenticating the client with certificate {1} instead of a client secret." -f $MyInvocation.MyCommand, $ClientCertificate.Thumbprint | Write-Verbose
+        try {
+            # RFC 7523. The assertion is bound to this exact token endpoint through its 'aud' claim,
+            # which is why it is built here, after the endpoint has been resolved, rather than
+            # alongside the certificate.
+            $RequestBody['client_assertion_type'] = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+            $RequestBody['client_assertion'] = New-OAuthClientAssertion -ClientId $ClientId -Audience $OAuthUri -Certificate $ClientCertificate
+            "{0} - Authenticating the client with certificate {1} instead of a client secret." -f $MyInvocation.MyCommand, $ClientCertificate.Thumbprint | Write-Verbose
+        }
+        finally {
+            # A certificate the module opened itself - from the store or from a file - is opened
+            # again on every request, so an unattended job making thousands of them would hold
+            # thousands of key handles until the collector got round to them. The assertion is a
+            # string by this point and nothing downstream needs the certificate.
+            #
+            # One passed in with -OAuthCertificate belongs to the caller, who may well reuse it for
+            # the next call, and is left alone. The validation failures above end the request rather
+            # than repeating, so they are not the path that accumulates and are deliberately not
+            # wrapped.
+            if ($null -eq $BoundParams['OAuthCertificate']) {
+                $ClientCertificate.Dispose()
+            }
+        }
     }
     else {
         $RequestBody['client_secret'] = $($BoundParams['Credential'].GetNetworkCredential().Password)
