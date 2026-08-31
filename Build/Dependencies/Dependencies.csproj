@@ -28,7 +28,7 @@
 
   <ItemGroup>
     <!-- Drives Microsoft Edge for -AuthenticationType Browser on PowerShell 7 (Install-Selenium). -->
-    <PackageReference Include="Selenium.WebDriver" Version="4.47.0" />
+    <PackageReference Include="Selenium.WebDriver" Version="4.48.0" />
 
     <!-- Hosts the embedded sign-in browser for -AuthenticationType WebView2 (Install-WebView2). -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
@@ -41,11 +41,11 @@
       the 8.x line: System.Text.Json 9 and later drop the net462 target Windows PowerShell 5.1 needs,
       so majors are ignored in .github/dependabot.yml while 8.0.x security patches still come through.
     -->
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" />
     <PackageReference Include="System.Text.Encodings.Web" Version="8.0.0" />
     <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.5.3" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
     <PackageReference Include="System.Buffers" Version="4.5.1" />
     <PackageReference Include="System.Memory" Version="4.5.5" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
