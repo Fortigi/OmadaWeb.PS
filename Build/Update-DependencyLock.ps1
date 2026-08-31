@@ -136,6 +136,22 @@ function Get-ManifestVersion {
     return $Versions
 }
 
+function Remove-YamlQuote {
+    # YAML scalars may be double-quoted, single-quoted or bare, and all three mean the same string.
+    # Reading only one of the forms would turn a harmless reformatting of dependabot.yml into a build
+    # failure, so the quotes are stripped rather than matched.
+    param([string]$Value)
+
+    $Trimmed = $Value.Trim()
+    if ($Trimmed.Length -ge 2) {
+        $Quote = $Trimmed[0]
+        if (($Quote -eq '"' -or $Quote -eq "'") -and $Trimmed[$Trimmed.Length - 1] -eq $Quote) {
+            return $Trimmed.Substring(1, $Trimmed.Length - 2)
+        }
+    }
+    return $Trimmed
+}
+
 function Get-IgnoredDependencyName {
     # Collects the dependency-name entries Dependabot is told to ignore for one manifest directory.
     #
@@ -161,8 +177,11 @@ function Get-IgnoredDependencyName {
             continue
         }
 
-        if ($Line -match '^\s*directory\s*:\s*"?([^"]+?)"?\s*$') {
-            $InRequestedUpdate = ($Matches[1] -eq $Directory)
+        if ($Line -match '^\s*directory\s*:\s*(.+?)\s*$') {
+            # A directory line starts a new scope even without an intervening package-ecosystem, so
+            # an ignore list already being read ends here.
+            $InRequestedUpdate = ((Remove-YamlQuote $Matches[1]) -eq $Directory)
+            $InIgnoreList = $false
             continue
         }
 
@@ -175,8 +194,8 @@ function Get-IgnoredDependencyName {
             continue
         }
 
-        if ($InIgnoreList -and $Line -match '^\s*-\s+dependency-name\s*:\s*"?([^"]+?)"?\s*$') {
-            $Names += $Matches[1]
+        if ($InIgnoreList -and $Line -match '^\s*-\s+dependency-name\s*:\s*(.+?)\s*$') {
+            $Names += Remove-YamlQuote $Matches[1]
         }
     }
     return $Names
@@ -422,8 +441,12 @@ if ($PSCmdlet.ParameterSetName -eq "Refresh") {
     $InventoryChanged = 0
 
     foreach ($Artifact in ($Artifacts | Where-Object { $_.Verification -eq "Sha256" })) {
-        $ManifestPath = Join-Path $RepositoryRoot $Artifact.Manifest
-        $Declared = Get-ManifestVersion -ManifestPath $ManifestPath
+        # The offline checks above already parsed every manifest once, keyed by its relative path.
+        $Declared = @{}
+        if ($ManifestVersions.ContainsKey($Artifact.Manifest)) {
+            $Declared = $ManifestVersions[$Artifact.Manifest]
+        }
+
         $Version = $Artifact.Version
         if ($Declared.ContainsKey($Artifact.PackageId)) {
             $Version = $Declared[$Artifact.PackageId]

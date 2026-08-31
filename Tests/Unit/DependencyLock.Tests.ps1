@@ -189,6 +189,27 @@ Describe 'Update-DependencyLock.ps1 -Check' -Tag 'Unit' {
         { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
     }
 
+    It 'Should read the ignore list whichever way its YAML scalars are quoted' {
+        # Double quotes, single quotes and bare scalars all mean the same string in YAML. Reading only
+        # one form would turn a reformatting of dependabot.yml into a false build failure.
+        $Root = New-LockSandbox
+        $ConfigFile = Join-Path $Root -ChildPath '.github\dependabot.yml'
+        $Rewritten = @(Get-Content -Path $ConfigFile | ForEach-Object {
+                if ($_ -match '^(\s*-\s+dependency-name\s*:\s*)"([^"]+)"\s*$') {
+                    "{0}'{1}'" -f $Matches[1], $Matches[2]
+                }
+                elseif ($_ -match '^(\s*directory\s*:\s*)"([^"]+)"\s*$') {
+                    "{0}{1}" -f $Matches[1], $Matches[2]
+                }
+                else {
+                    $_
+                }
+            })
+        $Rewritten | Set-Content -Path $ConfigFile
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Not -Throw
+    }
+
     It 'Should not accept an ignore rule that belongs to a different manifest directory' {
         # Legacy/ has its own ignore list. A rule there must not satisfy a requirement about the main
         # manifest, or the closure check would pass on a configuration that does not govern it.
