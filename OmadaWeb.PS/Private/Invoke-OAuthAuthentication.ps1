@@ -11,9 +11,36 @@
     "{0} - Invoking OAuth authentication" -f $MyInvocation.MyCommand | Write-Verbose
 
     "{0} - Request bearer token" -f $MyInvocation.MyCommand | Write-Verbose
-    if ($null -eq $BoundParams['Credential']) {
-        "{0} - Credentials not provided! This mandatory for OAuth authentication!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+
+    # A confidential client proves who it is with either a shared secret or a certificate, and this
+    # is where that fork is decided. Resolving the certificate first means the credential check below
+    # can ask the question that actually matters - was any client credential supplied at all - rather
+    # than insisting on the secret form of one.
+    $ClientCertificate = Get-OAuthClientCertificate -Certificate $BoundParams['OAuthCertificate'] -CertificateThumbprint $BoundParams['OAuthCertificateThumbprint'] -CertificatePath $BoundParams['OAuthCertificatePath'] -CertificatePassword $BoundParams['OAuthCertificatePassword']
+
+    $ClientId = $null
+    if (-not [string]::IsNullOrWhiteSpace($BoundParams['ClientId'])) {
+        $ClientId = $BoundParams['ClientId'].Trim()
     }
+    elseif ($null -ne $BoundParams['Credential']) {
+        $ClientId = $BoundParams['Credential'].UserName.Trim()
+    }
+
+    if ($null -eq $ClientCertificate -and $null -eq $BoundParams['Credential']) {
+        "{0} - Credentials not provided! This mandatory for OAuth authentication! Supply -Credential holding the client id and secret, or a client certificate with -OAuthCertificateThumbprint, -OAuthCertificatePath or -OAuthCertificate together with -ClientId." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ClientId)) {
+        "{0} - No client id was provided! Supply it with -ClientId, or as the user name of -Credential." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+    }
+
+    # Both forms at once is not an error - the credential may be there because the same script also
+    # signs in interactively - but only one of them authenticates the client, and which one is not
+    # something to leave a reader of the logs guessing at.
+    if ($null -ne $ClientCertificate -and $null -ne $BoundParams['Credential']) {
+        "Both a client certificate and a Credential were supplied for OAuth authentication. The certificate is used and the client secret in the credential is ignored." | Write-Warning
+    }
+
     if ($null -eq $BoundParams['EntraIdTenantId'] -and -not $BoundParams.Keys.Contains("OAuthUri")) {
         "{0} - EntraIdTenantId not provided! This mandatory for Entra based OAuth authentication when no custom OAuthUri is provided!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
     }
@@ -51,10 +78,21 @@
     }
 
     $RequestBody = @{
-        scope         = $OAuthScope
-        client_id     = $($BoundParams['Credential'].UserName.Trim())
-        grant_type    = 'client_credentials'
-        client_secret = $($BoundParams['Credential'].GetNetworkCredential().Password)
+        scope      = $OAuthScope
+        client_id  = $ClientId
+        grant_type = 'client_credentials'
+    }
+
+    if ($null -ne $ClientCertificate) {
+        # RFC 7523. The assertion is bound to this exact token endpoint through its 'aud' claim, which
+        # is why it is built here, after the endpoint has been resolved, rather than alongside the
+        # certificate.
+        $RequestBody['client_assertion_type'] = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+        $RequestBody['client_assertion'] = New-OAuthClientAssertion -ClientId $ClientId -Audience $OAuthUri -Certificate $ClientCertificate
+        "{0} - Authenticating the client with certificate {1} instead of a client secret." -f $MyInvocation.MyCommand, $ClientCertificate.Thumbprint | Write-Verbose
+    }
+    else {
+        $RequestBody['client_secret'] = $($BoundParams['Credential'].GetNetworkCredential().Password)
     }
 
     $Arguments = @{

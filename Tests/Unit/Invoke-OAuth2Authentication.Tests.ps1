@@ -7,6 +7,39 @@ BeforeAll {
     Import-Module $ModulePath -Force -ErrorAction Stop
 
     $Script:Credential = New-Object System.Management.Automation.PSCredential('client-id', (ConvertTo-SecureString 'secret' -AsPlainText -Force))
+
+    # A real key pair, built in memory, so the certificate flow can be asserted on the request body
+    # it actually produces rather than on a stub. Nothing is installed and nothing has to be cleaned
+    # up; Get-OAuthClientCertificate.Tests.ps1 covers where a certificate is found.
+    $Script:CertificateKey = [System.Security.Cryptography.RSA]::Create(2048)
+    $CertificateRequest = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
+        [System.Security.Cryptography.X509Certificates.X500DistinguishedName]::new('CN=OmadaWeb.PS OAuth test'),
+        $Script:CertificateKey,
+        [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+        [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+    $SelfSignedCertificate = $CertificateRequest.CreateSelfSigned([System.DateTimeOffset]::UtcNow.AddDays(-1), [System.DateTimeOffset]::UtcNow.AddDays(1))
+    $Script:ClientCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+        $SelfSignedCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, 'omadaweb-test'),
+        'omadaweb-test',
+        [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+
+    function Script:ConvertFrom-JwtPayload {
+        param(
+            [string]$Assertion
+        )
+
+        $Padded = ($Assertion -split '\.')[1].Replace('-', '+').Replace('_', '/')
+        switch ($Padded.Length % 4) {
+            2 {
+                $Padded += '=='
+            }
+            3 {
+                $Padded += '='
+            }
+        }
+
+        return ([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Padded)) | ConvertFrom-Json)
+    }
 }
 
 Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
@@ -63,6 +96,129 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential }
                 { Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop } | Should -Throw
             }
+        }
+
+        It 'Should throw when a certificate is supplied without a client id' {
+            {
+                InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate } {
+                    # The secret flow takes the client id from the credential's user name. There is no
+                    # credential here, so it has to be given explicitly and saying so is the only
+                    # useful answer.
+                    $RequestContext = New-TestRequestContext -BoundParams @{ OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
+                    Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop
+                }
+            } | Should -Throw '*No client id was provided*'
+        }
+    }
+
+    Context 'Certificate credential' {
+        It 'Should send a signed client assertion instead of a client secret' {
+            $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate } {
+                $Captured = $null
+                Mock Invoke-RestMethod {
+                    $Script:CapturedBody = $Body
+                    return [PSCustomObject]@{ access_token = 'certificate-token' }
+                }
+
+                $BoundParams = @{
+                    ClientId         = 'a1b2c3d4-0000-0000-0000-000000000000'
+                    OAuthCertificate = $Certificate
+                    EntraIdTenantId  = 'c1ec94c3-4a7a-4568-9321-79b0a74b8e70'
+                    Headers          = @{}
+                }
+
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+
+                $BoundParams.Headers.Authorization | Should -Be 'Bearer certificate-token'
+                $Captured = $Script:CapturedBody
+                return $Captured
+            }
+
+            $Body.grant_type | Should -Be 'client_credentials'
+            $Body.client_id | Should -Be 'a1b2c3d4-0000-0000-0000-000000000000'
+            $Body.client_assertion_type | Should -Be 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+            $Body.client_assertion | Should -Not -BeNullOrEmpty
+            # The secret field must be absent, not empty: an empty client_secret alongside an
+            # assertion is rejected by Entra ID as a malformed request.
+            $Body.ContainsKey('client_secret') | Should -BeFalse
+        }
+
+        It 'Should bind the assertion to the token endpoint that is actually called' {
+            $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate } {
+                Mock Invoke-RestMethod {
+                    $Script:CapturedBody = $Body
+                    return [PSCustomObject]@{ access_token = 'token' }
+                }
+
+                $BoundParams = @{
+                    ClientId         = 'client'
+                    OAuthCertificate = $Certificate
+                    OAuthUri         = 'https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token'
+                    OAuthScope       = 'omadaIdentityCloud'
+                    Headers          = @{}
+                }
+
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+
+                return $Script:CapturedBody
+            }
+
+            $Payload = ConvertFrom-JwtPayload -Assertion $Body.client_assertion
+
+            $Payload.aud | Should -Be 'https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token'
+            $Payload.iss | Should -Be 'client'
+            $Payload.sub | Should -Be 'client'
+        }
+
+        It 'Should take the client id from the credential when ClientId is not given' {
+            $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate; Credential = $Script:Credential } {
+                Mock Invoke-RestMethod {
+                    $Script:CapturedBody = $Body
+                    return [PSCustomObject]@{ access_token = 'token' }
+                }
+
+                $BoundParams = @{ Credential = $Credential; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
+
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) -WarningAction SilentlyContinue | Out-Null
+
+                return $Script:CapturedBody
+            }
+
+            $Body.client_id | Should -Be 'client-id'
+            $Body.client_assertion | Should -Not -BeNullOrEmpty
+            $Body.ContainsKey('client_secret') | Should -BeFalse
+        }
+
+        It 'Should warn that the client secret is ignored when both credentials are supplied' {
+            $Warnings = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate; Credential = $Script:Credential } {
+                Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
+
+                $BoundParams = @{ Credential = $Credential; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
+
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) -WarningVariable CapturedWarnings -WarningAction SilentlyContinue | Out-Null
+
+                return $CapturedWarnings
+            }
+
+            $Warnings -join "`n" | Should -BeLike '*client secret in the credential is ignored*'
+        }
+
+        It 'Should still send a client secret when no certificate is supplied' {
+            $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-RestMethod {
+                    $Script:CapturedBody = $Body
+                    return [PSCustomObject]@{ access_token = 'token' }
+                }
+
+                $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
+
+                Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+
+                return $Script:CapturedBody
+            }
+
+            $Body.client_secret | Should -Be 'secret'
+            $Body.ContainsKey('client_assertion') | Should -BeFalse
         }
     }
 
@@ -124,5 +280,9 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 }
 
 AfterAll {
+    if ($null -ne $Script:CertificateKey) {
+        $Script:CertificateKey.Dispose()
+    }
+
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 }
