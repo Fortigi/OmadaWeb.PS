@@ -79,8 +79,53 @@ Describe 'Get-EntraErrorVerdict' -Tag 'Unit' {
         }
     }
 
-    Context 'Codes this module has never seen' {
-        # Microsoft adds error codes, so the list above cannot be exhaustive. An unrecognized code
+    Context 'Account selection and session conditions' {
+        # Issue #76. The whole 1600x family says one thing: Entra ID cannot settle on an account by
+        # itself. None of them is a fault in this module and none of them is worth a bug report, so
+        # the verdict has to name them rather than let them fall into the catch-all below.
+        It 'Names <ErrorCode> instead of calling it unrecognized' -TestCases @(
+            @{ ErrorCode = '16000' }
+            @{ ErrorCode = '16001' }
+            @{ ErrorCode = '16002' }
+            @{ ErrorCode = '160021' }
+            @{ ErrorCode = '16003' }
+        ) {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ ErrorCode = $ErrorCode } {
+                $Verdict = Get-EntraErrorVerdict -ErrorCode $ErrorCode
+
+                $Verdict.IsError | Should -BeTrue
+                $Verdict.Action | Should -Be 'Manual'
+                $Verdict.IsTerminal | Should -BeFalse
+                $Verdict.IsRecognized | Should -BeTrue
+                $Verdict.Reason | Should -Not -BeNullOrEmpty
+                $Verdict.Reason | Should -Not -BeLike '*does not recognize*'
+            }
+        }
+
+        It 'Sends the user to the browser window that is already open' {
+            InModuleScope 'OmadaWeb.PS' {
+                (Get-EntraErrorVerdict -ErrorCode '16000').Reason | Should -BeLike '*browser window*'
+            }
+        }
+
+        It 'Reaches the same verdict from <Description>' -TestCases @(
+            @{ Description = 'the number itself'; ErrorCode = 16000 }
+            @{ Description = 'the number as a string'; ErrorCode = '16000' }
+            @{ Description = 'the AADSTS form'; ErrorCode = 'AADSTS16000' }
+        ) {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ ErrorCode = $ErrorCode } {
+                $Verdict = Get-EntraErrorVerdict -ErrorCode $ErrorCode
+
+                $Verdict.Numeric | Should -Be 16000
+                $Verdict.Code | Should -Be 'AADSTS16000'
+                $Verdict.Action | Should -Be 'Manual'
+                $Verdict.IsRecognized | Should -BeTrue
+                $Verdict.Reason | Should -Not -BeLike '*does not recognize*'
+            }
+        }
+    }
+
+    Context 'Codes this module has never seen' {        # Microsoft adds error codes, so the list above cannot be exhaustive. An unrecognized code
         # has to fail safe and name itself, not be treated as a healthy page.
         It 'Fails safe and names the code' {
             InModuleScope 'OmadaWeb.PS' {
@@ -90,6 +135,19 @@ Describe 'Get-EntraErrorVerdict' -Tag 'Unit' {
                 $Verdict.Action | Should -Be 'Manual'
                 $Verdict.IsTerminal | Should -BeFalse
                 $Verdict.Reason | Should -BeLike '*AADSTS90210*'
+            }
+        }
+
+        It 'Marks the code as one it does not know' {
+            InModuleScope 'OmadaWeb.PS' {
+                # The fail-safe is what keeps an unknown code from being guessed at, and the flag is
+                # what lets the handover still ask for a report. Weakening either would hide the
+                # next code Microsoft adds.
+                $Verdict = Get-EntraErrorVerdict -ErrorCode 'AADSTS99999'
+
+                $Verdict.Action | Should -Be 'Manual'
+                $Verdict.IsRecognized | Should -BeFalse
+                $Verdict.Reason | Should -BeLike '*does not recognize*'
             }
         }
     }
