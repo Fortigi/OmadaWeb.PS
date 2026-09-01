@@ -485,25 +485,13 @@ try {
     }
     else {
         $Script:UserAgent = $Script:UserAgent -f $($InstalledModule['Version'])
-        $GalleryVersion = Get-GalleryModuleVersion -ModuleName $ModuleName
-
-        if (-not $GalleryVersion) {
-        }
-        else {
-            if ([System.Version]$InstalledModule['Version'] -lt [System.Version]$GalleryVersion) {
-                "The installed version {0} of '{1}' is outdated. Latest version: {2}. Execute Update-Module {1} to update to the latest version!" -f ($($InstalledModule['Version'])), $ModuleName, $GalleryVersion | Write-Warning
-            }
-            elseif ([System.Version]$InstalledModule['Version'] -eq [System.Version]$GalleryVersion) {
-                "The installed version {0} of '{1}' is up-to-date." -f ($($InstalledModule['Version'])) , $ModuleName | Write-Verbose
-            }
-            else {
-                "The installed version {0} of '{1}' is newer than the gallery version {2}." -f ($($InstalledModule['Version'])), $ModuleName, $GalleryVersion | Write-Warning
-            }
-        }
+        Write-ModuleVersionStatus -ModuleName $ModuleName -InstalledModule $InstalledModule
     }
 
 }
-catch {}
+catch {
+    "The version check for module '{0}' could not be completed: {1}" -f $ModuleName, $_.Exception.Message | Write-Verbose
+}
 
 $Script:EdgeProfiles = Get-EdgeProfile
 
