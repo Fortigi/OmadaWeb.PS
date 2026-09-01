@@ -25,6 +25,19 @@ Describe 'Set-DynamicParameter' -Tag 'Unit' {
         }
     }
 
+    It 'Should add a SkipBodyRedaction switch that says where the body ends up' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
+            $Dictionary.ContainsKey('SkipBodyRedaction') | Should -Be $true
+            $Dictionary['SkipBodyRedaction'].ParameterType | Should -Be ([System.Management.Automation.SwitchParameter])
+
+            # The parameter puts request bodies into a stream callers export to a file, so the help
+            # has to say so rather than only describe the convenience.
+            $HelpMessage = ($Dictionary['SkipBodyRedaction'].Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } | Select-Object -First 1).HelpMessage
+            $HelpMessage | Should -Match 'verbose'
+        }
+    }
+
     It 'Should default AuthenticationType to WebView2' {
         InModuleScope 'OmadaWeb.PS' {
             $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'

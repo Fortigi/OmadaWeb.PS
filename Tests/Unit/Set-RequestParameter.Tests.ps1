@@ -61,6 +61,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                     CookiePath          = 'C:\Temp'
                     Paged               = $true
                     SessionKey          = 'user-a'
+                    SkipBodyRedaction   = $true
                 }
                 $Result = Set-RequestParameter -RequestContext (New-TestRequestContext -BoundParams $BoundParams)
                 $Result.Keys | Should -Contain 'Uri'
@@ -71,6 +72,7 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                 $Result.Keys | Should -Not -Contain 'CookiePath'
                 $Result.Keys | Should -Not -Contain 'Paged'
                 $Result.Keys | Should -Not -Contain 'SessionKey'
+                $Result.Keys | Should -Not -Contain 'SkipBodyRedaction'
             }
         }
 
@@ -157,6 +159,37 @@ Describe 'Set-RequestParameter' -Tag 'Unit' {
                 $VerboseOutput | Should -Match 'svc_sql'
                 $VerboseOutput | Should -Match 'example\.omada\.cloud'
                 $VerboseOutput | Should -Match 'POST'
+            }
+        }
+
+        It 'Should log the body itself when body redaction is skipped, and nothing else it was hiding' {
+            InModuleScope 'OmadaWeb.PS' {
+                # What -SkipBodyRedaction exists for: the Omada SQL troubleshooter needs to see the
+                # query it sent. Everything the walker masks for another reason stays masked.
+                try {
+                    $Script:SkipBodyRedaction = $true
+                    $Session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+                    $Session.Cookies.Add((New-Object System.Net.Cookie('oisauthtoken', 'cookie-secret-value', '/', 'example.omada.cloud')))
+                    $BoundParams = @{
+                        Uri        = 'https://example.omada.cloud/OData'
+                        Method     = 'POST'
+                        Headers    = @{ Authorization = 'Basic dXNlcjpTdXAzclNlY3JldCE=' }
+                        WebSession = $Session
+                        Credential = New-Object System.Management.Automation.PSCredential('omada\svc_sql', (ConvertTo-SecureString 'Sup3rSecret!' -AsPlainText -Force))
+                        Body       = '{"C_QUERY":"SELECT * FROM dbo.Person"}'
+                    }
+                    $RequestContext = New-TestRequestContext -BoundParams $BoundParams -Session $Session
+
+                    $VerboseOutput = ((Set-RequestParameter -RequestContext $RequestContext -Verbose 4>&1) | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] }) | Out-String
+
+                    $VerboseOutput | Should -Match 'dbo\.Person'
+                    $VerboseOutput | Should -Not -Match 'dXNlcjpTdXAzclNlY3JldCE'
+                    $VerboseOutput | Should -Not -Match 'cookie-secret-value'
+                    $VerboseOutput | Should -Not -Match 'Sup3rSecret'
+                }
+                finally {
+                    $Script:SkipBodyRedaction = $false
+                }
             }
         }
     }

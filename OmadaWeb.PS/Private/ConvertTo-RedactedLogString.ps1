@@ -264,8 +264,12 @@ function Get-RedactedMemberValue {
     }
 
     # Request bodies keep their keys and value shapes - enough to tell what was sent - but no values.
+    # -SkipBodyRedaction lifts that one rule, for callers such as the Omada SQL troubleshooter that
+    # need to read back the query they sent. Only this rule: everything below still applies to the
+    # body, so a member named for a secret, a credential, a secure string and a token inside a body
+    # string stay masked. Read from module scope for the same reason as the pattern list above.
     $ChildMaskValues = $MaskValues
-    if ($Name -eq "Body") {
+    if ($Name -eq "Body" -and -not $Script:SkipBodyRedaction) {
         $ChildMaskValues = $true
     }
 
