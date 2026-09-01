@@ -390,7 +390,9 @@ Task Test -depends ImportModule {
     $PesterConfiguration.TestResult.Enabled = $true
     $PesterConfiguration.TestResult.OutputFormat = 'JUnitXml'
     $PesterConfiguration.TestResult.OutputPath = (Join-Path -Path $ParentPath -ChildPath 'buildoutput\TestResults.xml')
-    # E2E tests need a real Edge/WebView2 install and are slow; they are opt-in and run on a separate scheduled pipeline instead of every build.
+    # E2E tests need a real Edge/WebView2 install, a browser window and a tenant to sign in to, so
+    # they are excluded here and run daily on .github/workflows/entra-canary.yml instead - the
+    # scheduled pipeline this comment used to promise. See docs/entra-canary.md.
     $PesterConfiguration.Filter.ExcludeTag = 'E2E'
 
     # Every test run exercises the module under Set-StrictMode -Version Latest. The module picks this

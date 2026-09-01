@@ -205,6 +205,8 @@ The warning names the state, the elements that were expected but absent, and the
 
 The module waits 60 seconds without progress before it gives up on autofill, so a slow round trip to Microsoft is not mistaken for a changed page. Waiting for you to approve a sign-in request in your authenticator app does not count against that.
 
+You should not normally be the one to find out. A scheduled job signs in to Entra ID once a day in a real browser and opens an issue when autofill stops recognising a screen, so a change on Microsoft's side is usually already known - and often already fixed - by the time you meet it. See [the Entra sign-in canary](docs/entra-canary.md).
+
 ### When Omada refuses the sign-in
 
 A sign-in can also fail on the other side of the redirect. Your identity provider authenticates you, hands the browser back to Omada, and Omada decides it cannot let you in - because the account is not a member of the tenant the Omada application is registered in, because the application registration is not accepted, or for any other reason it reports. That failure is not an HTTP error and not a redirect: it is a message rendered on Omada's own logon page, which then simply sits there.
