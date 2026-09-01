@@ -72,7 +72,9 @@ function Resolve-EntraSignInScreen {
 
     .OUTPUTS
         PSCustomObject with the members Screen, Action, ElementId, SubmitId, Index, Value,
-        ValueSource, Code, Reason and IsTerminal.
+        ValueSource, Code, Reason, IsTerminal and IsRecognized. IsRecognized is the verdict's own -
+        it says whether the code the page reported is one this module has an entry for, which is
+        what decides whether the handover asks the user for a bug report.
     #>
     [CmdletBinding()]
     [OutputType([System.Management.Automation.PSCustomObject])]
@@ -97,16 +99,17 @@ function Resolve-EntraSignInScreen {
     $Id = $Script:EntraSignInElementId
 
     $Decision = [pscustomobject]@{
-        Screen      = "Unknown"
-        Action      = "Wait"
-        ElementId   = $null
-        SubmitId    = $null
-        Index       = -1
-        Value       = $null
-        ValueSource = $null
-        Code        = $null
-        Reason      = $null
-        IsTerminal  = $false
+        Screen       = "Unknown"
+        Action       = "Wait"
+        ElementId    = $null
+        SubmitId     = $null
+        Index        = -1
+        Value        = $null
+        ValueSource  = $null
+        Code         = $null
+        Reason       = $null
+        IsTerminal   = $false
+        IsRecognized = $false
     }
 
     if ($null -eq $PageState) {
@@ -148,6 +151,7 @@ function Resolve-EntraSignInScreen {
         $Decision.Code = $ErrorVerdict.Code
         $Decision.Reason = $ErrorVerdict.Reason
         $Decision.IsTerminal = $ErrorVerdict.IsTerminal
+        $Decision.IsRecognized = $ErrorVerdict.IsRecognized
 
         # The verdict's own answer is carried through rather than flattened into "wait and see".
         # Waiting is the right response to a page this module does not recognize, because it might

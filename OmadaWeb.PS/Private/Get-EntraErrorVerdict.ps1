@@ -26,15 +26,18 @@ function Get-EntraErrorVerdict {
 
         An error code this function does not recognize is answered with Manual, not with silence:
         the list below is not, and cannot be, exhaustive, so anything unknown fails safe by handing
-        the sign-in back to the user with the code named in the diagnostic.
+        the sign-in back to the user with the code named in the diagnostic. IsRecognized says which
+        of the two happened, because the two deserve different words: a code that is in the list
+        below has a meaning worth stating, while one that is not is worth a bug report. Nothing but
+        the caller's wording depends on it - the action is Manual either way.
 
     .PARAMETER ErrorCode
         The value of iErrorCode, or sErrorCode, as read from the page. Accepts a number, the same
         number as a string, or a string such as 'AADSTS50126' - only the digits are used.
 
     .OUTPUTS
-        PSCustomObject with the members IsError, Code, Numeric, Action, IsTerminal and Reason.
-        Action is one of 'None', 'Stop' or 'Manual'.
+        PSCustomObject with the members IsError, Code, Numeric, Action, IsTerminal, IsRecognized
+        and Reason. Action is one of 'None', 'Stop' or 'Manual'.
     #>
     [CmdletBinding()]
     [OutputType([System.Management.Automation.PSCustomObject])]
@@ -46,12 +49,13 @@ function Get-EntraErrorVerdict {
     )
 
     $Verdict = [pscustomobject]@{
-        IsError    = $false
-        Code       = $null
-        Numeric    = 0
-        Action     = "None"
-        IsTerminal = $false
-        Reason     = $null
+        IsError      = $false
+        Code         = $null
+        Numeric      = 0
+        Action       = "None"
+        IsTerminal   = $false
+        IsRecognized = $false
+        Reason       = $null
     }
 
     if ([string]::IsNullOrWhiteSpace($ErrorCode)) {
@@ -96,17 +100,32 @@ function Get-EntraErrorVerdict {
         # authentication is required, or has to be enrolled in, before this account can continue.
         50076 = "Entra ID requires multi-factor authentication for this sign-in."
         50079 = "This account has to enroll in multi-factor authentication before it can sign in."
+
+        # Issue #76. The 1600x family is not a failure of the credential at all: it is Entra ID
+        # saying that it cannot settle on an account by itself. Silent single sign-on hits it
+        # whenever the browser holds more than one identity, or holds one that the target tenant
+        # does not know, and the answer to every one of them is the same - the person at the
+        # keyboard picks an account in the window that is already open. They are listed here rather
+        # than left to the catch-all below because a documented condition that this module can name
+        # should never be reported as one it has never heard of.
+        16000  = "Entra ID cannot continue this sign-in without a choice being made: either more than one account is signed in and none of them can be picked automatically, or the account it picked cannot be used for this application. Please choose the account to sign in with in the browser window that is open."
+        16001  = "The account this sign-in selected is not one Entra ID accepts for it. Please choose another account in the browser window that is open."
+        16002  = "Entra ID could not match this sign-in to any of the sessions the browser already holds. Please choose the account to sign in with in the browser window that is open."
+        160021 = "Entra ID found no signed-in session for the account this sign-in asked for. Please sign in with that account in the browser window that is open."
+        16003  = "The account that is signed in is not known in the tenant this application belongs to, so single sign-on cannot be used for it. Please sign in with an account of that tenant in the browser window that is open."
     }
 
     if ($TerminalReason.ContainsKey([int]$Numeric)) {
         $Verdict.Action = "Stop"
         $Verdict.IsTerminal = $true
+        $Verdict.IsRecognized = $true
         $Verdict.Reason = $TerminalReason[[int]$Numeric]
         return $Verdict
     }
 
     if ($ManualReason.ContainsKey([int]$Numeric)) {
         $Verdict.Action = "Manual"
+        $Verdict.IsRecognized = $true
         $Verdict.Reason = $ManualReason[[int]$Numeric]
         return $Verdict
     }
