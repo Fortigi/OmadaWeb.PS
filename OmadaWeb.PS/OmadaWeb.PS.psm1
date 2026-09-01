@@ -143,6 +143,10 @@ $Script:SensitiveLogNamePatterns = @(
 # Used only inside an object that pairs a Name member with a Value member - a cookie or a header,
 # where the value is the secret. Precomputed for the same reason as the list above.
 $Script:SensitiveLogNamePatternsWithValue = $Script:SensitiveLogNamePatterns + "value"
+# Set per request from -SkipBodyRedaction, and read by the walker instead of being threaded through
+# its recursion. It has to exist before the first request: Set-StrictMode is active, and the walker
+# reads it on every object logged, including the one logged at the end of this file.
+$Script:SkipBodyRedaction = $false
 # Wrapped in a function purely to scope the analyzer suppression to this one assignment. The
 # attribute always covers the whole scope it sits on - PSAvoidGlobalVars has no per-variable
 # suppression ID - so on the param() block above it would have covered this entire file and hidden

@@ -13,6 +13,13 @@ function Invoke-OmadaRequest {
             $Script:StopError = $false
             $BoundParams = $PsCmdLet.MyInvocation.BoundParameters
 
+            # Assigned rather than only set when the switch is present, and assigned here rather than
+            # further down, so it holds for exactly the request that asked for it: the walker reads
+            # it as module state, and a flag left on would keep bodies in the verbose stream for
+            # every later call in the same PowerShell session. The re-authentication retry below
+            # rebuilds its arguments from $BoundParams, so it carries across that recursion.
+            $Script:SkipBodyRedaction = $BoundParams.ContainsKey("SkipBodyRedaction") -and [bool]$BoundParams['SkipBodyRedaction']
+
             if ("UserAgent" -notin $BoundParams.Keys) {
                 $BoundParams.Add("UserAgent", $Script:UserAgent)
                 $Script:UserAgentParameterUsed = $false

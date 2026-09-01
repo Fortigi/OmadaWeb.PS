@@ -197,6 +197,81 @@ Describe 'ConvertTo-RedactedLogString' -Tag 'Unit' {
         }
     }
 
+    Context 'Skipping body redaction' {
+        AfterEach {
+            InModuleScope 'OmadaWeb.PS' {
+                # The flag is module state, so a test that left it on would redact nothing in the
+                # tests that run after it - and they would still pass.
+                $Script:SkipBodyRedaction = $false
+            }
+        }
+
+        It 'Should keep body values when body redaction is skipped' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:SkipBodyRedaction = $true
+                $Result = ConvertTo-RedactedLogString -InputObject @{ Body = @{ C_QUERY = 'SELECT * FROM dbo.Person' } }
+                $Result | Should -Match 'C_QUERY'
+                $Result | Should -Match 'dbo\.Person'
+            }
+        }
+
+        It 'Should still mask a member inside the body whose name names a secret' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:SkipBodyRedaction = $true
+                $Result = ConvertTo-RedactedLogString -InputObject @{ Body = @{ C_QUERY = 'SELECT * FROM dbo.Person'; Password = 'Sup3rSecret!' } }
+                $Result | Should -Match 'dbo\.Person'
+                $Result | Should -Not -Match 'Sup3rSecret'
+                $Result | Should -Match '\*\*\*REDACTED\*\*\*'
+            }
+        }
+
+        It 'Should still mask a token that appears inside a body value' {
+            InModuleScope 'OmadaWeb.PS' {
+                # The name rules cannot see this one - the secret is in the text, not in a member
+                # name - so it is the regex net that has to catch it, exactly as it does elsewhere.
+                $Script:SkipBodyRedaction = $true
+                $Result = ConvertTo-RedactedLogString -InputObject @{ Body = @{ C_QUERY = 'SELECT * FROM dbo.Person'; Note = 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature' } }
+                $Result | Should -Match 'dbo\.Person'
+                $Result | Should -Not -Match 'eyJzdWIiOiIxIn0'
+            }
+        }
+
+        It 'Should still mask a credential and a secure string inside the body' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:SkipBodyRedaction = $true
+                $Result = ConvertTo-RedactedLogString -InputObject @{
+                    Body = @{
+                        Account = New-Object System.Management.Automation.PSCredential('omada\svc_sql', (ConvertTo-SecureString 'Sup3rSecret!' -AsPlainText -Force))
+                        Secret  = (ConvertTo-SecureString 'An0therSecret!' -AsPlainText -Force)
+                    }
+                }
+                $Result | Should -Not -Match 'Sup3rSecret'
+                $Result | Should -Not -Match 'An0therSecret'
+                $Result | Should -Match 'svc_sql'
+            }
+        }
+
+        It 'Should shape-mask the body again once the flag is off' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Script:SkipBodyRedaction = $false
+                $Result = ConvertTo-RedactedLogString -InputObject @{ Body = @{ C_QUERY = 'SELECT * FROM dbo.Person' } }
+                $Result | Should -Not -Match 'dbo\.Person'
+                $Result | Should -Match 'String\(24\)'
+            }
+        }
+
+        It 'Should not affect -ShapeOnly, which masks values whatever the flag says' {
+            InModuleScope 'OmadaWeb.PS' {
+                # -ShapeOnly is used where the object being logged IS a body. The switch under test
+                # is about the module's own request logging, not about that call site.
+                $Script:SkipBodyRedaction = $true
+                $Result = ConvertTo-RedactedLogString -InputObject @{ Name = 'Omada' } -ShapeOnly
+                $Result | Should -Match 'Name'
+                $Result | Should -Not -Match 'Omada'
+            }
+        }
+    }
+
     Context 'Edge cases' {
         It 'Should render a null input as the literal null' {
             InModuleScope 'OmadaWeb.PS' {
