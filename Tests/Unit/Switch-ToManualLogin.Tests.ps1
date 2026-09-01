@@ -105,6 +105,56 @@ Describe 'Switch-ToManualLogin' -Tag 'Unit' {
             $Warning | Should -Not -BeLike '*abcdef1234567890*'
         }
     }
+
+    Context 'What the handover says about why it happened' {
+        # Issue #76. A screen this module cannot read is worth a bug report; a condition Entra ID
+        # named itself is not. The two cases have to say different things, and the first one must
+        # not lose a word of what it says today.
+        It 'Blames the markup and asks for a report when the screen is unrecognized' {
+            InModuleScope 'OmadaWeb.PS' {
+                Switch-ToManualLogin -State 'ProcessingScenarios' -MissingElementId 'i0116' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                $Warning = $Warnings -join "`n"
+
+                $Warning | Should -BeLike '*no longer matches what this module knows about it*'
+                $Warning | Should -BeLike '*usually means Microsoft changed it*'
+                $Warning | Should -BeLike '*https://github.com/Fortigi/OmadaWeb.PS/issues*'
+            }
+        }
+
+        It 'Makes no claim about the page and asks for no report when the condition is recognized' {
+            InModuleScope 'OmadaWeb.PS' {
+                Switch-ToManualLogin -State 'Deciding/SignInError' -Cause 'RecognizedCondition' -Reason 'AADSTS16000: Entra ID could not decide which account to use.' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                $Warning = $Warnings -join "`n"
+
+                $Warning | Should -BeLike '*sign in yourself in the browser window*'
+                $Warning | Should -Not -BeLike '*Microsoft changed it*'
+                $Warning | Should -Not -BeLike '*github.com*'
+            }
+        }
+
+        It 'Leaves the missing element line out when no selector is to blame' {
+            InModuleScope 'OmadaWeb.PS' {
+                # The page was read and understood - nothing was missing. Printing 'unknown' here
+                # would invent a selector failure that never happened.
+                Switch-ToManualLogin -State 'Deciding/SignInError' -Cause 'RecognizedCondition' -Reason 'AADSTS16000: Entra ID could not decide which account to use.' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                ($Warnings -join "`n") | Should -Not -BeLike '*Missing elements*'
+            }
+        }
+
+        It 'Still asks for a report when the code itself is unknown' {
+            InModuleScope 'OmadaWeb.PS' {
+                Switch-ToManualLogin -State 'Deciding/SignInError' -Cause 'UnrecognizedCode' -Reason 'AADSTS99999: unknown' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                $Warning = $Warnings -join "`n"
+
+                $Warning | Should -BeLike '*https://github.com/Fortigi/OmadaWeb.PS/issues*'
+                $Warning | Should -Not -BeLike '*Missing elements*'
+            }
+        }
+    }
 }
 
 Describe 'Reset-LoginAutomationState' -Tag 'Unit' {
@@ -532,8 +582,45 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
         }
     }
 
-    It 'Resets the fallback when the browser leaves the Microsoft sign-in page' {
+    It 'Names an interaction-required code instead of blaming the sign-in page' {
         InModuleScope 'OmadaWeb.PS' {
+            # Issue #76. AADSTS16000 is a documented condition: Entra ID wants a person to pick an
+            # account. Handing over is right, but calling the code unrecognized, blaming the markup
+            # and asking for a bug report are all wrong.
+            $Script:LoginAutomationFallbackTimeout = 60
+            $Script:NextScriptResult = Script:New-SnapshotResult @{
+                ids        = @('idSIButton9', 'i0281')
+                visibleIds = @('idSIButton9', 'i0281')
+                errorCode  = '16000'
+            }
+
+            $Warning = Script:Invoke-LoginTick -Count 3
+
+            $Script:MicrosoftOnlineLogin | Should -BeFalse
+            $Warning | Should -BeLike '*AADSTS16000*'
+            $Warning | Should -Not -BeLike '*does not recognize*'
+            $Warning | Should -Not -BeLike '*Microsoft changed it*'
+            $Warning | Should -Not -BeLike '*github.com*'
+            $Warning | Should -Not -BeLike '*Missing elements*'
+        }
+    }
+
+    It 'Keeps asking for a report when the code on the page is one it has never seen' {
+        InModuleScope 'OmadaWeb.PS' {
+            # The fail-safe that made issue #76 visible in the first place. It stays.
+            $Script:LoginAutomationFallbackTimeout = 60
+            $Script:NextScriptResult = Script:New-SnapshotResult @{ errorCode = '99999' }
+
+            $Warning = Script:Invoke-LoginTick -Count 3
+
+            $Script:MicrosoftOnlineLogin | Should -BeFalse
+            $Warning | Should -BeLike '*AADSTS99999*'
+            $Warning | Should -BeLike '*https://github.com/Fortigi/OmadaWeb.PS/issues*'
+            $Warning | Should -Not -BeLike '*Missing elements : unknown*'
+        }
+    }
+
+    It 'Resets the fallback when the browser leaves the Microsoft sign-in page' {        InModuleScope 'OmadaWeb.PS' {
             $Script:ManualLoginFallbackActive = $true
             $Script:UnmatchedPageSince = [DateTime]::Now
             $Script:WebView2.Source = [System.Uri]::New('https://omada.contoso.com/home')
