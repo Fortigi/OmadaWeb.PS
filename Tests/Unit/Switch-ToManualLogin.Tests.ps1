@@ -151,6 +151,7 @@ Describe 'Switch-ToManualLogin' -Tag 'Unit' {
                 $Warning = $Warnings -join "`n"
 
                 $Warning | Should -BeLike '*https://github.com/Fortigi/OmadaWeb.PS/issues*'
+                $Warning | Should -Not -BeLike '*Microsoft changed it*'
                 $Warning | Should -Not -BeLike '*Missing elements*'
             }
         }
@@ -616,11 +617,13 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
             $Script:MicrosoftOnlineLogin | Should -BeFalse
             $Warning | Should -BeLike '*AADSTS99999*'
             $Warning | Should -BeLike '*https://github.com/Fortigi/OmadaWeb.PS/issues*'
+            $Warning | Should -Not -BeLike '*Microsoft changed it*'
             $Warning | Should -Not -BeLike '*Missing elements : unknown*'
         }
     }
 
-    It 'Resets the fallback when the browser leaves the Microsoft sign-in page' {        InModuleScope 'OmadaWeb.PS' {
+    It 'Resets the fallback when the browser leaves the Microsoft sign-in page' {
+        InModuleScope 'OmadaWeb.PS' {
             $Script:ManualLoginFallbackActive = $true
             $Script:UnmatchedPageSince = [DateTime]::Now
             $Script:WebView2.Source = [System.Uri]::New('https://omada.contoso.com/home')

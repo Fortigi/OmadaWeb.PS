@@ -125,7 +125,8 @@ Describe 'Get-EntraErrorVerdict' -Tag 'Unit' {
         }
     }
 
-    Context 'Codes this module has never seen' {        # Microsoft adds error codes, so the list above cannot be exhaustive. An unrecognized code
+    Context 'Codes this module has never seen' {
+        # Microsoft adds error codes, so the list above cannot be exhaustive. An unrecognized code
         # has to fail safe and name itself, not be treated as a healthy page.
         It 'Fails safe and names the code' {
             InModuleScope 'OmadaWeb.PS' {

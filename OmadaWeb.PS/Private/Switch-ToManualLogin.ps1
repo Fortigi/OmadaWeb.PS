@@ -23,8 +23,9 @@ function Switch-ToManualLogin {
             function was written for: the markup is the suspect, the missing selectors are the
             evidence, and a bug report is the fix.
           - UnrecognizedCode. Entra ID named an error this module has no entry for. The page was
-            read perfectly well, so no selector is to blame and none is reported - but the code
-            itself is worth reporting, so the request to do so stays.
+            read perfectly well, so no selector is to blame, none is reported, and the markup is
+            not accused of anything - but the code itself is worth reporting, so the request to do
+            so stays. That request is the whole reason this differs from RecognizedCondition.
           - RecognizedCondition. Entra ID named something this module knows and cannot answer on
             the user's behalf, such as a request to pick an account. Nothing is broken, nothing is
             missing, and asking for a bug report would send a user to the issue tracker for a
@@ -107,14 +108,24 @@ function Switch-ToManualLogin {
         $Lines.Add("  Reason           : {0}" -f (Protect-LogMessage -Message $Reason))
     }
 
-    if ($Cause -eq "RecognizedCondition") {
-        # Entra ID said what it wants and this module knows what that means. Claiming the page had
-        # changed would be false, and asking for a bug report would be asking a user to report a
-        # sign-in working as designed.
-        $Lines.Add("Entra ID asked for something that only you can do. Please sign in yourself in the browser window that is open - nothing about the page is broken, and there is nothing to report.")
-    }
-    else {
-        $Lines.Add("The sign-in page no longer matches what this module knows about it, which usually means Microsoft changed it. Please sign in yourself in the browser window that is open - only filling in your credentials automatically stopped working, signing in did not. Please report the details above at https://github.com/Fortigi/OmadaWeb.PS/issues.")
+    switch ($Cause) {
+        "RecognizedCondition" {
+            # Entra ID said what it wants and this module knows what that means. Claiming the page
+            # had changed would be false, and asking for a bug report would be asking a user to
+            # report a sign-in working as designed.
+            $Lines.Add("Entra ID asked for something that only you can do. Please sign in yourself in the browser window that is open - nothing about the page is broken, and there is nothing to report.")
+        }
+
+        "UnrecognizedCode" {
+            # The page was read and understood; it is the code that is new. Blaming the markup would
+            # send a reader to the selector table, which is the one place the answer is not - but
+            # the code itself is worth reporting, because that is how it gets an entry.
+            $Lines.Add("Entra ID reported an error code this module has no entry for. Please sign in yourself in the browser window that is open - only filling in your credentials automatically stopped working, signing in did not. Please report the details above at https://github.com/Fortigi/OmadaWeb.PS/issues.")
+        }
+
+        default {
+            $Lines.Add("The sign-in page no longer matches what this module knows about it, which usually means Microsoft changed it. Please sign in yourself in the browser window that is open - only filling in your credentials automatically stopped working, signing in did not. Please report the details above at https://github.com/Fortigi/OmadaWeb.PS/issues.")
+        }
     }
 
     ($Lines -join [System.Environment]::NewLine) | Write-Warning
