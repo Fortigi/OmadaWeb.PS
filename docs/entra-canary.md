@@ -200,12 +200,21 @@ through a second literal replacement of all four values, because that text is ab
 
 1. **Read the diagnostic in the issue.** It is what `Switch-ToManualLogin` emitted, and it names the
    state, the elements that were expected but absent, the ones that were present, and the page path.
-2. **Decide which failure it is.** The canary asserts several things separately, on purpose:
-   - *"Signed in with the credential, without falling back to manual entry"* failed → a selector
-     broke. This is the one the canary exists for. Note that it rests on whether the sign-in actually
-     completed rather than on catching the warning: nobody is at this browser, so if autofill stops
-     filling fields the sign-in simply never finishes. The diagnostic enriches that verdict; it does
-     not carry it.
+2. **Decide which failure it is.** The canary asserts several things separately, on purpose. Read
+   them together — the combination is what names the cause, and no single one of them means
+   "Microsoft changed the sign-in page" on its own:
+   - *"Signed in with the credential, without falling back to manual entry"* failed **and a
+     `Switch-ToManualLogin` diagnostic is in the report** → a selector broke. This is the one the
+     canary exists for. Note that the assertion rests on whether the sign-in actually completed
+     rather than on catching the warning: nobody is at this browser, so if autofill stops filling
+     fields the sign-in simply never finishes. The diagnostic enriches that verdict; it does not
+     carry it.
+   - The same assertion failed **with no diagnostic, and "Actually travelled through Entra and back"
+     failed with 0** → the sign-in never reached Microsoft, so the selector table is ruled out
+     entirely. Read the error text. Issue #79 was exactly this: a console-handle bug in
+     `Start-WebView2Login` failed the sign-in in 142 ms, before a browser window existed, and the
+     alert nonetheless sent its reader to the selector table. Both the assertion message and the
+     alert body now decide their wording from the evidence instead.
    - *"Did not report a selector it no longer recognizes"* failed on its own → the sign-in completed
      but the module still reported a page it did not recognise. Worth reading: something changed that
      the automation recovered from.

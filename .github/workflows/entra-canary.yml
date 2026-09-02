@@ -279,12 +279,29 @@ jobs:
               return;
             }
 
+            // A selector break is the failure this canary was built for, but it is not the only one
+            // it can catch - and issue #79 was filed by an earlier version of this text telling a
+            // maintainer to go and edit the selector table over a console-handle bug in the module.
+            // So the alert asks the reader to read the report first, and only claims a selector
+            // break when the report carries the diagnostic that proves one.
+            const looksLikeSelectorBreak = report.includes('Switch-ToManualLogin');
+
+            const diagnosis = looksLikeSelectorBreak
+              ? [
+                  `**What this means.** Credential autofill no longer recognizes a Microsoft sign-in screen. Signing in still works — a selector break degrades autofill, not login — but every user supplying \`-Credential\` now has to type it themselves.`,
+                  ``,
+                  `**What to do.** Update \`$Script:EntraSignInElementId\` in \`OmadaWeb.PS/OmadaWeb.PS.psm1\` from the diagnostic below, then re-run this workflow. See \`docs/entra-canary.md\` and issue #32.`,
+                ]
+              : [
+                  `**No selector diagnostic was captured, so do not assume the sign-in page changed.** \`Switch-ToManualLogin\` did not report an unrecognized page; the sign-in failed some other way — in this module, in the tenant, or on the runner.`,
+                  ``,
+                  `**What to do.** Read the failed assertions below first. "Actually travelled through Entra and back" failing with 0 means the browser never reached Microsoft, which rules the selector table out entirely. See the response guide in \`docs/entra-canary.md\`.`,
+                ];
+
             const body = [
               `The scheduled Entra ID sign-in canary failed twice in a row, so this is not a transient Microsoft hiccup.`,
               ``,
-              `**What this means.** Credential autofill no longer recognizes a Microsoft sign-in screen. Signing in still works — a selector break degrades autofill, not login — but every user supplying \`-Credential\` now has to type it themselves.`,
-              ``,
-              `**What to do.** Update \`$Script:EntraSignInElementId\` in \`OmadaWeb.PS/OmadaWeb.PS.psm1\` from the diagnostic below, then re-run this workflow. See \`docs/entra-canary.md\` and issue #32.`,
+              ...diagnosis,
               ``,
               `[Run ${context.runId}](${runUrl})`,
               ``,
