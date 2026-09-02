@@ -82,7 +82,7 @@
 .PARAMETER EnvironmentName
     GitHub environment the secrets are written to when -GitHubRepository is used.
 .EXAMPLE
-    Connect-MgGraph -Scopes 'User.ReadWrite.All','Application.ReadWrite.All','DelegatedPermissionGrant.ReadWrite.All','Directory.Read.All','Policy.Read.All','Policy.ReadWrite.ConditionalAccess'
+    Connect-MgGraph -Scopes 'User.ReadWrite.All','Application.ReadWrite.All','DelegatedPermissionGrant.ReadWrite.All','Directory.Read.All','Policy.Read.All','Policy.ReadWrite.ConditionalAccess','User-PasswordProfile.ReadWrite.All'
     ./Build/New-EntraCanaryConfiguration.ps1 -WhatIf
 
     Shows every object that would be created or changed, without touching the tenant. The script
@@ -667,7 +667,8 @@ try {
         "DelegatedPermissionGrant.ReadWrite.All",
         # Get-MgOrganization is how the tenant's initial onmicrosoft.com domain is found, and it is
         # not covered by any of the scopes above.
-        "Directory.Read.All"
+        "Directory.Read.All",
+        "User-PasswordProfile.ReadWrite.All"
     )
     if (-not $SkipConditionalAccess) {
         $RequiredScope += "Policy.Read.All"
