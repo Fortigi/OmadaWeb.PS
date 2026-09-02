@@ -23,8 +23,14 @@ function Test-OmadaConsoleControl {
         The answer is probed rather than inferred from [Console]::IsInputRedirected. Redirection is
         the common reason a console cannot be driven, but it is not the only one, and a predicate
         that is right about the usual case and wrong about the rest just re-introduces the crash
-        somewhere harder to find. Reading the property is cheap, and it is the very operation that
-        has to succeed later - so this cannot come to disagree with reality.
+        somewhere harder to find. Probing is cheap, and it is the very operation that has to succeed
+        later - so this cannot come to disagree with reality.
+
+        Both halves are probed, because the caller does both. The getter and the setter are separate
+        operations on the console handle, and a predicate that only read would still let a host where
+        the read works and the write does not crash on the write - the guard would be in place and
+        the bug would survive it. Writing the value straight back is a no-op, so asking the question
+        costs nothing and changes nothing.
 
     .OUTPUTS
         System.Boolean. True when Console.TreatControlCAsInput can be read and written.
@@ -39,14 +45,15 @@ function Test-OmadaConsoleControl {
     param()
 
     try {
-        $null = [Console]::TreatControlCAsInput
+        $Current = [Console]::TreatControlCAsInput
+        [Console]::TreatControlCAsInput = $Current
         return $true
     }
     catch {
         # Verbose rather than a warning. There is nothing for the user to do about it, nothing is
         # degraded that they would notice - a host with no console has nobody at a keyboard to press
         # Ctrl+C - and this runs on every browser sign-in.
-        "{0} - No console is attached, so Ctrl+C handling is left alone: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
+        "{0} - Ctrl+C handling cannot be driven here, so it is left alone: {1}" -f $MyInvocation.MyCommand, $_.Exception.Message | Write-Verbose
         return $false
     }
 }

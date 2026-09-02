@@ -61,19 +61,39 @@ Describe 'Test-OmadaConsoleControl' -Tag 'Unit' {
         { InModuleScope 'OmadaWeb.PS' { Test-OmadaConsoleControl } } | Should -Not -Throw
     }
 
-    It 'Agrees with what the console actually allows' {
-        # Not a tautology: it asserts the predicate reports the same thing the guarded call site will
+    It 'Agrees with what the console actually allows, for the write as well as the read' {
+        # Not a tautology: it asserts the predicate reports the same thing the guarded call sites will
         # experience a moment later. A probe that answered from something else - a redirection flag,
         # a cached value - could differ from it, and that difference is the bug.
+        #
+        # The write is exercised too, because Start-WebView2Login does both. A predicate that only
+        # read would leave a host where the read works and the write does not crashing on the write,
+        # with the guard in place and the bug intact.
         $Expected = $true
         try {
-            $null = [Console]::TreatControlCAsInput
+            $Current = [Console]::TreatControlCAsInput
+            [Console]::TreatControlCAsInput = $Current
         }
         catch {
             $Expected = $false
         }
 
         InModuleScope 'OmadaWeb.PS' { Test-OmadaConsoleControl } | Should -Be $Expected
+    }
+
+    It 'Leaves the console setting exactly as it found it' {
+        # The probe writes, so it has to write back what was there. A predicate that turned Ctrl+C
+        # into input as a side effect of being asked a question would break the caller's session in a
+        # way nothing here would notice.
+        if (-not (InModuleScope 'OmadaWeb.PS' { Test-OmadaConsoleControl })) {
+            Set-ItResult -Skipped -Because "this host has no console to observe"
+            return
+        }
+
+        $Before = [Console]::TreatControlCAsInput
+        $null = InModuleScope 'OmadaWeb.PS' { Test-OmadaConsoleControl }
+
+        [Console]::TreatControlCAsInput | Should -Be $Before
     }
 
     It 'Reports false in a host that has no console' {
