@@ -118,41 +118,83 @@ jobs:
             throw "The built module was not found at '$modulePath'."
           }
 
+          # Each attempt runs in a child process with a deadline, rather than in this one.
+          #
+          # A browser sign-in has no natural end when nobody is driving it. If the automation hands
+          # over to manual - which is exactly what a selector break makes it do - it then waits for a
+          # user who does not exist on a runner. The first run of this workflow after the console fix
+          # did precisely that: the window opened, the timer ticked for 29 minutes, and the job
+          # timeout killed the step. A killed step reports nothing at all: no assertions, no
+          # diagnostic, no alert. The canary was silent about the very failure it was watching for.
+          #
+          # In-process there is nothing to interrupt: the WinForms dialog blocks the thread it is
+          # shown on. A child process can simply be killed, which turns a hang into a reported
+          # failure - and that is the difference between a canary and a job that sometimes times out.
+          $attemptTimeoutSeconds = 480
+
           function Invoke-CanaryAttempt {
             param([int]$Attempt)
 
             $diagnosticPath = Join-Path $env:RUNNER_TEMP ("canary-diagnostic-{0}.txt" -f $Attempt)
             Remove-Item -LiteralPath $diagnosticPath -Force -ErrorAction SilentlyContinue
-            $env:OMADAWEBPS_CANARY_DIAGNOSTIC_PATH = $diagnosticPath
 
-            $container = New-PesterContainer -Path './Tests/E2E' -Data @{ ModulePath = $modulePath }
-            $configuration = New-PesterConfiguration
-            $configuration.Run.Container = $container
-            $configuration.Run.PassThru = $true
-            $configuration.Filter.Tag = 'E2E'
-            $configuration.Output.Verbosity = 'Detailed'
-            $configuration.TestResult.Enabled = $true
-            $configuration.TestResult.OutputFormat = 'JUnitXml'
-            $configuration.TestResult.OutputPath = (Join-Path $env:GITHUB_WORKSPACE ("buildoutput/CanaryResults-{0}.xml" -f $Attempt))
+            $resultPath = Join-Path $env:GITHUB_WORKSPACE ("buildoutput/CanaryResults-{0}.xml" -f $Attempt)
+            $summaryPath = Join-Path $env:RUNNER_TEMP ("canary-summary-{0}.json" -f $Attempt)
+            Remove-Item -LiteralPath $resultPath, $summaryPath -Force -ErrorAction SilentlyContinue
 
-            $result = Invoke-Pester -Configuration $configuration
+            $arguments = @(
+              "-NoLogo", "-NoProfile",
+              "-File", ('"{0}"' -f (Join-Path $env:GITHUB_WORKSPACE 'Tests/E2E/Invoke-CanaryAttempt.ps1')),
+              "-ModulePath", ('"{0}"' -f $modulePath),
+              "-ResultPath", ('"{0}"' -f $resultPath),
+              "-SummaryPath", ('"{0}"' -f $summaryPath),
+              "-DiagnosticPath", ('"{0}"' -f $diagnosticPath)
+            )
+
+            $process = Start-Process -FilePath (Get-Command pwsh.exe).Source -ArgumentList $arguments -NoNewWindow -PassThru
+            $timedOut = -not $process.WaitForExit($attemptTimeoutSeconds * 1000)
+
+            if ($timedOut) {
+              Write-Host ("::warning title=Canary attempt timed out::Attempt {0} was still running after {1} seconds and was stopped." -f $Attempt, $attemptTimeoutSeconds)
+              try { $process.Kill($true) } catch { Write-Host "Could not stop the attempt cleanly: $($_.Exception.Message)" }
+              # Every browser process the sign-in started outlives the runspace that opened it, and
+              # the next attempt must not inherit one.
+              Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            }
 
             $diagnostic = ''
             if (Test-Path -LiteralPath $diagnosticPath) {
               $diagnostic = Get-Content -LiteralPath $diagnosticPath -Raw
             }
 
-            $failure = @($result.Failed | ForEach-Object {
-              $name = if ([string]::IsNullOrWhiteSpace($_.ExpandedPath)) { $_.Name } else { $_.ExpandedPath }
-              "- {0}: {1}" -f $name, $_.ErrorRecord.Exception.Message
-            })
+            if ($timedOut) {
+              return [pscustomobject]@{
+                Failed     = 1
+                Passed     = 0
+                Skipped    = 0
+                Diagnostic = $diagnostic
+                Failure    = @("- The sign-in did not finish within $attemptTimeoutSeconds seconds and was stopped. Nobody is at this browser, so a sign-in that waits for a user waits forever; read the verbose trace above for the last page it reached.")
+              }
+            }
+
+            if (-not (Test-Path -LiteralPath $summaryPath)) {
+              return [pscustomobject]@{
+                Failed     = 1
+                Passed     = 0
+                Skipped    = 0
+                Diagnostic = $diagnostic
+                Failure    = @("- The attempt exited with code $($process.ExitCode) without reporting a result. See the output above.")
+              }
+            }
+
+            $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
 
             return [pscustomobject]@{
-              Failed     = [int]$result.FailedCount
-              Passed     = [int]$result.PassedCount
-              Skipped    = [int]$result.SkippedCount
+              Failed     = [int]$summary.Failed
+              Passed     = [int]$summary.Passed
+              Skipped    = [int]$summary.Skipped
               Diagnostic = $diagnostic
-              Failure    = $failure
+              Failure    = @($summary.Failure)
             }
           }
 
