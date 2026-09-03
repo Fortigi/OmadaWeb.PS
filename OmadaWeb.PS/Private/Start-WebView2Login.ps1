@@ -8,9 +8,26 @@ function Start-WebView2Login {
         [switch]$InPrivate
     )
 
+    # Declared outside the try because the catch below reads them. Anything that threw before they
+    # were assigned would otherwise make the handler fail on an unset variable under StrictMode, and
+    # the error the user saw would be that one instead of the one that actually broke the sign-in.
+    $ConsoleControlAvailable = $false
+    $OriginalTreatControlCAsInput = $null
+
     try {
         "{0} - Starting WebView2 login" -f $MyInvocation.MyCommand | Write-Verbose
-        $OriginalTreatControlCAsInput = [Console]::TreatControlCAsInput
+
+        # Ctrl+C is taken over further down so that pressing it closes this window instead of killing
+        # the caller's session, and put back afterwards. Both halves of that go through
+        # Console.TreatControlCAsInput, which throws "The handle is invalid" on a process with no
+        # console attached - a scheduled task, a service, a CI job, a piped script. Reading it here
+        # unguarded is what made -AuthenticationType WebView2 fail instantly and non-interactively,
+        # before the browser it needs was ever created (issue #79). See Test-OmadaConsoleControl.
+        $ConsoleControlAvailable = Test-OmadaConsoleControl
+        if ($ConsoleControlAvailable) {
+            $OriginalTreatControlCAsInput = [Console]::TreatControlCAsInput
+        }
+
         [System.Windows.Forms.Application]::EnableVisualStyles()
         $Script:WinForm = New-Object System.Windows.Forms.Form
         [Microsoft.Web.WebView2.WinForms.WebView2] $Script:WebView2 = New-Object Microsoft.Web.WebView2.WinForms.WebView2
@@ -199,14 +216,18 @@ function Start-WebView2Login {
         }
 
         # Disable Ctrl+C handling while form is open avoiding crashing the sessions when CTRL+C is pressed
-        "{0} - Disable Ctrl+C handling while form is open avoiding crashing the sessions when CTRL+C is pressed" -f $MyInvocation.MyCommand | Write-Verbose
-        [Console]::TreatControlCAsInput = $true
+        if ($ConsoleControlAvailable) {
+            "{0} - Disable Ctrl+C handling while form is open avoiding crashing the sessions when CTRL+C is pressed" -f $MyInvocation.MyCommand | Write-Verbose
+            [Console]::TreatControlCAsInput = $true
+        }
 
         "{0} - Show WinForm Dialog" -f $MyInvocation.MyCommand | Write-Verbose
         $Script:WinForm.ShowDialog() | Out-Null
 
-        "{0} - Re-enable Ctrl+C." -f $MyInvocation.MyCommand | Write-Verbose
-        [Console]::TreatControlCAsInput = $OriginalTreatControlCAsInput
+        if ($ConsoleControlAvailable) {
+            "{0} - Re-enable Ctrl+C." -f $MyInvocation.MyCommand | Write-Verbose
+            [Console]::TreatControlCAsInput = $OriginalTreatControlCAsInput
+        }
 
         "{0} - Reset-Timer" -f $MyInvocation.MyCommand | Write-Verbose
         Reset-Timer
@@ -225,7 +246,11 @@ function Start-WebView2Login {
             $Script:WebView2.Dispose()
             "{0} - Dispose WinForm" -f $MyInvocation.MyCommand | Write-Verbose
             $Script:WinForm.Dispose()
-            if ($null -ne $OriginalTreatControlCAsInput) {
+            # $null here means Ctrl+C was never taken over, either because there was no console to
+            # take it from or because the failure happened before that point. Either way there is
+            # nothing to put back, and writing to the console would throw a second time inside the
+            # handler for the first failure.
+            if ($ConsoleControlAvailable -and $null -ne $OriginalTreatControlCAsInput) {
                 "{0} - Re-enable Ctrl+C." -f $MyInvocation.MyCommand | Write-Verbose
                 [Console]::TreatControlCAsInput = $OriginalTreatControlCAsInput
             }

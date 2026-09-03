@@ -76,15 +76,30 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
         # A capture that quietly missed it would leave the canary reporting a failure with no reason
         # attached, which is the failure this whole exercise is meant to prevent.
         #
-        # -ForceAuthentication and -SkipCookieCache are what make a scheduled run mean anything: a
-        # cached cookie would satisfy the request without a sign-in page ever being drawn, so the
-        # canary would go green on the strength of yesterday's success.
+        # -SkipCookieCache is what makes a scheduled run mean anything: a cached cookie would satisfy
+        # the request without a sign-in page ever being drawn, so the canary would go green on the
+        # strength of yesterday's success. The authorization request also carries prompt=login, so
+        # the screens are drawn even if a session somehow survived.
+        #
+        # -ForceAuthentication is deliberately NOT used, and that is not a shortcut. It makes
+        # Start-WebView2Login fire ClearBrowsingDataAsync when the browser initializes, and nothing
+        # sequences that clear before the first navigation - the trace of run 33699066012 shows
+        # "Browsing data cleared" arriving after "Navigating to". Clearing cookies underneath a
+        # sign-in already in flight is a good way to produce exactly what that run got back from
+        # Entra: AADSTS50058, "the cookies used to represent the user's session were not sent".
+        # The runner starts from a fresh profile every time, so there is nothing here to clear anyway.
+        # The stand-in serves plain HTTP on the loopback interface, and PowerShell 7 refuses to send a
+        # credential over an unencrypted connection without being told to. Guarded by version rather
+        # than passed unconditionally because the parameter does not exist on Windows PowerShell 5.1,
+        # which is the same shape Tests/Integration uses for the same reason.
+        $UnencryptedAuthParameter = if ($PSVersionTable.PSVersion.Major -ge 6) { @{ AllowUnencryptedAuthentication = $true } } else { @{} }
+
         try {
             $Output = Invoke-OmadaWebRequest -Uri $Script:RelyingParty.ResourceUrl `
                 -AuthenticationType WebView2 `
                 -Credential $Credential `
-                -ForceAuthentication `
                 -SkipCookieCache `
+                @UnencryptedAuthParameter `
                 -ErrorAction Stop 3>&1
 
             foreach ($Record in @($Output)) {
@@ -142,10 +157,27 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
 
         $Report = (@($Message, $Diagnostic) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [System.Environment]::NewLine
 
-        $Report | Should -BeNullOrEmpty -Because (
-            "credential autofill did not carry the sign-in through, which usually means Microsoft changed a page this module recognizes by element id. " +
+        # The message is chosen from the evidence rather than assuming the most likely cause, because
+        # this text is what the alert issue tells a maintainer to go and do.
+        #
+        # Issue #79 is why. A console-handle bug in Start-WebView2Login made the sign-in fail in 142
+        # milliseconds, before a browser window existed - and the alert said Microsoft had changed a
+        # page and sent the reader to the selector table. Everything needed to tell those apart had
+        # already been collected: a selector break leaves a diagnostic, and a failure that never
+        # reached Microsoft leaves RedirectHitCount at zero.
+        $Because = if (-not [string]::IsNullOrWhiteSpace($Diagnostic)) {
+            "credential autofill fell back to manual sign-in, so Microsoft changed a page this module recognizes by element id. " +
             "Update `$Script:EntraSignInElementId in OmadaWeb.PS/OmadaWeb.PS.psm1 from the diagnostic above (issue #32)"
-        )
+        }
+        elseif ($Script:RelyingParty.RedirectHitCount -eq 0 -and -not [string]::IsNullOrWhiteSpace($Message)) {
+            "the sign-in failed before the browser ever came back from Microsoft, so this is NOT a selector break and the selector table is not what needs changing. " +
+            "The error above is from this module or from the runner - read it first"
+        }
+        else {
+            "credential autofill did not carry the sign-in through. No fallback diagnostic was captured, so check the error above before assuming the sign-in page changed"
+        }
+
+        $Report | Should -BeNullOrEmpty -Because $Because
     }
 
     It 'Did not report a selector it no longer recognizes' {
