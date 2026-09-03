@@ -76,14 +76,22 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
         # A capture that quietly missed it would leave the canary reporting a failure with no reason
         # attached, which is the failure this whole exercise is meant to prevent.
         #
-        # -ForceAuthentication and -SkipCookieCache are what make a scheduled run mean anything: a
-        # cached cookie would satisfy the request without a sign-in page ever being drawn, so the
-        # canary would go green on the strength of yesterday's success.
+        # -SkipCookieCache is what makes a scheduled run mean anything: a cached cookie would satisfy
+        # the request without a sign-in page ever being drawn, so the canary would go green on the
+        # strength of yesterday's success. The authorization request also carries prompt=login, so
+        # the screens are drawn even if a session somehow survived.
+        #
+        # -ForceAuthentication is deliberately NOT used, and that is not a shortcut. It makes
+        # Start-WebView2Login fire ClearBrowsingDataAsync when the browser initializes, and nothing
+        # sequences that clear before the first navigation - the trace of run 33699066012 shows
+        # "Browsing data cleared" arriving after "Navigating to". Clearing cookies underneath a
+        # sign-in already in flight is a good way to produce exactly what that run got back from
+        # Entra: AADSTS50058, "the cookies used to represent the user's session were not sent".
+        # The runner starts from a fresh profile every time, so there is nothing here to clear anyway.
         try {
             $Output = Invoke-OmadaWebRequest -Uri $Script:RelyingParty.ResourceUrl `
                 -AuthenticationType WebView2 `
                 -Credential $Credential `
-                -ForceAuthentication `
                 -SkipCookieCache `
                 -ErrorAction Stop 3>&1
 
