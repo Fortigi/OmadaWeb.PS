@@ -126,35 +126,26 @@ function Invoke-OmadaRequest {
                     "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
                 }
                 else {
-                    try {
-                        $SessionContext.AuthCookie = (Import-Clixml $CookiePath).OmadaWebAuthCookie
-                        # Diagnostics only: the cookie's own value is the session secret, so this goes
-                        # through the redaction walker. Depth is kept shallow on purpose so a verbose
-                        # log does not expand the whole cookie object graph.
-                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $SessionContext.AuthCookie -MaxDepth 3) | Write-Verbose
-                    }
-                    catch {
-                        $SessionContext.AuthCookie = $null
-                        "Failure loading cookie, try to create a new one." | Write-Verbose
-                    }
+                    # Import-OmadaCookieFile also migrates a file left unprotected by a version of
+                    # this module that predates issue #21, rewriting it encrypted and warning once.
+                    $SessionContext.AuthCookie = Import-OmadaCookieFile -Path $CookiePath
+
+                    # Diagnostics only: the cookie's own value is the session secret, so this goes
+                    # through the redaction walker. Depth is kept shallow on purpose so a verbose
+                    # log does not expand the whole cookie object graph.
+                    "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $SessionContext.AuthCookie -MaxDepth 3) | Write-Verbose
                 }
             }
             elseif ($null -eq $SessionContext.AuthCookie -and $BoundParams.Keys -notcontains "SkipCookieCache") {
                 if ($BoundParams.Keys -notcontains "ForceAuthentication" -and (Test-Path $SessionContext.CookieCacheFilePath -PathType Leaf)) {
                     "{0} - Loading cached encrypted cookie: {1}" -f $MyInvocation.MyCommand, $SessionContext.CookieCacheFilePath | Write-Verbose
 
-                    try {
-                        $SessionContext.AuthCookie = ([System.Management.Automation.PSSerializer]::Deserialize([System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                                    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml $SessionContext.CookieCacheFilePath))
-                                ))).OmadaWebAuthCookie
-                        # Diagnostics only: the cookie's own value is the session secret, so this goes
-                        # through the redaction walker. Depth is kept shallow on purpose so a verbose
-                        # log does not expand the whole cookie object graph.
-                        "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $SessionContext.AuthCookie -MaxDepth 3) | Write-Verbose
-                    }
-                    catch {
-                        "Failure loading cookie, try to create a new one." | Write-Verbose
-                    }
+                    $SessionContext.AuthCookie = Import-OmadaCookieFile -Path $SessionContext.CookieCacheFilePath
+
+                    # Diagnostics only: the cookie's own value is the session secret, so this goes
+                    # through the redaction walker. Depth is kept shallow on purpose so a verbose
+                    # log does not expand the whole cookie object graph.
+                    "{0} - Cookie:`r{1}" -f $MyInvocation.MyCommand, (ConvertTo-RedactedLogString -InputObject $SessionContext.AuthCookie -MaxDepth 3) | Write-Verbose
                 }
             }
 
@@ -406,10 +397,7 @@ function Invoke-OmadaRequest {
                         # still on disk (the one that caused this 401 in the first place), looping forever.
                         $RetryCookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
                         $RetryCookiePath = Join-Path $BoundParams['CookiePath'] -ChildPath $RetryCookieFileName
-                        try {
-                            [PSCustomObject]@{ OmadaWebAuthCookie = $SessionContext.AuthCookie } | Export-Clixml $RetryCookiePath -Force
-                        }
-                        catch {
+                        if (!(Export-OmadaCookieFile -Path $RetryCookiePath -AuthCookie $SessionContext.AuthCookie)) {
                             "{0} - Failed to update cookie file '{1}' after re-authentication." -f $MyInvocation.MyCommand, $RetryCookiePath | Write-Verbose
                         }
                     }

@@ -300,7 +300,7 @@ Everything the module stores lives under one root: `%LOCALAPPDATA%\OmadaWeb.PS`.
 | Artefact | Path | Contents | Protection | Lifetime |
 |---|---|---|---|---|
 | Encrypted cookie cache | `%LOCALAPPDATA%\OmadaWeb.PS\Cookies\<session hash>` | The Omada session cookie, so a later command does not have to sign in again | Encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), readable only by the current user on the current machine | Until the cookie is rejected, `-ForceAuthentication` or `-SkipCookieCache` is used, or you run `Clear-OmadaWebCache` |
-| Custom cookie file | The folder you pass to `-CookiePath` | The same session cookie | **Not encrypted** - protected only by the file system permissions of the location you choose | Until you delete it. It is not touched by `Clear-OmadaWebCache`, because the module does not know where you put it |
+| Custom cookie file | The folder you pass to `-CookiePath` | The same session cookie | Encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), readable only by the current user on the current machine - the same protection as the cache above | Until you delete it. It is not touched by `Clear-OmadaWebCache`, because the module does not know where you put it |
 | WebView2 browser profiles | `%LOCALAPPDATA%\OmadaWeb.PS\Edge User Data\OmadaWebView2Profile_<session hash>` | A dedicated Edge user profile per session, holding the Entra ID cookies and tokens that make re-authentication silent | File system permissions of your Windows user profile | Until you run `Clear-OmadaWebCache` |
 | Selenium browser profiles | `%LOCALAPPDATA%\OmadaWeb.PS\Profiles\<Edge profile>_<session hash>` | The Edge `user-data-dir` used when `-EdgeProfile` is combined with `-AuthenticationType Browser` | File system permissions of your Windows user profile | Until you run `Clear-OmadaWebCache` |
 | Bundled WebView2 assemblies | `lib\<edition>\<architecture>` inside the installed module | The Microsoft WebView2 assemblies, fetched and verified against their pinned SHA-256 when the module was built (see [SECURITY.md](SECURITY.md)) | File system permissions of the module's install location, usually read-only | For the lifetime of the installed module version; never written to at runtime |
@@ -680,10 +680,12 @@ Together with -OAuthScope this is the provider-neutral way to reach any OpenID C
 ```
 
 #### -CookiePath <string>
-Attempts to load a stored Omada authentication cookie from this path. This file will be updated when re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, an encrypted cookie is not cached.
+Attempts to load a stored Omada authentication cookie from this path. This file will be updated when re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, the default cookie cache is not written - this file takes its place.
+
+The file is encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), exactly like the default cookie cache, so it is readable only by the user who created it on the machine where it was created. This parameter only applies in combination with parameter -AuthenticationType Browser and -AuthenticationType WebView2.
 
 > [!IMPORTANT]
-> Be aware that an unencrypted version of the session cookie is stored on the file system. This parameter only applies in combination with parameter -AuthenticationType Browser and -AuthenticationType WebView2. Make sure it is stored at a secure location so it cannot be accessed by unauthorized users.
+> Because the protection is tied to the user and the machine, a cookie file **cannot be copied to another user or another computer**. Earlier versions of this module wrote this file unencrypted, and such a file is still accepted: it is read once, immediately re-written encrypted, and a warning is shown. If a file written by an earlier version ever sat on shared or synchronised storage, treat the token as exposed and sign out of the Omada session to invalidate it.
 
 ```yaml
         Type: System.String

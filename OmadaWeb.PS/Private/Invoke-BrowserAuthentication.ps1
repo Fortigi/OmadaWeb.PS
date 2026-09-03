@@ -113,19 +113,11 @@ function Invoke-BrowserAuthentication {
         # $BoundParams['Uri'] directly rather than relying on the caller's $Uri local.
         $CookieFileName = Get-OmadaCookieFileName -Uri ([System.Uri]::new($BoundParams['Uri'])) -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
         $CookiePath = (Join-Path $($BoundParams['CookiePath']) -ChildPath $CookieFileName)
-        $CookieObject = [PSCustomObject]@{
-            OmadaWebAuthCookie = $SessionContext.AuthCookie
-        }
 
-        try {
-            $CookieObject | Export-Clixml $CookiePath -Force
+        # Protected at rest, through the same writer as the default cache below. This used to be a
+        # bare Export-Clixml, which left the raw oisauthtoken readable in the file (issue #21).
+        if (Export-OmadaCookieFile -Path $CookiePath -AuthCookie $SessionContext.AuthCookie) {
             "Cookie file exported to: {0}" -f $CookiePath | Write-Verbose
-        }
-        catch [System.UnauthorizedAccessException] {
-            "Unable to export the cookie file due to insufficient permissions in folder {0}" -f $($BoundParams['CookiePath']) | Write-Warning
-        }
-        catch {
-            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
     elseif ($BoundParams.Keys -contains "SkipCookieCache") {
@@ -137,20 +129,8 @@ function Invoke-BrowserAuthentication {
     }
     elseif ($BoundParams.Keys -notcontains "SkipCookieCache") {
         "{0} - Caching encrypted cookie" -f $MyInvocation.MyCommand | Write-Verbose
-        $CookieObject = [PSCustomObject]@{
-            OmadaWebAuthCookie = $SessionContext.AuthCookie
-        }
-        $CookieCliXmlContent = [System.Management.Automation.PSSerializer]::Serialize($CookieObject, [int]::MaxValue)
-        $SecureCookieCliXml = ConvertTo-SecureString -String $CookieCliXmlContent -AsPlainText -Force
-        try {
-            $SecureCookieCliXml | Export-Clixml -Path $SessionContext.CookieCacheFilePath -Force
+        if (Export-OmadaCookieFile -Path $SessionContext.CookieCacheFilePath -AuthCookie $SessionContext.AuthCookie) {
             "{0} - Updated encrypted cookie cache: {1}" -f $MyInvocation.MyCommand, $SessionContext.CookieCacheFilePath | Write-Verbose
-        }
-        catch [System.UnauthorizedAccessException] {
-            "Unable to cache cookie due to insufficient permissions in folder '{0}'" -f (Split-Path $SessionContext.CookieCacheFilePath) | Write-Warning
-        }
-        catch {
-            $PSCmdlet.ThrowTerminatingError($PSItem)
         }
     }
 
