@@ -256,7 +256,21 @@ $(Get-EntraElementVisibilityScript)
 
                 $Decision = Resolve-EntraSignInScreen -PageState $Script:PageState -UserName $Script:CurrentWebView2Session.Credential.UserName.Trim() -HasPassword:$HasPassword -PreferredMfaMethod $PreferredMfaMethod -MfaRequestDisplayed:$Script:MfaRequestDisplayed
 
-                "Invoke-WebView2MicrosoftLogin - Screen '{0}', action '{1}'" -f $Decision.Screen, $Decision.Action | Write-Verbose
+                # The code and the reason travel with the screen, because between them they are the
+                # difference between "Microsoft changed the page" and "Entra refused this request",
+                # and the screen name alone does not say which. Without them a verbose trace can
+                # report SignInError and still leave a reader with no idea what the error was - which
+                # is exactly what the sign-in canary hit (issue #79).
+                $DecisionDetail = ""
+                if (-not [string]::IsNullOrWhiteSpace($Decision.Code)) {
+                    $DecisionDetail = ", code '{0}'" -f $Decision.Code
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace($Decision.Reason)) {
+                    $DecisionDetail = "{0}, reason '{1}'" -f $DecisionDetail, (Protect-LogMessage -Message $Decision.Reason)
+                }
+
+                "Invoke-WebView2MicrosoftLogin - Screen '{0}', action '{1}'{2}" -f $Decision.Screen, $Decision.Action, $DecisionDetail | Write-Verbose
                 $Script:PreviousScenario = $Script:CurrentScenario
                 $Script:CurrentScenario = $Decision.Screen
 

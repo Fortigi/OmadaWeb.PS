@@ -130,7 +130,9 @@ jobs:
           # In-process there is nothing to interrupt: the WinForms dialog blocks the thread it is
           # shown on. A child process can simply be killed, which turns a hang into a reported
           # failure - and that is the difference between a canary and a job that sometimes times out.
-          $attemptTimeoutSeconds = 480
+          # Generous for a real sign-in (no MFA on this account, so it is seconds) and short enough
+          # that two attempts plus the flake pause fit inside the job timeout with room to report.
+          $attemptTimeoutSeconds = 300
 
           function Invoke-CanaryAttempt {
             param([int]$Attempt)
@@ -151,7 +153,14 @@ jobs:
               "-DiagnosticPath", ('"{0}"' -f $diagnosticPath)
             )
 
-            $process = Start-Process -FilePath (Get-Command pwsh.exe).Source -ArgumentList $arguments -NoNewWindow -PassThru
+            # Captured to a file rather than streamed, so that a killed attempt still has a trace to
+            # read. It is echoed into the job log below either way; a timed-out attempt whose output
+            # went nowhere is what made the first stalled run unexplainable.
+            $childLog = Join-Path $env:RUNNER_TEMP ("canary-output-{0}.log" -f $Attempt)
+            $childErrorLog = Join-Path $env:RUNNER_TEMP ("canary-error-{0}.log" -f $Attempt)
+
+            $process = Start-Process -FilePath (Get-Command pwsh.exe).Source -ArgumentList $arguments -NoNewWindow -PassThru `
+              -RedirectStandardOutput $childLog -RedirectStandardError $childErrorLog
             $timedOut = -not $process.WaitForExit($attemptTimeoutSeconds * 1000)
 
             if ($timedOut) {
@@ -162,18 +171,38 @@ jobs:
               Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             }
 
+            Write-Host ("::group::Attempt {0} output" -f $Attempt)
+            Get-Content -LiteralPath $childLog -ErrorAction SilentlyContinue | Write-Host
+            Get-Content -LiteralPath $childErrorLog -ErrorAction SilentlyContinue | Write-Host
+            Write-Host "::endgroup::"
+
             $diagnostic = ''
             if (Test-Path -LiteralPath $diagnosticPath) {
               $diagnostic = Get-Content -LiteralPath $diagnosticPath -Raw
             }
 
             if ($timedOut) {
+              # A killed attempt never reached the assertion that writes the diagnostic file, so the
+              # last screen the automation named in its trace is the only account of where it stopped
+              # - and it is a good one: it distinguishes a page the module could not read from one
+              # Entra refused.
+              $lastScreen = @(Select-String -LiteralPath $childLog -Pattern "Screen '.*', action '.*'" -ErrorAction SilentlyContinue |
+                Select-Object -Last 1 | ForEach-Object { $_.Line.Trim() })
+
+              $failure = @("- The sign-in did not finish within $attemptTimeoutSeconds seconds and was stopped. Nobody is at this browser, so a sign-in that waits for a user waits forever.")
+              if ($lastScreen.Count -gt 0) {
+                $failure += "- The last page the automation named was: $($lastScreen[0])"
+              }
+              else {
+                $failure += "- The automation never named a page, so it did not get as far as reading one. Look at the trace above."
+              }
+
               return [pscustomobject]@{
                 Failed     = 1
                 Passed     = 0
                 Skipped    = 0
                 Diagnostic = $diagnostic
-                Failure    = @("- The sign-in did not finish within $attemptTimeoutSeconds seconds and was stopped. Nobody is at this browser, so a sign-in that waits for a user waits forever; read the verbose trace above for the last page it reached.")
+                Failure    = $failure
               }
             }
 
