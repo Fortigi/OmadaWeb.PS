@@ -88,11 +88,18 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
         # sign-in already in flight is a good way to produce exactly what that run got back from
         # Entra: AADSTS50058, "the cookies used to represent the user's session were not sent".
         # The runner starts from a fresh profile every time, so there is nothing here to clear anyway.
+        # The stand-in serves plain HTTP on the loopback interface, and PowerShell 7 refuses to send a
+        # credential over an unencrypted connection without being told to. Guarded by version rather
+        # than passed unconditionally because the parameter does not exist on Windows PowerShell 5.1,
+        # which is the same shape Tests/Integration uses for the same reason.
+        $UnencryptedAuthParameter = if ($PSVersionTable.PSVersion.Major -ge 6) { @{ AllowUnencryptedAuthentication = $true } } else { @{} }
+
         try {
             $Output = Invoke-OmadaWebRequest -Uri $Script:RelyingParty.ResourceUrl `
                 -AuthenticationType WebView2 `
                 -Credential $Credential `
                 -SkipCookieCache `
+                @UnencryptedAuthParameter `
                 -ErrorAction Stop 3>&1
 
             foreach ($Record in @($Output)) {
