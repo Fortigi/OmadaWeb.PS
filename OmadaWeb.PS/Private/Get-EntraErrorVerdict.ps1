@@ -22,7 +22,10 @@ function Get-EntraErrorVerdict {
             register security information, complete an extra verification step. The window is open
             and the user can finish there, so autofill steps aside through Switch-ToManualLogin
             rather than failing the request.
-          - None. There is no error. A healthy page reports iErrorCode 0.
+          - None. There is no error to act on. A healthy page reports iErrorCode 0 - and so, for this
+            module's purposes, does AADSTS50058, which reports only that the page found no existing
+            session to sign in silently with. That is the normal state of a cold browser, not a
+            failure, and it is explained where it is handled below.
 
         An error code this function does not recognize is answered with Manual, not with silence:
         the list below is not, and cannot be, exhaustive, so anything unknown fails safe by handing
@@ -75,6 +78,30 @@ function Get-EntraErrorVerdict {
     }
 
     if ($Numeric -eq 0) {
+        return $Verdict
+    }
+
+    # AADSTS50058 - "a silent sign-in request was sent but no user is signed in" - is not a failed
+    # sign-in. It is the sign-in page saying it looked for an existing session and found none, which
+    # is the ordinary state of a browser that has never signed in before. Entra's page attempts that
+    # silent check on load and leaves the result in $Config, while rendering the perfectly usable
+    # username prompt underneath it.
+    #
+    # Treating it as an error meant that a cold browser profile - the only kind the scheduled canary
+    # ever has, and what any user gets on a first sign-in or with -ForceAuthentication - was handed
+    # straight to a manual sign-in before the username was ever typed. The canary found it because it
+    # starts cold every single day (issue #79).
+    #
+    # It is answered here rather than added to the manual list because the right response is to
+    # carry on: the rules that follow read the elements that are actually on the page, and if there
+    # is a username field they will fill it in. If the page really is unusable, the stall timer still
+    # ends in Switch-ToManualLogin a minute later, so nothing is trapped by this.
+    #
+    # Same family as the 1600x codes handled below, and the same lesson from issue #76: a code the
+    # sign-in page emits about its own silent-SSO probe says nothing about whether the credential can
+    # be typed.
+    if ($Numeric -eq 50058) {
+        "{0} - AADSTS50058 reports no existing session, which is not a sign-in failure. Continuing." -f $MyInvocation.MyCommand | Write-Verbose
         return $Verdict
     }
 

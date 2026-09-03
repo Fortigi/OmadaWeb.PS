@@ -668,10 +668,12 @@ try {
         # Get-MgOrganization is how the tenant's initial onmicrosoft.com domain is found, and it is
         # not covered by any of the scopes above.
         "Directory.Read.All",
-        "User-PasswordProfile.ReadWrite.All"
+        "User-PasswordProfile.ReadWrite.All",
+        # Security defaults are read on every run, including under -SkipConditionalAccess, because
+        # they are a tenant-wide switch rather than a Conditional Access policy.
+        "Policy.Read.All"
     )
     if (-not $SkipConditionalAccess) {
-        $RequiredScope += "Policy.Read.All"
         $RequiredScope += "Policy.ReadWrite.ConditionalAccess"
     }
 
@@ -723,11 +725,18 @@ try {
     $Contained = $false
     $LocationRestricted = $false
 
+    # Security defaults are read whether or not Conditional Access is being touched. They are not a
+    # Conditional Access policy - they are a tenant-wide switch that enforces MFA registration on
+    # every account - and a canary account cannot answer that prompt. Reporting them only in the
+    # Conditional Access branch meant that -SkipConditionalAccess hid the single most likely reason
+    # for a canary that cannot sign in, and silently ignored -DisableSecurityDefaults along with it.
     if ($SkipConditionalAccess) {
         "Skipping every Conditional Access change (-SkipConditionalAccess)." | Write-Host -ForegroundColor Yellow
     }
-    else {
-        $SecurityDefaults = Get-CanarySecurityDefaultsState -Disable:$DisableSecurityDefaults
+
+    $SecurityDefaults = Get-CanarySecurityDefaultsState -Disable:$DisableSecurityDefaults
+
+    if (-not $SkipConditionalAccess) {
         if ($null -ne $User) {
             $MfaExemption = @(Add-CanaryMfaExemption -UserId $User.Id)
 

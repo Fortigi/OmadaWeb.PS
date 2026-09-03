@@ -26,6 +26,42 @@ Describe 'Get-EntraErrorVerdict' -Tag 'Unit' {
         }
     }
 
+    Context 'The page reporting that it found no session to sign in silently with' {
+        # AADSTS50058 is not a failed sign-in. Entra's page attempts a silent single sign-on when it
+        # loads, and when the browser holds no session it leaves that result in $Config while
+        # rendering the ordinary username prompt underneath. A cold browser profile always sees it -
+        # a first sign-in, a -ForceAuthentication run, and every single run of the scheduled canary,
+        # which is how it was found (issue #79). Treated as an error, it handed the sign-in to a
+        # manual fallback before the username had even been typed.
+        It 'Reports no error for <Description>' -TestCases @(
+            @{ Description = 'the number itself'; ErrorCode = 50058 }
+            @{ Description = 'the number as a string'; ErrorCode = '50058' }
+            @{ Description = 'the AADSTS form'; ErrorCode = 'AADSTS50058' }
+        ) {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ ErrorCode = $ErrorCode } {
+                $Verdict = Get-EntraErrorVerdict -ErrorCode $ErrorCode
+
+                $Verdict.IsError | Should -BeFalse
+                $Verdict.Action | Should -Be 'None'
+                $Verdict.IsTerminal | Should -BeFalse
+            }
+        }
+
+        It 'Does not hand the sign-in to the user over it' {
+            # The point of the fix: the automation carries on and fills the username field that is
+            # sitting on the page, instead of stepping aside from a page it could have driven.
+            InModuleScope 'OmadaWeb.PS' {
+                (Get-EntraErrorVerdict -ErrorCode 'AADSTS50058').Action | Should -Not -Be 'Manual'
+            }
+        }
+
+        It 'Still treats a neighbouring code as an error, so the exemption is not a hole' {
+            InModuleScope 'OmadaWeb.PS' {
+                (Get-EntraErrorVerdict -ErrorCode '50059').IsError | Should -BeTrue
+            }
+        }
+    }
+
     Context 'Failures that a retry cannot turn into a success' {
         # Every one of these ends the sign-in through Stop-OmadaLogin instead of opening another
         # browser window. 50126 is in this group on purpose: resubmitting a credential Entra ID has
