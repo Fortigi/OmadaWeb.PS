@@ -81,6 +81,24 @@ Describe 'Export-OmadaCookieFile / Import-OmadaCookieFile' -Tag 'Unit' {
         }
     }
 
+    It 'Should release the unmanaged decryption buffer on both the success and the failure path' {
+        # SecureStringToBSTR allocates unmanaged memory holding the decrypted document, which is
+        # neither garbage collected nor zeroed on release. Decrypting a protected file only to leave
+        # the plaintext in the process heap would defeat the point of protecting it. Asserted on the
+        # source rather than by probing memory, because there is no supported way to observe a freed
+        # BSTR - but a future edit that drops the finally fails here.
+        InModuleScope 'OmadaWeb.PS' {
+            $Source = (Get-Command Import-OmadaCookieFile).Definition
+
+            $Source | Should -Match 'ZeroFreeBSTR'
+            $Source | Should -Match 'PtrToStringBSTR'
+            # PtrToStringAuto would read to the first null rather than using the BSTR length prefix.
+            $Source | Should -Not -Match 'PtrToStringAuto'
+            # The free has to be in a finally, or a file that fails to decrypt leaks the buffer.
+            $Source | Should -Match '(?s)finally\s*\{[^}]*ZeroFreeBSTR'
+        }
+    }
+
     Context 'A file left unprotected by an earlier version' {
         It 'Should still be readable, so an upgrade does not strand the user' {
             InModuleScope 'OmadaWeb.PS' {

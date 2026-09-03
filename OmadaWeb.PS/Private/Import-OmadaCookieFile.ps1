@@ -35,10 +35,18 @@ function Import-OmadaCookieFile {
     }
 
     if (Test-OmadaCookieCacheFile -Path $Path) {
+        # SecureStringToBSTR allocates unmanaged memory holding the decrypted document. It is not
+        # garbage collected and it is not zeroed on release, so without the finally below the
+        # plaintext cookie would sit in the process's unmanaged heap until the process exits - and
+        # turn up in any memory dump taken meanwhile. Decrypting a protected file only to leave the
+        # plaintext lying about would defeat the point of protecting it.
+        $Bstr = [System.IntPtr]::Zero
         try {
-            $PlainCliXml = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml -Path $Path))
-            )
+            $Bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml -Path $Path))
+
+            # PtrToStringBSTR, not PtrToStringAuto: SecureStringToBSTR returns a length-prefixed
+            # BSTR, so this is the marshaller that reads exactly the right number of characters.
+            $PlainCliXml = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($Bstr)
             return ([System.Management.Automation.PSSerializer]::Deserialize($PlainCliXml)).OmadaWebAuthCookie
         }
         catch {
@@ -46,6 +54,11 @@ function Import-OmadaCookieFile {
             # indistinguishable from a corrupt one, and both mean the same thing: authenticate.
             "Failure loading cookie from '{0}', try to create a new one." -f $Path | Write-Verbose
             return $null
+        }
+        finally {
+            if ($Bstr -ne [System.IntPtr]::Zero) {
+                [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Bstr)
+            }
         }
     }
 
