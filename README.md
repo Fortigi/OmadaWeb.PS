@@ -680,7 +680,7 @@ Together with -OAuthScope this is the provider-neutral way to reach any OpenID C
 ```
 
 #### -CookiePath <string>
-Attempts to load a stored Omada authentication cookie from this path. This file will be updated when re-authentication is needed. If the file does not exist, it will be created after successful authentication. When this option is used, the default cookie cache is not written - this file takes its place.
+The **folder** to keep a stored Omada authentication cookie in. Pass a directory, not a file path: the module derives the file name itself with `Get-OmadaCookieFileName` and creates one file per session inside the folder you name. The file is updated when re-authentication is needed, and created after successful authentication if it is not there yet. When this option is used, the default cookie cache is not written - this file takes its place.
 
 The file is encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), exactly like the default cookie cache, so it is readable only by the user who created it on the machine where it was created. **There is no option to write it unencrypted** - the module deliberately offers no plaintext export, because a readable file holding a live session token is exactly what this parameter used to produce. This parameter only applies in combination with parameter -AuthenticationType Browser or -AuthenticationType WebView2.
 
