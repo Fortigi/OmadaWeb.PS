@@ -143,6 +143,10 @@ $Script:SensitiveLogNamePatterns = @(
 # Used only inside an object that pairs a Name member with a Value member - a cookie or a header,
 # where the value is the secret. Precomputed for the same reason as the list above.
 $Script:SensitiveLogNamePatternsWithValue = $Script:SensitiveLogNamePatterns + "value"
+# Set per request from -SkipBodyRedaction, and read by the walker instead of being threaded through
+# its recursion. It has to exist before the first request: Set-StrictMode is active, and the walker
+# reads it on every object logged, including the one logged at the end of this file.
+$Script:SkipBodyRedaction = $false
 # Wrapped in a function purely to scope the analyzer suppression to this one assignment. The
 # attribute always covers the whole scope it sits on - PSAvoidGlobalVars has no per-variable
 # suppression ID - so on the param() block above it would have covered this entire file and hidden
@@ -473,33 +477,22 @@ try {
     $InstalledModule = Get-InstalledModuleInfo -ModuleName $ModuleName
     # Get-InstalledModuleInfo returns $null whenever the module was imported from a path instead of
     # installed - every build and every test run. Reading a member off that $null is an error under
-    # StrictMode, and the empty catch below swallowed it, so $Script:UserAgent kept its unformatted
-    # "OmadaWeb.PS/{0}" template and every request built from it was rejected as a malformed header.
+    # StrictMode, and the catch below - empty at the time - swallowed it, so $Script:UserAgent kept
+    # its unformatted "OmadaWeb.PS/{0}" template and every request built from it was rejected as a
+    # malformed header.
     if ($null -eq $InstalledModule -or -not $InstalledModule['RepositorySource'] -or $InstalledModule['RepositorySource'] -notlike "*powershellgallery.com*") {
         "Module '{0}' was not sourced from the PowerShell Gallery. Skipping version check." -f $ModuleName | Write-Verbose
         $Script:UserAgent = $Script:UserAgent -f "Development"
     }
     else {
         $Script:UserAgent = $Script:UserAgent -f $($InstalledModule['Version'])
-        $GalleryVersion = Get-GalleryModuleVersion -ModuleName $ModuleName
-
-        if (-not $GalleryVersion) {
-        }
-        else {
-            if ([System.Version]$InstalledModule['Version'] -lt [System.Version]$GalleryVersion) {
-                "The installed version {0} of '{1}' is outdated. Latest version: {2}. Execute Update-Module {1} to update to the latest version!" -f ($($InstalledModule['Version'])), $ModuleName, $GalleryVersion | Write-Warning
-            }
-            elseif ([System.Version]$InstalledModule['Version'] -eq [System.Version]$GalleryVersion) {
-                "The installed version {0} of '{1}' is up-to-date." -f ($($InstalledModule['Version'])) , $ModuleName | Write-Verbose
-            }
-            else {
-                "The installed version {0} of '{1}' is newer than the gallery version {2}." -f ($($InstalledModule['Version'])), $ModuleName, $GalleryVersion | Write-Warning
-            }
-        }
+        Write-ModuleVersionStatus -ModuleName $ModuleName -InstalledModule $InstalledModule
     }
 
 }
-catch {}
+catch {
+    "The version check for module '{0}' could not be completed: {1}" -f $ModuleName, $_.Exception.Message | Write-Verbose
+}
 
 $Script:EdgeProfiles = Get-EdgeProfile
 

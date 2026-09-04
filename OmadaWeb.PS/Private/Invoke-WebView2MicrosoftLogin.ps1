@@ -256,7 +256,21 @@ $(Get-EntraElementVisibilityScript)
 
                 $Decision = Resolve-EntraSignInScreen -PageState $Script:PageState -UserName $Script:CurrentWebView2Session.Credential.UserName.Trim() -HasPassword:$HasPassword -PreferredMfaMethod $PreferredMfaMethod -MfaRequestDisplayed:$Script:MfaRequestDisplayed
 
-                "Invoke-WebView2MicrosoftLogin - Screen '{0}', action '{1}'" -f $Decision.Screen, $Decision.Action | Write-Verbose
+                # The code and the reason travel with the screen, because between them they are the
+                # difference between "Microsoft changed the page" and "Entra refused this request",
+                # and the screen name alone does not say which. Without them a verbose trace can
+                # report SignInError and still leave a reader with no idea what the error was - which
+                # is exactly what the sign-in canary hit (issue #79).
+                $DecisionDetail = ""
+                if (-not [string]::IsNullOrWhiteSpace($Decision.Code)) {
+                    $DecisionDetail = ", code '{0}'" -f $Decision.Code
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace($Decision.Reason)) {
+                    $DecisionDetail = "{0}, reason '{1}'" -f $DecisionDetail, (Protect-LogMessage -Message $Decision.Reason)
+                }
+
+                "Invoke-WebView2MicrosoftLogin - Screen '{0}', action '{1}'{2}" -f $Decision.Screen, $Decision.Action, $DecisionDetail | Write-Verbose
                 $Script:PreviousScenario = $Script:CurrentScenario
                 $Script:CurrentScenario = $Decision.Screen
 
@@ -316,14 +330,25 @@ $(Get-EntraElementVisibilityScript)
                     "Manual" {
                         # Entra ID named its own error, and it is one only the person at the keyboard
                         # can resolve - registering security information, completing an extra
-                        # verification step. Waiting out the stall timeout first would add a silent
-                        # minute to a message that is already known, so hand over now.
+                        # verification step, picking which account to use. Waiting out the stall
+                        # timeout first would add a silent minute to a message that is already known,
+                        # so hand over now.
                         $Reason = $Decision.Reason
                         if (-not [string]::IsNullOrWhiteSpace($Decision.Code)) {
                             $Reason = "{0}: {1}" -f $Decision.Code, $Reason
                         }
 
-                        Switch-ToManualLogin -State ("Deciding/{0}" -f $Decision.Screen) -FoundElementId $Present -Url $Script:WebView2.Source.AbsoluteUri -Reason $Reason | Out-Null
+                        # No selector failed here - the page was read, and it said what was wrong -
+                        # so no missing element is named. Whether the handover asks for a bug report
+                        # follows from the code, not from the screen: a code with an entry in the
+                        # verdict table has already been explained, while one without it is exactly
+                        # what the issue tracker is for (issue #76).
+                        $Cause = "UnrecognizedCode"
+                        if ($Decision.IsRecognized) {
+                            $Cause = "RecognizedCondition"
+                        }
+
+                        Switch-ToManualLogin -State ("Deciding/{0}" -f $Decision.Screen) -FoundElementId $Present -Url $Script:WebView2.Source.AbsoluteUri -Reason $Reason -Cause $Cause | Out-Null
                         return $false
                     }
 

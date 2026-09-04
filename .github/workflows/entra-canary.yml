@@ -1,0 +1,414 @@
+name: Entra Sign-in Canary
+
+# The scheduled pipeline the E2E tag was always excluded for (roadmap E5, issue #33).
+#
+# Signs in to Microsoft Entra ID once a day, in a real browser, with a real account in a tenant we
+# control, and fails when credential autofill stops recognizing Microsoft's sign-in screens. That is
+# the module's only dependency on Microsoft's DOM, and Microsoft changes it on its own schedule - so
+# without this the detection mechanism is a user bug report.
+#
+# A red canary means "autofill needs a selector update" - $Script:EntraSignInElementId in
+# OmadaWeb.PS/OmadaWeb.PS.psm1, see issue #32 - and not "login is broken". Since #52 a selector break
+# degrades autofill and hands the window to the user; this run is how that gets noticed first.
+#
+# The tenant setup, the secrets and the response to a red run are in docs/entra-canary.md.
+
+on:
+  schedule:
+    # Well clear of the nightly build at 01:17, so a runner queue shared between them never makes one
+    # look like the other's failure.
+    - cron: '43 5 * * *'
+  workflow_dispatch:
+    inputs:
+      browser_host_check_only:
+        description: 'Only check that the runner can host a WebView2 window, and skip the sign-in. Use to validate a new runner image without involving the tenant.'
+        required: false
+        default: false
+        type: boolean
+
+# Only 'issues: write' is elevated, and only so a failure can file the alert. Nothing here needs to
+# write to the repository.
+permissions:
+  contents: read
+  issues: write
+
+# Never cancel a run in progress: this drives a real sign-in against a real account, and killing it
+# half way leaves a browser profile and a listener behind on the runner for no benefit. A queued
+# duplicate simply waits.
+concurrency:
+  group: entra-signin-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Entra ID sign-in
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    # Holds the four canary secrets. An environment rather than repository secrets, so that no
+    # pull-request workflow can reach them.
+    environment: entra-canary
+
+    outputs:
+      outcome: ${{ steps.canary.outputs.outcome }}
+      report: ${{ steps.canary.outputs.report }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install modules
+        shell: pwsh
+        run: ./Build/InstallModules.ps1
+
+      # Built rather than run from source, so the canary exercises the same single .psm1 that ships
+      # to the Gallery. A sign-in that only works before the module is assembled is not a sign-in
+      # that works for a user.
+      - name: Build the module
+        shell: pwsh
+        run: ./Build/build.ps1 -Task Build -BuildVersion '0.0.0'
+
+      # Runs before the sign-in, and fails the job on its own. Without it, a runner that cannot open a
+      # browser window fails every canary assertion at once and the diagnostic reads "the sign-in page
+      # was not recognized" - true, and pointing at exactly the wrong thing. A maintainer would go
+      # looking at Microsoft's markup while the real answer was that no browser ever opened.
+      #
+      # Deliberately does not file an issue when it fails: nothing about the sign-in page has changed,
+      # so an alert saying otherwise would be a lie. The failed run is the signal.
+      - name: Check the runner can host a browser
+        shell: pwsh
+        run: ./Tests/E2E/Test-CanaryBrowserHost.ps1
+
+      - name: Run the canary
+        id: canary
+        if: inputs.browser_host_check_only != true
+        shell: pwsh
+        env:
+          OMADAWEBPS_CANARY_TENANT_ID: ${{ secrets.CANARY_TENANT_ID }}
+          OMADAWEBPS_CANARY_CLIENT_ID: ${{ secrets.CANARY_CLIENT_ID }}
+          OMADAWEBPS_CANARY_USERNAME: ${{ secrets.CANARY_USERNAME }}
+          OMADAWEBPS_CANARY_PASSWORD: ${{ secrets.CANARY_PASSWORD }}
+          OMADAWEBPS_CANARY_PORT: '8400'
+          OMADAWEBPS_STRICTMODE: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Masked before anything else runs. GitHub masks a secret it injected, but the tenant id
+          # and the account name arrive as ordinary strings in places it does not track - a Pester
+          # failure message, an exception - and this run files a public issue.
+          foreach ($name in 'OMADAWEBPS_CANARY_TENANT_ID','OMADAWEBPS_CANARY_CLIENT_ID','OMADAWEBPS_CANARY_USERNAME','OMADAWEBPS_CANARY_PASSWORD') {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if (-not [string]::IsNullOrWhiteSpace($value)) {
+              Write-Host "::add-mask::$value"
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:OMADAWEBPS_CANARY_TENANT_ID) -or
+              [string]::IsNullOrWhiteSpace($env:OMADAWEBPS_CANARY_CLIENT_ID) -or
+              [string]::IsNullOrWhiteSpace($env:OMADAWEBPS_CANARY_USERNAME) -or
+              [string]::IsNullOrWhiteSpace($env:OMADAWEBPS_CANARY_PASSWORD)) {
+            Write-Host "::notice title=Canary not configured::The 'entra-canary' environment has no canary secrets, so nothing was signed in. See docs/entra-canary.md."
+            "outcome=skipped" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "report=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
+          }
+
+          $modulePath = Join-Path $env:GITHUB_WORKSPACE 'buildoutput/OmadaWeb.PS/OmadaWeb.PS.psm1'
+          if (-not (Test-Path $modulePath)) {
+            throw "The built module was not found at '$modulePath'."
+          }
+
+          # Each attempt runs in a child process with a deadline, rather than in this one.
+          #
+          # A browser sign-in has no natural end when nobody is driving it. If the automation hands
+          # over to manual - which is exactly what a selector break makes it do - it then waits for a
+          # user who does not exist on a runner. The first run of this workflow after the console fix
+          # did precisely that: the window opened, the timer ticked for 29 minutes, and the job
+          # timeout killed the step. A killed step reports nothing at all: no assertions, no
+          # diagnostic, no alert. The canary was silent about the very failure it was watching for.
+          #
+          # In-process there is nothing to interrupt: the WinForms dialog blocks the thread it is
+          # shown on. A child process can simply be killed, which turns a hang into a reported
+          # failure - and that is the difference between a canary and a job that sometimes times out.
+          # Generous for a real sign-in (no MFA on this account, so it is seconds) and short enough
+          # that two attempts plus the flake pause fit inside the job timeout with room to report.
+          $attemptTimeoutSeconds = 300
+
+          function Invoke-CanaryAttempt {
+            param([int]$Attempt)
+
+            $diagnosticPath = Join-Path $env:RUNNER_TEMP ("canary-diagnostic-{0}.txt" -f $Attempt)
+            Remove-Item -LiteralPath $diagnosticPath -Force -ErrorAction SilentlyContinue
+
+            $resultPath = Join-Path $env:GITHUB_WORKSPACE ("buildoutput/CanaryResults-{0}.xml" -f $Attempt)
+            $summaryPath = Join-Path $env:RUNNER_TEMP ("canary-summary-{0}.json" -f $Attempt)
+            Remove-Item -LiteralPath $resultPath, $summaryPath -Force -ErrorAction SilentlyContinue
+
+            $arguments = @(
+              "-NoLogo", "-NoProfile",
+              "-File", ('"{0}"' -f (Join-Path $env:GITHUB_WORKSPACE 'Tests/E2E/Invoke-CanaryAttempt.ps1')),
+              "-ModulePath", ('"{0}"' -f $modulePath),
+              "-ResultPath", ('"{0}"' -f $resultPath),
+              "-SummaryPath", ('"{0}"' -f $summaryPath),
+              "-DiagnosticPath", ('"{0}"' -f $diagnosticPath)
+            )
+
+            # Captured to a file rather than streamed, so that a killed attempt still has a trace to
+            # read. It is echoed into the job log below either way; a timed-out attempt whose output
+            # went nowhere is what made the first stalled run unexplainable.
+            $childLog = Join-Path $env:RUNNER_TEMP ("canary-output-{0}.log" -f $Attempt)
+            $childErrorLog = Join-Path $env:RUNNER_TEMP ("canary-error-{0}.log" -f $Attempt)
+
+            $process = Start-Process -FilePath (Get-Command pwsh.exe).Source -ArgumentList $arguments -NoNewWindow -PassThru `
+              -RedirectStandardOutput $childLog -RedirectStandardError $childErrorLog
+            $timedOut = -not $process.WaitForExit($attemptTimeoutSeconds * 1000)
+
+            if ($timedOut) {
+              Write-Host ("::warning title=Canary attempt timed out::Attempt {0} was still running after {1} seconds and was stopped." -f $Attempt, $attemptTimeoutSeconds)
+              try { $process.Kill($true) } catch { Write-Host "Could not stop the attempt cleanly: $($_.Exception.Message)" }
+              # Every browser process the sign-in started outlives the runspace that opened it, and
+              # the next attempt must not inherit one.
+              Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            }
+
+            Write-Host ("::group::Attempt {0} output" -f $Attempt)
+            Get-Content -LiteralPath $childLog -ErrorAction SilentlyContinue | Write-Host
+            Get-Content -LiteralPath $childErrorLog -ErrorAction SilentlyContinue | Write-Host
+            Write-Host "::endgroup::"
+
+            $diagnostic = ''
+            if (Test-Path -LiteralPath $diagnosticPath) {
+              $diagnostic = Get-Content -LiteralPath $diagnosticPath -Raw
+            }
+
+            if ($timedOut) {
+              # A killed attempt never reached the assertion that writes the diagnostic file, so the
+              # last screen the automation named in its trace is the only account of where it stopped
+              # - and it is a good one: it distinguishes a page the module could not read from one
+              # Entra refused.
+              $lastScreen = @(Select-String -LiteralPath $childLog -Pattern "Screen '.*', action '.*'" -ErrorAction SilentlyContinue |
+                Select-Object -Last 1 | ForEach-Object { $_.Line.Trim() })
+
+              $failure = @("- The sign-in did not finish within $attemptTimeoutSeconds seconds and was stopped. Nobody is at this browser, so a sign-in that waits for a user waits forever.")
+              if ($lastScreen.Count -gt 0) {
+                $failure += "- The last page the automation named was: $($lastScreen[0])"
+              }
+              else {
+                $failure += "- The automation never named a page, so it did not get as far as reading one. Look at the trace above."
+              }
+
+              return [pscustomobject]@{
+                Failed     = 1
+                Passed     = 0
+                Skipped    = 0
+                Diagnostic = $diagnostic
+                Failure    = $failure
+              }
+            }
+
+            if (-not (Test-Path -LiteralPath $summaryPath)) {
+              return [pscustomobject]@{
+                Failed     = 1
+                Passed     = 0
+                Skipped    = 0
+                Diagnostic = $diagnostic
+                Failure    = @("- The attempt exited with code $($process.ExitCode) without reporting a result. See the output above.")
+              }
+            }
+
+            $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+
+            return [pscustomobject]@{
+              Failed     = [int]$summary.Failed
+              Passed     = [int]$summary.Passed
+              Skipped    = [int]$summary.Skipped
+              Diagnostic = $diagnostic
+              Failure    = @($summary.Failure)
+            }
+          }
+
+          $first = Invoke-CanaryAttempt -Attempt 1
+          $final = $first
+
+          # The tests decided for themselves that they are not configured. Reported rather than
+          # passed off as a success, so a canary that has silently stopped running is visible.
+          if ($first.Skipped -gt 0 -and $first.Passed -eq 0 -and $first.Failed -eq 0) {
+            Write-Host "::notice title=Canary skipped::The canary tests reported themselves as not configured."
+            "outcome=skipped" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "report=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            exit 0
+          }
+
+          if ($first.Failed -gt 0) {
+            # The flake policy. Microsoft's sign-in service has transient bad minutes, and a canary
+            # that alerts on one of them gets muted by its audience, which is the only failure mode
+            # worse than not having a canary. One automatic retry, and a warning either way so a run
+            # that needed the retry is still visible.
+            Write-Host "::warning title=Canary retry::The first attempt failed. Retrying once in 120 seconds before alerting."
+            Start-Sleep -Seconds 120
+            $final = Invoke-CanaryAttempt -Attempt 2
+          }
+
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $lines.Add(("Attempt 1: {0} passed, {1} failed." -f $first.Passed, $first.Failed))
+          if ($first.Failed -gt 0) {
+            $lines.Add(("Attempt 2 (after the flake retry): {0} passed, {1} failed." -f $final.Passed, $final.Failed))
+          }
+
+          if ($final.Failure.Count -gt 0) {
+            $lines.Add("")
+            $lines.Add("Failed assertions:")
+            $final.Failure | ForEach-Object { $lines.Add($_) }
+          }
+
+          if (-not [string]::IsNullOrWhiteSpace($final.Diagnostic)) {
+            $lines.Add("")
+            $lines.Add("Diagnostic reported by Switch-ToManualLogin:")
+            $lines.Add("")
+            $lines.Add('```')
+            $lines.Add($final.Diagnostic.Trim())
+            $lines.Add('```')
+          }
+
+          $report = $lines -join "`n"
+
+          # Belt and braces over ::add-mask::. This text is about to become a public issue, and a
+          # value that reached it through a channel GitHub does not track would be published before
+          # anyone could react.
+          foreach ($name in 'OMADAWEBPS_CANARY_TENANT_ID','OMADAWEBPS_CANARY_CLIENT_ID','OMADAWEBPS_CANARY_USERNAME','OMADAWEBPS_CANARY_PASSWORD') {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if (-not [string]::IsNullOrWhiteSpace($value)) {
+              $report = $report.Replace($value, '***')
+            }
+          }
+
+          $outcome = if ($final.Failed -gt 0) { 'failure' } else { 'success' }
+          "outcome=$outcome" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          $delimiter = "REPORT-" + [guid]::NewGuid().ToString('N')
+          "report<<$delimiter" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $report | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $delimiter | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          $report | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+          if ($final.Failed -gt 0) {
+            throw "The Entra sign-in canary failed twice. See the report above."
+          }
+
+      - name: Upload the canary test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: CanaryResults
+          path: buildoutput/CanaryResults-*.xml
+          if-no-files-found: ignore
+
+      # Scheduled-workflow failure mail goes to whoever last touched the file and is easy to miss, so
+      # the alert is an issue: it is durable, it carries the diagnostic, and it closes itself when
+      # the canary recovers.
+      # Gated on the canary having actually reached a verdict, not merely on the job having failed.
+      # A checkout or build failure leaves this output empty, and alerting on that would file an
+      # issue saying Microsoft changed its sign-in page when nothing had even tried to sign in.
+      - name: Open or close the canary alert
+        if: always() && (steps.canary.outputs.outcome == 'success' || steps.canary.outputs.outcome == 'failure')
+        uses: actions/github-script@v9
+        env:
+          CANARY_OUTCOME: ${{ steps.canary.outputs.outcome }}
+          CANARY_REPORT: ${{ steps.canary.outputs.report }}
+        with:
+          script: |
+            const title = 'Entra sign-in canary is failing';
+            const outcome = process.env.CANARY_OUTCOME;
+            const report = process.env.CANARY_REPORT || '(no report captured)';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'canary',
+              per_page: 100,
+            });
+            const alert = existing.data.find(issue => issue.title === title);
+
+            if (outcome === 'success') {
+              if (alert) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: alert.number,
+                  body: `The canary passed again in [run ${context.runId}](${runUrl}). Closing.`,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: alert.number,
+                  state: 'closed',
+                });
+              }
+              return;
+            }
+
+            // A selector break is the failure this canary was built for, but it is not the only one
+            // it can catch - and issue #79 was filed by an earlier version of this text telling a
+            // maintainer to go and edit the selector table over a console-handle bug in the module.
+            // So the alert asks the reader to read the report first, and only claims a selector
+            // break when the report carries the diagnostic that proves one.
+            const looksLikeSelectorBreak = report.includes('Switch-ToManualLogin');
+
+            const diagnosis = looksLikeSelectorBreak
+              ? [
+                  `**What this means.** Credential autofill no longer recognizes a Microsoft sign-in screen. Signing in still works — a selector break degrades autofill, not login — but every user supplying \`-Credential\` now has to type it themselves.`,
+                  ``,
+                  `**What to do.** Update \`$Script:EntraSignInElementId\` in \`OmadaWeb.PS/OmadaWeb.PS.psm1\` from the diagnostic below, then re-run this workflow. See \`docs/entra-canary.md\` and issue #32.`,
+                ]
+              : [
+                  `**No selector diagnostic was captured, so do not assume the sign-in page changed.** \`Switch-ToManualLogin\` did not report an unrecognized page; the sign-in failed some other way — in this module, in the tenant, or on the runner.`,
+                  ``,
+                  `**What to do.** Read the failed assertions below first. "Actually travelled through Entra and back" failing with 0 means the browser never reached Microsoft, which rules the selector table out entirely. See the response guide in \`docs/entra-canary.md\`.`,
+                ];
+
+            const body = [
+              `The scheduled Entra ID sign-in canary failed twice in a row, so this is not a transient Microsoft hiccup.`,
+              ``,
+              ...diagnosis,
+              ``,
+              `[Run ${context.runId}](${runUrl})`,
+              ``,
+              report,
+            ].join('\n');
+
+            if (alert) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: alert.number,
+                body,
+              });
+              return;
+            }
+
+            // The label is created on demand: a fresh clone of this repository has no 'canary'
+            // label, and a missing one would fail the create call rather than the canary.
+            try {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'canary',
+                color: 'fbca04',
+                description: 'Raised automatically by the scheduled Entra sign-in canary',
+              });
+            } catch (error) {
+              if (error.status !== 422) {
+                throw error;
+              }
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['canary'],
+            });

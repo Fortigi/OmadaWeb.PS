@@ -40,11 +40,21 @@ function Get-WebView2Cookie {
                         return
                     }
                     $Filter = [System.Uri]::New($Script:CurrentWebView2Session.BaseUrl).Host.ToLower()
-                    $Match = $Cookies | Where-Object { ($null -ne $_.Domain) -and $_.Domain.ToLowerInvariant().EndsWith($Filter) }
+                    # Wrapped, because Where-Object returns the single object itself when exactly one
+                    # cookie matches, and a bare object has no Count for the test below to read.
+                    # Under StrictMode that is a terminating error inside this callback, and the
+                    # callback's catch only writes "Cookie callback error" to the console - so the
+                    # cookie is never exported, the sign-in window never closes, and a sign-in that
+                    # actually succeeded hangs until something else times it out.
+                    #
+                    # One matching cookie is not a corner case: it is what any host that sets only
+                    # oisauthtoken produces, which is exactly what the scheduled canary's loopback
+                    # stand-in does. It found this (issue #79); the same bug class as #68.
+                    $Match = @($Cookies | Where-Object { ($null -ne $_.Domain) -and $_.Domain.ToLowerInvariant().EndsWith($Filter) })
                     $Script:CurrentWebView2Session.AuthCookie = [pscustomobject]@{}
                     $Exported = $false
 
-                    if ($Match -and $Match.Count -gt 0) {
+                    if ($Match.Count -gt 0) {
                         $Match | ForEach-Object {
                             if (!$Exported -and $_.name -eq 'oisauthtoken') {
                                 if ( $Script:LastCheckedHost -ne $Script:WebView2.Source.Host) {

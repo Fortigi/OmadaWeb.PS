@@ -10,6 +10,84 @@ BeforeAll {
 
     $Script:Lock = Import-PowerShellDataFile -Path $Script:LockPath
     $Script:Artifacts = @($Script:Lock.Artifacts)
+
+    $Script:UpdateScript = Join-Path $Script:RepositoryRoot -ChildPath 'Build\Update-DependencyLock.ps1'
+    $Script:DependabotConfig = @(Get-Content -Path (Join-Path $Script:RepositoryRoot -ChildPath '.github\dependabot.yml'))
+    $Script:WorkFolder = Join-Path ([System.IO.Path]::GetTempPath()) ("OmadaWebLockTests_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
+    $null = New-Item -Path $Script:WorkFolder -ItemType Directory -Force
+
+    function New-LockSandbox {
+        # A throwaway copy of everything Update-DependencyLock.ps1 reads, so a test can doctor one
+        # file and assert the gate notices. The script itself is always run from the real repository,
+        # which is also how the scheduled sweep invokes it: trusted script, untrusted tree.
+        $Root = Join-Path $Script:WorkFolder -ChildPath ([System.Guid]::NewGuid().ToString('N'))
+        foreach ($Relative in @('OmadaWeb.PS', 'Build\Dependencies', '.github')) {
+            $null = New-Item -Path (Join-Path $Root -ChildPath $Relative) -ItemType Directory -Force
+        }
+
+        Copy-Item -Path $Script:LockPath -Destination (Join-Path $Root -ChildPath 'OmadaWeb.PS\DependencyLock.psd1')
+        Copy-Item -Path $Script:InventoryPath -Destination (Join-Path $Root -ChildPath 'Build\Dependencies.psd1')
+        Copy-Item -Path (Join-Path $Script:RepositoryRoot -ChildPath '.github\dependabot.yml') -Destination (Join-Path $Root -ChildPath '.github\dependabot.yml')
+        Copy-Item -Path (Join-Path $Script:RepositoryRoot -ChildPath 'Build\Dependencies') -Destination (Join-Path $Root -ChildPath 'Build') -Recurse -Force
+        Copy-Item -Path $Script:PrivatePath -Destination (Join-Path $Root -ChildPath 'OmadaWeb.PS') -Recurse -Force
+
+        return $Root
+    }
+
+    function Get-IgnoreRulePattern {
+        # Matches an ignore rule whatever its YAML quoting. Update-DependencyLock.ps1 treats
+        # double-quoted, single-quoted and bare scalars as the same string, so a test that insists on
+        # one of them would fail on a reformatting the script itself is happy with - or, worse, would
+        # quietly stop matching and leave the test exercising nothing.
+        param([string]$PackageId)
+
+        return '^\s*-\s+dependency-name\s*:\s*(?:"|'')?{0}(?:"|'')?\s*$' -f [regex]::Escape($PackageId)
+    }
+
+    function Test-IgnoreRule {
+        param([string]$PackageId)
+
+        $Pattern = Get-IgnoreRulePattern $PackageId
+        return @($Script:DependabotConfig | Where-Object { $_ -match $Pattern }).Count -gt 0
+    }
+
+    function Remove-IgnoreRule {
+        # Strips one ignore rule from a sandbox config, and asserts it was actually there - otherwise
+        # the test would go on to assert a failure that never had a cause.
+        param([string]$Path, [string]$PackageId)
+
+        $Pattern = Get-IgnoreRulePattern $PackageId
+        $Line = @(Get-Content -Path $Path)
+        $Kept = @($Line | Where-Object { $_ -notmatch $Pattern })
+        $Kept.Count | Should -BeLessThan $Line.Count -Because "'$PackageId' must have an ignore rule to remove"
+        $Kept | Set-Content -Path $Path
+    }
+
+    function Get-PinnedVersion {
+        # Versions are read from the lock rather than written into the test, so a legitimate bump does
+        # not break a test that is really about "these two files disagree".
+        param([string]$Id)
+
+        $Artifact = @($Script:Artifacts | Where-Object { $_.Id -eq $Id })
+        $Artifact.Count | Should -Be 1 -Because "the tests below doctor the pin for '$Id'"
+        return $Artifact[0].Version
+    }
+
+    function Set-DoctoredVersion {
+        # Introduces one specific disagreement into a sandbox file, and asserts it actually landed -
+        # otherwise a renamed field would leave the test passing while exercising nothing.
+        param([string]$Path, [string]$Find, [string]$Replace)
+
+        $Content = Get-Content -Path $Path -Raw
+        $Content | Should -BeLike "*$Find*" -Because "the test needs '$Find' present in '$Path' to doctor it"
+        $Content.Replace($Find, $Replace) | Set-Content -Path $Path -NoNewline
+    }
+}
+
+AfterAll {
+    if ($Script:WorkFolder -and (Test-Path $Script:WorkFolder)) {
+        Remove-Item -Path $Script:WorkFolder -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Describe 'DependencyLock.psd1' -Tag 'Unit' {
@@ -102,6 +180,116 @@ Describe 'Dependency manifests' -Tag 'Unit' {
             $Reference.Count | Should -Be 1 -Because "'$($Artifact.PackageId)' must appear once in '$($Artifact.Manifest)' to enter the dependency graph"
             $Reference[0].Version | Should -Be $Artifact.Version -Because "a pin that disagrees with the manifest means the hash was never refreshed"
         }
+    }
+}
+
+Describe 'Update-DependencyLock.ps1 -Check' -Tag 'Unit' {
+    # -SkipDownload throughout: these assert the offline gates, and a unit test must not depend on
+    # nuget.org being reachable.
+    It 'Should pass on the repository as it stands' {
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot (New-LockSandbox) } | Should -Not -Throw
+    }
+
+    It 'Should fail when the SBOM reports a version the lock does not pin' {
+        # The gap that kept every Dependabot pull request red even once its hashes were refreshed:
+        # Build/Dependencies.psd1 was the third file that had to move, and nothing moved it.
+        $Root = New-LockSandbox
+        $InventoryFile = Join-Path $Root -ChildPath 'Build\Dependencies.psd1'
+        Set-DoctoredVersion -Path $InventoryFile -Find ('Version         = "{0}"' -f (Get-PinnedVersion 'Newtonsoft.Json')) -Replace 'Version         = "0.0.0"'
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+
+    It 'Should fail when a closure member has no Dependabot ignore rule' {
+        $Root = New-LockSandbox
+        $ConfigFile = Join-Path $Root -ChildPath '.github\dependabot.yml'
+        Remove-IgnoreRule -Path $ConfigFile -PackageId 'System.Memory'
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+
+    It 'Should fail when the lock and the Dependabot manifest disagree on a version' {
+        $Root = New-LockSandbox
+        $ManifestFile = Join-Path $Root -ChildPath 'Build\Dependencies\Dependencies.csproj'
+        Set-DoctoredVersion -Path $ManifestFile -Find ('"Newtonsoft.Json" Version="{0}"' -f (Get-PinnedVersion 'Newtonsoft.Json')) -Replace '"Newtonsoft.Json" Version="0.0.0"'
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+
+    It 'Should fail when two SBOM components mirror the same lock artefact' {
+        # A duplicate LockId would leave the drift check comparing only one of them, so a stale
+        # version in the other could ship unnoticed.
+        $Root = New-LockSandbox
+        $InventoryFile = Join-Path $Root -ChildPath 'Build\Dependencies.psd1'
+        $Duplicate = @(
+            '        @{'
+            '            Name    = "Newtonsoft.Json (duplicate)"'
+            '            Version = "0.0.0"'
+            '            LockId  = "Newtonsoft.Json"'
+            '        }'
+        )
+        $Line = @(Get-Content -Path $InventoryFile)
+        $Anchor = [array]::IndexOf($Line, ($Line | Where-Object { $_ -match '^\s*Components\s*=\s*@\(\s*$' } | Select-Object -First 1))
+        $Anchor | Should -BeGreaterThan -1 -Because 'the duplicate has to be inserted into the component list'
+        @($Line[0..$Anchor]) + $Duplicate + @($Line[($Anchor + 1)..($Line.Count - 1)]) | Set-Content -Path $InventoryFile
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+
+    It 'Should read the ignore list whichever way its YAML scalars are quoted' {
+        # Double quotes, single quotes and bare scalars all mean the same string in YAML. Reading only
+        # one form would turn a reformatting of dependabot.yml into a false build failure.
+        $Root = New-LockSandbox
+        $ConfigFile = Join-Path $Root -ChildPath '.github\dependabot.yml'
+        $Rewritten = @(Get-Content -Path $ConfigFile | ForEach-Object {
+                if ($_ -match '^(\s*-\s+dependency-name\s*:\s*)"([^"]+)"\s*$') {
+                    "{0}'{1}'" -f $Matches[1], $Matches[2]
+                }
+                elseif ($_ -match '^(\s*directory\s*:\s*)"([^"]+)"\s*$') {
+                    "{0}{1}" -f $Matches[1], $Matches[2]
+                }
+                else {
+                    $_
+                }
+            })
+        $Rewritten | Set-Content -Path $ConfigFile
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Not -Throw
+    }
+
+    It 'Should not accept an ignore rule that belongs to a different manifest directory' {
+        # Legacy/ has its own ignore list. A rule there must not satisfy a requirement about the main
+        # manifest, or the closure check would pass on a configuration that does not govern it.
+        $Root = New-LockSandbox
+        $ConfigFile = Join-Path $Root -ChildPath '.github\dependabot.yml'
+        Remove-IgnoreRule -Path $ConfigFile -PackageId 'System.Memory'
+        # Re-add it under the Legacy directory block, which is the last one in the file.
+        Add-Content -Path $ConfigFile -Value '      - dependency-name: "System.Memory"'
+
+        { & $Script:UpdateScript -Check -SkipDownload -RepositoryRoot $Root } | Should -Throw -ExpectedMessage '*problem(s) found*'
+    }
+}
+
+Describe 'Dependabot ignore policy' -Tag 'Unit' {
+    # The System.Text.Json closure cannot be upgraded a member at a time: the module loads these
+    # assemblies with Assembly.LoadFrom, which applies no binding redirects, so the versions loaded
+    # have to be the ones the pinned System.Text.Json resolves. Dependabot has to be told, or it keeps
+    # opening pull requests that can never go green - which is what happened to #55 and #58.
+    It 'Should ignore version updates for every member of the System.Text.Json closure' {
+        $Closure = @($Script:Artifacts | Where-Object { $_.Group -eq 'SystemTextJson' })
+        $Closure.Count | Should -BeGreaterThan 0 -Because 'the closure is what this rule protects'
+
+        foreach ($Artifact in $Closure) {
+            Test-IgnoreRule $Artifact.PackageId | Should -BeTrue -Because "Dependabot would otherwise propose bumping '$($Artifact.PackageId)' on its own"
+        }
+    }
+
+    It 'Should keep the frozen Selenium pin out of Dependabot version updates' {
+        # 4.11.0 is the last Selenium that ships a net4* build, so the Desktop pin must not move.
+        $Desktop = @($Script:Artifacts | Where-Object { $_.Id -eq 'Selenium.Desktop' })
+        $Desktop.Count | Should -Be 1
+
+        Test-IgnoreRule 'Selenium.WebDriver' | Should -BeTrue -Because 'a newer Selenium cannot be loaded by Windows PowerShell 5.1 at all'
     }
 }
 

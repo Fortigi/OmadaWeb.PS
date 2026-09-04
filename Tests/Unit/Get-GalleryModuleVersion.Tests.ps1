@@ -8,7 +8,7 @@ BeforeAll {
 }
 
 Describe 'Get-GalleryModuleVersion' -Tag 'Unit' {
-    It 'Should return the version of the most recently updated package' {
+    It 'Should return the highest version in the feed' {
         InModuleScope 'OmadaWeb.PS' {
             Mock Invoke-RestMethod {
                 @(
@@ -28,6 +28,93 @@ Describe 'Get-GalleryModuleVersion' -Tag 'Unit' {
             }
 
             Get-GalleryModuleVersion -ModuleName 'OmadaWeb.PS' | Should -Be '2.0.0'
+        }
+    }
+
+    It 'Should return the highest version rather than the most recently published one' {
+        InModuleScope 'OmadaWeb.PS' {
+            Mock Invoke-RestMethod {
+                @(
+                    [PSCustomObject]@{
+                        Properties = [PSCustomObject]@{
+                            version   = '2.0.0'
+                            Published = [PSCustomObject]@{ '#text' = (Get-Date).AddDays(-5) }
+                        }
+                    }
+                    [PSCustomObject]@{
+                        Properties = [PSCustomObject]@{
+                            version   = '1.0.0'
+                            Published = [PSCustomObject]@{ '#text' = (Get-Date) }
+                        }
+                    }
+                )
+            }
+
+            Get-GalleryModuleVersion -ModuleName 'OmadaWeb.PS' | Should -Be '2.0.0'
+        }
+    }
+
+    It 'Should return the highest stable version when the feed contains a newer prerelease' {
+        InModuleScope 'OmadaWeb.PS' {
+            Mock Invoke-RestMethod {
+                @(
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = '2026.9.1' } }
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = '2026.9.2-nightly74' } }
+                )
+            }
+
+            Get-GalleryModuleVersion -ModuleName 'OmadaWeb.PS' | Should -Be '2026.9.1'
+        }
+    }
+
+    It 'Should return the newer prerelease when prereleases are requested' {
+        InModuleScope 'OmadaWeb.PS' {
+            Mock Invoke-RestMethod {
+                @(
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = '2026.9.1' } }
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = '2026.9.2-nightly74' } }
+                )
+            }
+
+            Get-GalleryModuleVersion -ModuleName 'OmadaWeb.PS' -IncludePrerelease | Should -Be '2026.9.2-nightly74'
+        }
+    }
+
+    It 'Should prefer a stable release over an older prerelease when prereleases are requested' {
+        InModuleScope 'OmadaWeb.PS' {
+            Mock Invoke-RestMethod {
+                @(
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = '2026.9.1-nightly74' } }
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = '2026.9.1' } }
+                )
+            }
+
+            Get-GalleryModuleVersion -ModuleName 'OmadaWeb.PS' -IncludePrerelease | Should -Be '2026.9.1'
+        }
+    }
+
+    It 'Should return $null when the feed holds nothing but prereleases and stable was asked for' {
+        InModuleScope 'OmadaWeb.PS' {
+            Mock Invoke-RestMethod {
+                @(
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = '2026.9.1-nightly74' } }
+                )
+            }
+
+            Get-GalleryModuleVersion -ModuleName 'OmadaWeb.PS' | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'Should ignore a feed entry whose version cannot be parsed' {
+        InModuleScope 'OmadaWeb.PS' {
+            Mock Invoke-RestMethod {
+                @(
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = 'unknown' } }
+                    [PSCustomObject]@{ Properties = [PSCustomObject]@{ version = '2026.9.1' } }
+                )
+            }
+
+            Get-GalleryModuleVersion -ModuleName 'OmadaWeb.PS' | Should -Be '2026.9.1'
         }
     }
 
