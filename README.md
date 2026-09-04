@@ -685,7 +685,7 @@ The **folder** to keep a stored Omada authentication cookie in. Pass a directory
 The file is encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), exactly like the default cookie cache, so it is readable only by the user who created it on the machine where it was created. **There is no option to write it unencrypted** - the module deliberately offers no plaintext export, because a readable file holding a live session token is exactly what this parameter used to produce. This parameter only applies in combination with parameter -AuthenticationType Browser or -AuthenticationType WebView2.
 
 > [!IMPORTANT]
-> Because the protection is tied to the user and the machine, a cookie file **cannot be copied to another user or another computer**. Earlier versions of this module wrote this file unencrypted, and such a file is still accepted: it is read once, immediately re-written encrypted, and a warning is shown. If a file written by an earlier version ever sat on shared or synchronised storage, treat the token as exposed and sign out of the Omada session to invalidate it.
+> Because the protection is tied to the user and the machine, a cookie file **cannot be copied to another user or another computer**. A file written unencrypted by an earlier version of this module is ignored rather than read - you simply sign in again, and the file is replaced with an encrypted one. If such a file ever sat on shared or synchronised storage, treat the token it held as exposed; Omada session cookies are short lived, so it has most likely expired already.
 
 ```yaml
         Type: System.String

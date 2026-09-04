@@ -126,8 +126,8 @@ function Invoke-OmadaRequest {
                     "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
                 }
                 else {
-                    # Import-OmadaCookieFile also migrates a file left unprotected by a version of
-                    # this module that predates issue #21, rewriting it encrypted and warning once.
+                    # Only a protected file is read. One left unprotected by a version predating
+                    # issue #21 yields $null, so this authenticates and overwrites it protected.
                     $SessionContext.AuthCookie = Import-OmadaCookieFile -Path $CookiePath
 
                     # Diagnostics only: the cookie's own value is the session secret, so this goes

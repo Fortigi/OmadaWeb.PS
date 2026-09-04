@@ -208,23 +208,33 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
         }
 
         It 'Should read cookie previous from exported cookie file' {
-            $CookieObject = [PSCustomObject]@{
-                OmadaWebAuthCookie = [pscustomobject]@{
-                    name     = "oisauthtoken"
-                    value    = "test-cookie-value"
-                    domain   = "localhost"
-                    path     = "/"
-                    expires  = $null
-                    httpOnly = $true
-                    secure   = $false
-                    sameSite = "Lax"
-                }
-            }
+            # Seeded through Export-OmadaCookieFile: cookie files are protected at rest (issue #21)
+            # and an unprotected one is ignored, so a bare Export-Clixml fixture would no longer be
+            # read. That would not have failed this test - with -AuthenticationType None the request
+            # returns "OK" either way - so the cookie itself is asserted below rather than trusting
+            # the status, which is what this test is named for.
             $CookiePath = Join-Path $Env:Temp $Script:CookieFileName
-            $CookieObject | Export-Clixml -Path $CookiePath -Force
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ TargetPath = $CookiePath } {
+                Export-OmadaCookieFile -Path $TargetPath -AuthCookie ([pscustomobject]@{
+                        name     = "oisauthtoken"
+                        value    = "test-cookie-value"
+                        domain   = "localhost"
+                        path     = "/"
+                        expires  = $null
+                        httpOnly = $true
+                        secure   = $false
+                        sameSite = "Lax"
+                    }) | Should -BeTrue
+            }
+
             $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType None -CookiePath $Env:Temp -Verbose
             Get-Item $CookiePath | Remove-Item -Force
             $Result | Should -Be "OK"
+
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ UriA = $Uri } {
+                $Key = Get-OmadaSessionKey -Uri ([System.Uri]::new($UriA)) -AuthenticationType 'None'
+                $Script:OmadaSessions[$Key].AuthCookie.value | Should -Be 'test-cookie-value'
+            }
         }
 
         It 'Should create cookie file when using CookiePath parameter using WebView2' {
@@ -309,20 +319,23 @@ Describe 'Invoke-TestOmadaRestMethod' -Tag 'Integration' {
             Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType WebView2 -ForceAuthentication | Out-Null
 
             # Pre-seed a *different* cookie value into a -CookiePath file for the same host.
-            $CookieObject = [PSCustomObject]@{
-                OmadaWebAuthCookie = [pscustomobject]@{
-                    name     = "oisauthtoken"
-                    value    = "cookie-from-path-value"
-                    domain   = "localhost"
-                    path     = "/"
-                    expires  = $null
-                    httpOnly = $true
-                    secure   = $false
-                    sameSite = "Lax"
-                }
-            }
+            # Written through Export-OmadaCookieFile rather than a bare Export-Clixml: cookie files
+            # are protected at rest (issue #21) and an unprotected one is ignored, so a plain Clixml
+            # fixture would be skipped and this would assert against a freshly signed-in cookie
+            # rather than the one it seeded.
             $CookiePath = Join-Path $Env:Temp $Script:CookieFileName
-            $CookieObject | Export-Clixml -Path $CookiePath -Force
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ TargetPath = $CookiePath } {
+                Export-OmadaCookieFile -Path $TargetPath -AuthCookie ([pscustomobject]@{
+                        name     = "oisauthtoken"
+                        value    = "cookie-from-path-value"
+                        domain   = "localhost"
+                        path     = "/"
+                        expires  = $null
+                        httpOnly = $true
+                        secure   = $false
+                        sameSite = "Lax"
+                    }) | Should -BeTrue
+            }
 
             $Result = Invoke-TestOmadaRestMethod -Uri $Uri -AuthenticationType WebView2 -CookiePath $Env:Temp -Verbose
             Get-Item $CookiePath | Remove-Item -Force

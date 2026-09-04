@@ -100,49 +100,41 @@ Describe 'Export-OmadaCookieFile / Import-OmadaCookieFile' -Tag 'Unit' {
     }
 
     Context 'A file left unprotected by an earlier version' {
-        It 'Should still be readable, so an upgrade does not strand the user' {
+        # Not migrated, on purpose. Omada session cookies are short lived, so one written by an older
+        # version has almost certainly expired; reading it would buy at most a few minutes of not
+        # signing in, in exchange for a code path whose only job is to consume the very format this
+        # change set out to stop producing.
+
+        It 'Should be ignored rather than read' {
             InModuleScope 'OmadaWeb.PS' {
                 [PSCustomObject]@{ OmadaWebAuthCookie = $Script:TestCookie } | Export-Clixml -Path $Script:TestCookiePath -Force
 
-                $Loaded = Import-OmadaCookieFile -Path $Script:TestCookiePath 3>$null
-                $Loaded.Value | Should -Be 'SUPER-SECRET-TOKEN-VALUE'
+                Import-OmadaCookieFile -Path $Script:TestCookiePath | Should -BeNullOrEmpty
             }
         }
 
-        It 'Should be re-written protected on the spot, ending the exposure' {
-            InModuleScope 'OmadaWeb.PS' {
-                [PSCustomObject]@{ OmadaWebAuthCookie = $Script:TestCookie } | Export-Clixml -Path $Script:TestCookiePath -Force
-                (Get-Content -Path $Script:TestCookiePath -Raw) | Should -Match 'SUPER-SECRET-TOKEN-VALUE'
-
-                Import-OmadaCookieFile -Path $Script:TestCookiePath 3>$null | Out-Null
-
-                (Get-Content -Path $Script:TestCookiePath -Raw) | Should -Not -Match 'SUPER-SECRET-TOKEN-VALUE'
-                Test-OmadaCookieCacheFile -Path $Script:TestCookiePath | Should -BeTrue
-            }
-        }
-
-        It 'Should warn, because the token was readable until this moment' {
+        It 'Should not warn about it, because signing in again is the whole cost' {
             InModuleScope 'OmadaWeb.PS' {
                 [PSCustomObject]@{ OmadaWebAuthCookie = $Script:TestCookie } | Export-Clixml -Path $Script:TestCookiePath -Force
 
                 $Warnings = @()
                 Import-OmadaCookieFile -Path $Script:TestCookiePath -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
 
-                @($Warnings).Count | Should -BeGreaterThan 0
-                ($Warnings -join ' ') | Should -Match 'unprotected'
+                @($Warnings).Count | Should -Be 0
             }
         }
 
-        It 'Should read as protected on the next call, with no second warning' {
+        It 'Should be replaced by a protected file once the caller authenticates again' {
+            # The unprotected file does not linger: the next successful sign-in writes over it
+            # through the same path, so the plaintext is gone without a migration step.
             InModuleScope 'OmadaWeb.PS' {
                 [PSCustomObject]@{ OmadaWebAuthCookie = $Script:TestCookie } | Export-Clixml -Path $Script:TestCookiePath -Force
-                Import-OmadaCookieFile -Path $Script:TestCookiePath 3>$null | Out-Null
+                (Get-Content -Path $Script:TestCookiePath -Raw) | Should -Match 'SUPER-SECRET-TOKEN-VALUE'
 
-                $Warnings = @()
-                $Loaded = Import-OmadaCookieFile -Path $Script:TestCookiePath -WarningVariable Warnings -WarningAction SilentlyContinue
+                Export-OmadaCookieFile -Path $Script:TestCookiePath -AuthCookie $Script:TestCookie | Should -BeTrue
 
-                $Loaded.Value | Should -Be 'SUPER-SECRET-TOKEN-VALUE'
-                @($Warnings).Count | Should -Be 0
+                (Get-Content -Path $Script:TestCookiePath -Raw) | Should -Not -Match 'SUPER-SECRET-TOKEN-VALUE'
+                Test-OmadaCookieCacheFile -Path $Script:TestCookiePath | Should -BeTrue
             }
         }
     }
