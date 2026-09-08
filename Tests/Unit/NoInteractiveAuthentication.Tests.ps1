@@ -156,7 +156,7 @@ Describe 'NoInteractiveAuthentication' -Tag 'Unit' {
             # One forbids signing in and the other requires it, so honouring either would silently
             # discard the other.
             { Invoke-OmadaRestMethod -Uri 'http://localhost:19000/api/thing' -AuthenticationType 'WebView2' -NoInteractiveAuthentication -ForceAuthentication -ErrorAction Stop } |
-                Should -Throw -ExpectedMessage '*-NoInteractiveAuthentication cannot be combined with -ForceAuthentication*'
+                Should -Throw -ExpectedMessage '*Cannot combine -NoInteractiveAuthentication with -ForceAuthentication*'
         }
     }
 }

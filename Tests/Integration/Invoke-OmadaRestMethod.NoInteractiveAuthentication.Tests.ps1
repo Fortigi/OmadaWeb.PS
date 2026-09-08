@@ -185,8 +185,10 @@ Describe 'Invoke-TestOmadaRestMethod -NoInteractiveAuthentication' -Tag 'Integra
             Should -Invoke Get-DataFromWebView2 -ModuleName 'OmadaWeb.PS' -Times 0 -Exactly
             Should -Invoke Get-DataFromWebDriver -ModuleName 'OmadaWeb.PS' -Times 0 -Exactly
 
-            # It never reached the wire either, which is what makes this cheap enough for a watchdog
-            # to call on a timer.
+            # The request under test was never sent: the refusal happens while the session is being
+            # assembled, before any call to the endpoint. RequestCount deliberately excludes the
+            # startup and environment-suspension probes, so this says nothing about those - only
+            # that no request for /data went out.
             $Script:SharedServer.RequestCount | Should -Be 0
         }
     }

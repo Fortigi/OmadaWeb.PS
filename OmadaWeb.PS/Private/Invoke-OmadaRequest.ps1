@@ -31,7 +31,7 @@ function Invoke-OmadaRequest {
             # would mean honouring one and silently dropping the other, and either choice is a
             # surprise, so the combination is refused instead of resolved.
             if ($NoInteractiveAuthentication -and $BoundParams.ContainsKey("ForceAuthentication") -and [bool]$BoundParams['ForceAuthentication']) {
-                "{0} - -NoInteractiveAuthentication cannot be combined with -ForceAuthentication: the first forbids signing in, the second requires it." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+                "{0} - Cannot combine -NoInteractiveAuthentication with -ForceAuthentication: the first forbids signing in, the second requires it." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
             }
 
             if ("UserAgent" -notin $BoundParams.Keys) {
