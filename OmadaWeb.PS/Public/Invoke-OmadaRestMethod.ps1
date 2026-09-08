@@ -100,6 +100,19 @@ function Invoke-OmadaRestMethod {
         the token endpoint and scope explicitly.
 
     .EXAMPLE
+        try {
+            Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/v2/health" -NoInteractiveAuthentication -ErrorAction Stop
+        }
+        catch [System.Security.Authentication.AuthenticationException] {
+            "Omada session is gone; stopping the keep-alive." | Write-Warning
+        }
+
+        Uses the session that already exists and cannot open a sign-in window, which is what a
+        background keep-alive or a worker runspace needs. A session that has expired raises a
+        distinguishable terminating error - its FullyQualifiedErrorId starts with
+        'OmadaSessionExpired' - instead of prompting.
+
+    .EXAMPLE
         Invoke-OmadaRestMethod -Uri "https://omada.contoso.local/odata/dataobjects/identity(123456)" -AuthenticationType "Integrated"
 
         Retrieves an identity from an on-premises installation using Windows Integrated

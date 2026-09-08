@@ -62,6 +62,15 @@ function Invoke-BrowserAuthentication {
     else {
         "{0} - OmadaWebAuthCookie not exists or is for different domain. Need to authenticate!" -f $MyInvocation.MyCommand | Write-Verbose
 
+        # -NoInteractiveAuthentication is refused here, above the engine selection, rather than
+        # inside either engine: this is the single point every browser sign-in passes through when no
+        # usable cookie is available, so stopping here is what makes "no window can open" a property
+        # of the code rather than a claim about it.
+        if ($BoundParams.ContainsKey("NoInteractiveAuthentication") -and [bool]$BoundParams['NoInteractiveAuthentication']) {
+            $Message = "No usable Omada session for '{0}' and -NoInteractiveAuthentication was specified, so no sign-in was attempted. Sign in once without -NoInteractiveAuthentication, then retry." -f $SessionContext.BaseUrl
+            throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $SessionContext.BaseUrl)
+        }
+
         # Check if WebView2 should be used instead of Selenium
         $WebView2Authentication = $false
         if (($BoundParams.ContainsKey('UseWebView2') -and $BoundParams['UseWebView2']) -or $BoundParams['AuthenticationType'] -eq "WebView2") {

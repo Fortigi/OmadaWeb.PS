@@ -20,6 +20,20 @@ function Invoke-OmadaRequest {
             # rebuilds its arguments from $BoundParams, so it carries across that recursion.
             $Script:SkipBodyRedaction = $BoundParams.ContainsKey("SkipBodyRedaction") -and [bool]$BoundParams['SkipBodyRedaction']
 
+            # Read from $BoundParams rather than from the dynamic parameter's own variable, which
+            # does not exist at all when the switch was not supplied - an unset-variable read, and a
+            # terminating one under the StrictMode the test suite runs with. Kept as a local because
+            # this function asks the question in three places.
+            $NoInteractiveAuthentication = $BoundParams.ContainsKey("NoInteractiveAuthentication") -and [bool]$BoundParams['NoInteractiveAuthentication']
+
+            # -ForceAuthentication discards the session cookie precisely so that a sign-in happens,
+            # which is the one thing -NoInteractiveAuthentication promises will not. Accepting both
+            # would mean honouring one and silently dropping the other, and either choice is a
+            # surprise, so the combination is refused instead of resolved.
+            if ($NoInteractiveAuthentication -and $BoundParams.ContainsKey("ForceAuthentication") -and [bool]$BoundParams['ForceAuthentication']) {
+                "{0} - -NoInteractiveAuthentication cannot be combined with -ForceAuthentication: the first forbids signing in, the second requires it." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+            }
+
             if ("UserAgent" -notin $BoundParams.Keys) {
                 $BoundParams.Add("UserAgent", $Script:UserAgent)
                 $Script:UserAgentParameterUsed = $false
@@ -123,7 +137,16 @@ function Invoke-OmadaRequest {
                     # cookie (possibly from an earlier call for this session) in place - that would
                     # silently defeat the "force this specific cookie" contract -CookiePath implies.
                     $SessionContext.AuthCookie = $null
-                    "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
+
+                    # Under -NoInteractiveAuthentication nothing is going to be created, and a
+                    # terminating error follows within a few lines, so promising a new cookie here
+                    # would be the last thing a caller reads before being told the opposite.
+                    if ($NoInteractiveAuthentication) {
+                        "No cookie found at '{0}'." -f $CookiePath | Write-Warning
+                    }
+                    else {
+                        "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
+                    }
                 }
                 else {
                     # Only a protected file is read. One left unprotected by a version predating
@@ -365,6 +388,19 @@ function Invoke-OmadaRequest {
                     if (![string]::IsNullOrWhiteSpace($SessionContext.CookieCacheFilePath) -and (Test-Path $SessionContext.CookieCacheFilePath -PathType Leaf)) {
                         $SessionContext.CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
                     }
+
+                    # The dead session has been dropped above, so a later interactive call signs in
+                    # cleanly - but this call does not, and says why. Placed after that cleanup and
+                    # before the "Authentication needed!" host message, because under this switch
+                    # nothing is going to authenticate and announcing it would be untrue.
+                    if ($NoInteractiveAuthentication) {
+                        $Message = "The Omada session for '{0}' has expired or was rejected (HTTP 401) and -NoInteractiveAuthentication was specified, so no sign-in was attempted. Sign in once without -NoInteractiveAuthentication, then retry." -f $SessionContext.BaseUrl
+                        # The original 401 is carried as the inner exception: it holds the response
+                        # this verdict was reached from, which is the only place the server's own
+                        # explanation survives.
+                        throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $SessionContext.BaseUrl -InnerException $PSItem.Exception)
+                    }
+
                     if ($SessionContext.LoginCount -le 1) {
                         "Authentication needed!" | Write-Host
                     }
