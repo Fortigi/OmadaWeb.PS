@@ -325,6 +325,16 @@ This account cannot be used for this application however often the sign-in is re
 Entra ID withholds the account name from this message because it identifies an end user. Look the attempt up by its correlation ID in the sign-in logs of the tenant that refused it to see which account was used.
 ```
 
+**A refusal about the account gets one more window, with the picker on it.** When the sign-in was refused because the account the browser chose is not known in the application's tenant - and only then - the module says so and opens the sign-in window once more with `prompt=select_account`, so you can pick an account that does exist there:
+
+```text
+WARNING: The account the browser signed in with is not known in tenant 'Example productie'. Opening the
+sign-in window once more, this time asking which account to use - please choose one that exists in that
+tenant.
+```
+
+Once, never twice: a second refusal is the tenant repeating itself. It is also skipped entirely when you named the account yourself with `-UserName` or `-Credential` - the picker asks exactly the question you already answered - and when there is no interactive desktop, where a picker would be a window nobody will ever click and the command would hang instead of failing with a message.
+
 The request then fails with that same message rather than with a bare "could not authenticate", so what to do next is in the error itself. Add `-ForceAuthentication` to the retry so the sign-in starts from a clean browser session.
 
 Everything under `Meaning` is lifted out of the message Entra wrote, because all of it is something you have to paste into a portal to get any further and none of it was anywhere you could see it. One thing is deliberately missing: the account name. Entra replaces it with `{EUII Hidden}` in a message it hands to an application, so the sign-in logs of the tenant that refused the sign-in - searched by the correlation ID above - are the only place the account can be identified.
