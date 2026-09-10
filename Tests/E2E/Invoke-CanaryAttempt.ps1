@@ -32,6 +32,11 @@
 .PARAMETER DiagnosticPath
     Passed to the test as OMADAWEBPS_CANARY_DIAGNOSTIC_PATH, where Switch-ToManualLogin's diagnostic
     is written when there is one.
+.PARAMETER Scenario
+    Which sign-in to drive. 'PasswordAutofill' is the sign-in that completes - the original canary.
+    'UserNameOnly' and 'NoUserName' are the two that are not meant to complete: they watch what the
+    module does when it is given an account but no password, and when it is given neither. Each needs
+    its own browser window, so each is its own attempt.
 .EXAMPLE
     ./Tests/E2E/Invoke-CanaryAttempt.ps1 -ModulePath ./buildoutput/OmadaWeb.PS/OmadaWeb.PS.psm1 `
         -ResultPath ./buildoutput/CanaryResults-1.xml -SummaryPath $env:RUNNER_TEMP/summary-1.json `
@@ -49,7 +54,10 @@ param(
     [string]$SummaryPath,
 
     [Parameter(Mandatory)]
-    [string]$DiagnosticPath
+    [string]$DiagnosticPath,
+
+    [ValidateSet('PasswordAutofill', 'UserNameOnly', 'NoUserName')]
+    [string]$Scenario = 'PasswordAutofill'
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,7 +65,7 @@ $VerbosePreference = "Continue"
 
 $Env:OMADAWEBPS_CANARY_DIAGNOSTIC_PATH = $DiagnosticPath
 
-$Container = New-PesterContainer -Path (Join-Path $PSScriptRoot "EntraSignInCanary.Tests.ps1") -Data @{ ModulePath = $ModulePath }
+$Container = New-PesterContainer -Path (Join-Path $PSScriptRoot "EntraSignInCanary.Tests.ps1") -Data @{ ModulePath = $ModulePath; Scenario = $Scenario }
 
 $Configuration = New-PesterConfiguration
 $Configuration.Run.Container = $Container
@@ -71,6 +79,7 @@ $Configuration.TestResult.OutputPath = $ResultPath
 $Result = Invoke-Pester -Configuration $Configuration
 
 $Summary = [ordered]@{
+    Scenario = $Scenario
     Failed  = [int]$Result.FailedCount
     Passed  = [int]$Result.PassedCount
     Skipped = [int]$Result.SkippedCount

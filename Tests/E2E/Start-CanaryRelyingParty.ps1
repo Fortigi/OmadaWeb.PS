@@ -105,6 +105,11 @@ function New-CanaryAuthorizeUri {
         only thing under test - would never be rendered. The canary would then pass by not testing
         anything, which is worse than failing.
 
+        It is a parameter rather than a constant because one thing under test is the module's own
+        ability to put that parameter there. A scenario that checks whether -UserName reaches Entra
+        as login_hint and prompt=login has to be given an authorization request that carries neither,
+        or it would be watching this stand-in do the work and calling it a pass.
+
         The login hint is sent so that Entra can serve the account's own sign-in experience. It does
         not skip the username screen: the automation still fills it in, which is what the canary is
         there to watch.
@@ -125,7 +130,12 @@ function New-CanaryAuthorizeUri {
         The opaque state value echoed back on the redirect, which the listener checks.
 
     .PARAMETER LoginHint
-        The canary account's user principal name.
+        The canary account's user principal name. Left out when the scenario is about the module
+        supplying it.
+
+    .PARAMETER Prompt
+        The OpenID Connect prompt to send. Defaults to 'login'; an empty value sends none, which is
+        what a scenario testing the module's own prompt needs.
 
     .OUTPUTS
         System.String. The absolute authorization request URI.
@@ -155,7 +165,11 @@ function New-CanaryAuthorizeUri {
 
         [AllowNull()]
         [AllowEmptyString()]
-        [string]$LoginHint
+        [string]$LoginHint,
+
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Prompt = "login"
     )
 
     $QueryParameter = [ordered]@{
@@ -167,7 +181,10 @@ function New-CanaryAuthorizeUri {
         state                 = $State
         code_challenge        = $CodeChallenge
         code_challenge_method = "S256"
-        prompt                = "login"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Prompt)) {
+        $QueryParameter["prompt"] = $Prompt
     }
 
     if (-not [string]::IsNullOrWhiteSpace($LoginHint)) {
@@ -254,7 +271,12 @@ function Start-CanaryRelyingParty {
         The application (client) ID of the canary app registration.
 
     .PARAMETER LoginHint
-        The canary account's user principal name.
+        The canary account's user principal name. Left out when the scenario is about the module
+        supplying it.
+
+    .PARAMETER Prompt
+        The OpenID Connect prompt the authorization request carries. Defaults to 'login'; an empty
+        value sends none.
 
     .PARAMETER Port
         The loopback port to listen on. Must be covered by a registered redirect URI; Entra ignores
@@ -279,6 +301,10 @@ function Start-CanaryRelyingParty {
         [AllowEmptyString()]
         [string]$LoginHint,
 
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Prompt = "login",
+
         [ValidateRange(1024, 65535)]
         [int]$Port = 8400
     )
@@ -288,7 +314,7 @@ function Start-CanaryRelyingParty {
     $Pkce = New-CanaryPkcePair
     $StateValue = [guid]::NewGuid().ToString("N")
 
-    $AuthorizeUri = New-CanaryAuthorizeUri -TenantId $TenantId -ClientId $ClientId -RedirectUri $RedirectUri -CodeChallenge $Pkce.Challenge -State $StateValue -LoginHint $LoginHint
+    $AuthorizeUri = New-CanaryAuthorizeUri -TenantId $TenantId -ClientId $ClientId -RedirectUri $RedirectUri -CodeChallenge $Pkce.Challenge -State $StateValue -LoginHint $LoginHint -Prompt $Prompt
 
     $CookieName = "oisauthtoken"
     $CookieValue = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("canary-cookie-value"))
