@@ -97,10 +97,6 @@ Describe 'Stop-OmadaLogin' -Tag 'Unit' {
             $Script:LoginAbortReason.Url | Should -Be 'unknown'
         }
     }
-}
-
-AfterAll {
-    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 
     Context 'A sign-in refused because the account belongs to another tenant' {
 
@@ -171,5 +167,8 @@ AfterAll {
             }
         }
     }
+}
 
+AfterAll {
+    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 }

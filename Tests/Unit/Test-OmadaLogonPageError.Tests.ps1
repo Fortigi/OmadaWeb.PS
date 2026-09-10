@@ -153,10 +153,6 @@ Describe 'Test-OmadaLogonPageError' -Tag 'Unit' {
             }
         }
     }
-}
-
-AfterAll {
-    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 
     Context 'Classifying what kind of refusal it is' {
         It 'Calls an account of another tenant a WrongAccount, which a different account can get past' {
@@ -229,5 +225,8 @@ AfterAll {
             }
         }
     }
+}
 
+AfterAll {
+    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 }
