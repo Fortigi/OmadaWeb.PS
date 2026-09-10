@@ -111,12 +111,20 @@ function Initialize-WebView2 {
                                     # A failure here must not take the sign-in with it: without the
                                     # rewrite the browser simply chooses the account itself, which is
                                     # what it did before this existed.
-                                    [Console]::WriteLine("Error in NavigationStarting: $_")
+                                    #
+                                    # Reported by type and not by message. The exception raised while
+                                    # rewriting a sign-in request routinely quotes the URI it was
+                                    # given, and that URI is the one place the account name appears -
+                                    # so printing the message here would put an account name on the
+                                    # console for a failure that is not even fatal. The type says
+                                    # which of the two steps broke, which is what a reader needs.
+                                    [Console]::WriteLine("Error in NavigationStarting: {0}" -f $_.Exception.GetType().FullName)
                                 }
                             })
                     }
                     catch {
-                        [Console]::WriteLine("Could not watch navigation for the sign-in account: $_")
+                        # Same rule as the handler above: the type, not the message.
+                        [Console]::WriteLine("Could not watch navigation for the sign-in account: {0}" -f $_.Exception.GetType().FullName)
                     }
 
                     $Script:WebView2.Visible = $true
