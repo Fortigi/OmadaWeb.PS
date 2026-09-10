@@ -43,6 +43,10 @@ function Get-OmadaSessionContext {
         # supplied it: the WebView2 window runs in a blocking dialog that cannot see the call stack.
         UserName            = $null
         SelectAccount       = $false
+        # Whether this sign-in has already been given its one window with an account picker on it
+        # after being refused for the wrong account. Reset at the start of every sign-in, so the
+        # allowance is per call and not per PowerShell session.
+        AccountRecoveryAttempted = $false
         PreferredMfaMethod  = $null
         LastSessionType     = $null
         WebView2Used        = $false
