@@ -187,6 +187,17 @@ Describe 'New-CanaryAuthorizeUri' -Tag 'Unit' {
         (Get-CanaryQueryParameter -Uri $Uri)["login_hint"] | Should -Be "canary+test@example.onmicrosoft.com"
     }
 
+    It 'Omits the prompt when the scenario asks for a bare authorization request' {
+        # A scenario that tests whether the module puts prompt and login_hint on the request has to
+        # be given one that carries neither, or it would be watching the stand-in do the work.
+        $Parameter = $Script:AuthorizeParameter.Clone()
+        $Parameter.Prompt = ""
+
+        $Uri = New-CanaryAuthorizeUri @Parameter
+
+        $Uri | Should -Not -Match 'prompt='
+    }
+
     It 'Omits the login hint when none was supplied' {
         $Parameter = $Script:AuthorizeParameter.Clone()
         $Parameter.LoginHint = ""

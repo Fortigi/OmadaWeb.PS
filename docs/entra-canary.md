@@ -19,11 +19,34 @@ own schedule, and until now the detection mechanism was a user bug report.
 `Build/psakeBuild.ps1` has excluded the `E2E` tag from every build since long before this workflow
 existed, with a comment promising a separate scheduled pipeline. This is that pipeline.
 
+## The three scenarios
+
+Each run drives three sign-ins, one after the other. They cannot share a run: each needs its own
+browser window, and two of them are sign-ins that deliberately never finish.
+
+| Scenario | Given | Green when |
+|---|---|---|
+| `PasswordAutofill` | a user name and a password | the sign-in completes and the resource comes back — the original canary |
+| `UserNameOnly` | a user name, no password | the account reaches Entra **inside the authorization request** (`login_hint`), the password page is reached, no empty password is submitted, and the window is handed back saying it is waiting for you |
+| `NoUserName` | neither | nothing is added to the request and nothing is driven at all — the default has to stay indistinguishable from the module not being involved in the choice |
+
+The last two never complete, so they are watched rather than awaited: the sign-in runs in a
+background job for a fixed 135 seconds — long enough for the redirect chain, the sign-in page, and
+the 60 seconds of no progress that ends in the handover — and is then stopped from inside the test,
+which asserts against everything the module traced. A separate process is what makes that possible at
+all: the WinForms dialog blocks the thread it is shown on, so nothing inside that process can be
+interrupted once the window is up.
+
+`UserNameOnly` and `NoUserName` are given an authorization request carrying **no** `prompt` and **no**
+`login_hint`. For the first that is the point — whatever reaches Entra must have been put there by
+the module — and for the second it is what makes "the module added nothing" mean something.
+
 ## What it covers, and what it deliberately does not
 
 | | |
 |---|---|
 | **Covers** | The username screen, the password screen and "Stay signed in?" — the screens a password sign-in actually renders — driven by the shipping code path: `Invoke-WebView2MicrosoftLogin` over what `Get-EntraSignInProbeScript` reads and `Resolve-EntraSignInScreen` judges. |
+| **Covers** | That an account named with `-UserName` reaches Entra as part of the request, that a missing password is waited for rather than invented, and that naming no account leaves the request alone. |
 | **Does not cover** | Multi-factor authentication. An interactive approval cannot be automated, so the canary account is exempt by policy. The MFA screens in `Resolve-EntraSignInScreen` are covered by unit tests against recorded page snapshots instead. |
 | **Does not cover** | Interactive sign-in in general. That is IdP-agnostic — a tenant on Ping, Okta or ADFS reaches none of this code — so there is nothing here for the canary to watch. |
 | **Does not cover** | Omada itself. The canary needs no Omada environment; see below. |
@@ -178,10 +201,10 @@ also runs standalone:
 ### Flake policy
 
 Microsoft's sign-in service has transient bad minutes, and a canary that alerts on one of them gets
-muted by its audience — the only failure mode worse than having no canary. So the job runs the test,
-and on failure waits 120 seconds and runs it **once** more. The job fails only if both attempts fail.
-A first attempt that the retry cleared is still reported as a warning annotation, so flakes stay
-visible.
+muted by its audience — the only failure mode worse than having no canary. So each scenario runs, and on
+failure waits 120 seconds and runs **once** more. The job fails only if a scenario fails twice. A
+first attempt that the retry cleared is still reported as a warning annotation, so flakes stay
+visible. Every failed assertion in the report is prefixed with the scenario it came from.
 
 ### Notification
 
@@ -242,6 +265,21 @@ $env:OMADAWEBPS_CANARY_PASSWORD  = '<password>'
 
 Invoke-Pester -Path ./Tests/E2E -TagFilter E2E -Output Detailed
 ```
+
+That runs the `PasswordAutofill` scenario, which is the default. For one of the others, pass it
+through the container the way the workflow does:
+
+```powershell
+$Container = New-PesterContainer -Path ./Tests/E2E/EntraSignInCanary.Tests.ps1 -Data @{
+    ModulePath = './buildoutput/OmadaWeb.PS/OmadaWeb.PS.psm1'
+    Scenario   = 'UserNameOnly'
+}
+Invoke-Pester -Container $Container -TagFilter E2E -Output Detailed
+```
+
+A local run of `UserNameOnly` or `NoUserName` is worth watching rather than only reading: the browser
+window opens, stops where a person would take over, and stays there until the observation window ends
+— which is the behaviour being asserted.
 
 Without those variables the tests report **skipped**, which is also what keeps them out of a normal
 build. The build additionally excludes the `E2E` tag outright, so `./Build/build.ps1` never opens a
