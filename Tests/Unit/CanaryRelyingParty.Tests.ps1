@@ -193,9 +193,11 @@ Describe 'New-CanaryAuthorizeUri' -Tag 'Unit' {
         $Parameter = $Script:AuthorizeParameter.Clone()
         $Parameter.Prompt = ""
 
-        $Uri = New-CanaryAuthorizeUri @Parameter
+        $Query = Get-CanaryQueryParameter -Uri (New-CanaryAuthorizeUri @Parameter)
 
-        $Uri | Should -Not -Match 'prompt='
+        # Asked of the parsed query rather than of the raw string: 'prompt=' would also be satisfied
+        # by a parameter that merely ends in it, and absence is the thing being asserted.
+        $Query.ContainsKey("prompt") | Should -BeFalse
     }
 
     It 'Omits the login hint when none was supplied' {
