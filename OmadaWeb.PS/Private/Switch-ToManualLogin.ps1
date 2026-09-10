@@ -30,6 +30,12 @@ function Switch-ToManualLogin {
             the user's behalf, such as a request to pick an account. Nothing is broken, nothing is
             missing, and asking for a bug report would send a user to the issue tracker for a
             normal day at work (issue #76).
+          - WaitingForUserInput. The page was recognized, the automation read it correctly, and what
+            it asks for is something the caller never supplied - a password that was not part of the
+            credential, or a one-time code that only exists on the user's device. The sign-in is not
+            stuck: it is waiting for the person the window is open in front of. Nothing is missing,
+            nothing changed, and the handover exists only to stop the automation from polling a page
+            it has nothing left to do on.
 
         Only the path of the page URL is reported. Sign-in URLs carry client_id, state and nonce
         query parameters, and this text is written to a stream that users routinely capture into
@@ -52,7 +58,7 @@ function Switch-ToManualLogin {
         [AllowNull()]
         [string]$Reason,
 
-        [ValidateSet("UnrecognizedScreen", "UnrecognizedCode", "RecognizedCondition")]
+        [ValidateSet("UnrecognizedScreen", "UnrecognizedCode", "RecognizedCondition", "WaitingForUserInput")]
         [string]$Cause = "UnrecognizedScreen"
     )
 
@@ -91,8 +97,24 @@ function Switch-ToManualLogin {
         $MissingText = "unknown"
     }
 
+    # A page the automation understood perfectly has no missing selector to report, and naming one
+    # would send the next reader looking for a break that did not happen.
+    if ($Cause -eq "WaitingForUserInput") {
+        $MissingText = $null
+    }
+
     $Lines = [System.Collections.Generic.List[string]]::new()
-    $Lines.Add("Automated Microsoft sign-in could not continue - handing control back to you.")
+
+    # The opening line is the one a user reads first, and "could not continue" is a failure report.
+    # It is the truth for a page that matched nothing; it is not the truth for a page that is simply
+    # waiting for a password. Both keep the same prefix, because that prefix is what the sign-in
+    # canary and every support log search for.
+    if ($Cause -eq "WaitingForUserInput") {
+        $Lines.Add("Automated Microsoft sign-in is waiting for you - handing control back to you.")
+    }
+    else {
+        $Lines.Add("Automated Microsoft sign-in could not continue - handing control back to you.")
+    }
     $Lines.Add("  State            : {0}" -f $State)
     if (-not [string]::IsNullOrWhiteSpace($MissingText)) {
         $Lines.Add("  Missing elements : {0}" -f $MissingText)
@@ -114,6 +136,13 @@ function Switch-ToManualLogin {
             # had changed would be false, and asking for a bug report would be asking a user to
             # report a sign-in working as designed.
             $Lines.Add("Entra ID asked for something that only you can do. Please sign in yourself in the browser window that is open - nothing about the page is broken, and there is nothing to report.")
+        }
+
+        "WaitingForUserInput" {
+            # The sign-in is not broken and the automation is not lost: what is missing is an input
+            # only the user has. Saying anything about selectors here would be false, and asking for
+            # a bug report would be asking somebody to report having to type their own password.
+            $Lines.Add("Entra ID is asking for something that was not supplied to this command - a password, or a verification code from your device. Please complete the sign-in yourself in the browser window that is open; it stays open and waits for you. Nothing is broken and there is nothing to report.")
         }
 
         "UnrecognizedCode" {

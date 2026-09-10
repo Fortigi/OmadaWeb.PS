@@ -101,4 +101,75 @@ Describe 'Stop-OmadaLogin' -Tag 'Unit' {
 
 AfterAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
+
+    Context 'A sign-in refused because the account belongs to another tenant' {
+
+        BeforeAll {
+            $Script:TenantError = "OpenIdConnectMessage.Error was not null, indicating an error. Error: 'invalid_request'. Error_Description (may be empty): 'AADSTS50178: User account '{EUII Hidden}' from identity provider 'https://sts.windows.net/be4c52b6-1a23-493e-a8ce-f36325d16462/' does not exist in tenant 'Example productie' and cannot access the application 'a1880835-5fff-4d48-b926-44471e6f3c6c'(example.com (Omada)) in that tenant. Trace ID: c5936087-19ec-4f9d-bbfa-9202d9218900 Correlation ID: 53b30bf1-f9c9-4ad1-8bba-5442011f3a7c Timestamp: 2026-09-10 09:08:39Z'."
+        }
+
+        It 'Names the tenants, the application and the correlation id' {
+            # Everything in this list is something the reader has to paste into a portal to get any
+            # further, and all of it was already in the message - just not where anyone could see it.
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ TenantError = $Script:TenantError } {
+                Stop-OmadaLogin -Message $TenantError -Code 'AADSTS50178' -Reason 'Account unknown in the tenant.' -Category 'WrongAccount' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                $Warning = $Warnings -join "`n"
+
+                $Warning | Should -BeLike '*be4c52b6-1a23-493e-a8ce-f36325d16462*'
+                $Warning | Should -BeLike "*Example productie*"
+                $Warning | Should -BeLike '*example.com (Omada)*'
+                $Warning | Should -BeLike '*53b30bf1-f9c9-4ad1-8bba-5442011f3a7c*'
+            }
+        }
+
+        It 'Says that this account will never work, and what does' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ TenantError = $Script:TenantError } {
+                Stop-OmadaLogin -Message $TenantError -Category 'WrongAccount' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                $Warning = $Warnings -join "`n"
+
+                $Warning | Should -BeLike '*no further attempts are made*'
+                $Warning | Should -BeLike "*Sign in with an account of tenant 'Example productie'*"
+                $Warning | Should -BeLike '*invited into it as a guest*'
+            }
+        }
+
+        It 'Explains that Entra withheld the account name, instead of leaving a reader to hunt for it' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ TenantError = $Script:TenantError } {
+                Stop-OmadaLogin -Message $TenantError -Category 'WrongAccount' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                ($Warnings -join "`n") | Should -BeLike '*withholds the account name*'
+            }
+        }
+
+        It 'Records the category and the detail for the driver to act on' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ TenantError = $Script:TenantError } {
+                Stop-OmadaLogin -Message $TenantError -Category 'WrongAccount' -WarningAction SilentlyContinue | Out-Null
+
+                $Script:LoginAbortReason.Category | Should -Be 'WrongAccount'
+                $Script:LoginAbortReason.Detail.ResourceTenant | Should -Be 'Example productie'
+            }
+        }
+
+        It 'Keeps the general advice for a refusal that is not about the account' {
+            InModuleScope 'OmadaWeb.PS' {
+                Stop-OmadaLogin -Message "Error: 'unauthorized_client'." -Category 'AppRegistration' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                $Warning = $Warnings -join "`n"
+
+                $Warning | Should -BeLike '*no further attempts are made*'
+                $Warning | Should -Not -BeLike '*invited into it as a guest*'
+            }
+        }
+
+        It 'Prints no detail lines when the message carries none' {
+            InModuleScope 'OmadaWeb.PS' {
+                Stop-OmadaLogin -Message 'Access denied.' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                ($Warnings -join "`n") | Should -Not -BeLike '*Correlation*'
+            }
+        }
+    }
+
 }

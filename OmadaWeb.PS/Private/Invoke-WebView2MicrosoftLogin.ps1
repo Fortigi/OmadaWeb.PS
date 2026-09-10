@@ -293,7 +293,25 @@ $(Get-EntraElementVisibilityScript)
                         $ScenarioName = $Decision.Screen
                     }
 
-                    Switch-ToManualLogin -State ("Deciding/{0}" -f $ScenarioName) -MissingElementId $MissingElementId -FoundElementId $Present -Url $Script:WebView2.Source.AbsoluteUri -Reason $Decision.Reason | Out-Null
+                    # Two very different things reach this line. Usually the page matched nothing and
+                    # the markup is the suspect, which is what the default cause says. But a screen
+                    # that was recognized and answered with "wait" is not a stall at all: it asks for
+                    # something the caller never supplied - a password left out of the credential, a
+                    # code that exists only on the user's phone - and it will keep asking until the
+                    # person types it. Reporting that as a changed sign-in page blamed Microsoft for a
+                    # sign-in working exactly as designed, and sent the user to the issue tracker to
+                    # report their own password prompt.
+                    #
+                    # The screens are named rather than derived from the action, because 'Wait' is
+                    # also the value a decision carries when nothing matched at all.
+                    $Cause = "UnrecognizedScreen"
+                    $StallMissingElementId = $MissingElementId
+                    if ($Decision.Action -eq "Wait" -and $Decision.Screen -in @("PasswordRequired", "OneTimeCode")) {
+                        $Cause = "WaitingForUserInput"
+                        $StallMissingElementId = @()
+                    }
+
+                    Switch-ToManualLogin -State ("Deciding/{0}" -f $ScenarioName) -MissingElementId $StallMissingElementId -FoundElementId $Present -Url $Script:WebView2.Source.AbsoluteUri -Reason $Decision.Reason -Cause $Cause | Out-Null
                     return $false
                 }
 

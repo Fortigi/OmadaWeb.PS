@@ -681,4 +681,39 @@ Describe 'Invoke-WebView2MicrosoftLogin selector fallback' -Tag 'Unit' {
 
 AfterAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
+
+    Context 'Handing over because the sign-in is waiting for the user' {
+        It 'Says what is being waited for, and asks for no bug report' {
+            # A password that was never supplied is not a broken selector, and issue #76 is the
+            # standing reminder of what happens when the two are reported the same way.
+            InModuleScope 'OmadaWeb.PS' {
+                Switch-ToManualLogin -State 'Deciding/PasswordRequired' -Cause 'WaitingForUserInput' -Reason 'The credential has no password and this page offers no way to sign in without one.' -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                $Warning = $Warnings -join "`n"
+
+                $Warning | Should -BeLike '*asking for something that was not supplied*'
+                $Warning | Should -BeLike '*stays open and waits for you*'
+                $Warning | Should -Not -BeLike '*github.com/Fortigi/OmadaWeb.PS/issues*'
+                $Warning | Should -Not -BeLike '*Microsoft changed it*'
+            }
+        }
+
+        It 'Names no missing selector, because none was missing' {
+            InModuleScope 'OmadaWeb.PS' {
+                Switch-ToManualLogin -State 'Deciding/PasswordRequired' -Cause 'WaitingForUserInput' -MissingElementId @('i0118') -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+                ($Warnings -join "`n") | Should -Not -BeLike '*Missing elements*'
+            }
+        }
+
+        It 'Still turns the automation off, exactly like every other handover' {
+            InModuleScope 'OmadaWeb.PS' {
+                Switch-ToManualLogin -State 'Deciding/OneTimeCode' -Cause 'WaitingForUserInput' -WarningAction SilentlyContinue | Should -BeTrue
+
+                $Script:MicrosoftOnlineLogin | Should -BeFalse
+                $Script:ManualLoginFallbackActive | Should -BeTrue
+            }
+        }
+    }
+
 }

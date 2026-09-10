@@ -157,4 +157,77 @@ Describe 'Test-OmadaLogonPageError' -Tag 'Unit' {
 
 AfterAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
+
+    Context 'Classifying what kind of refusal it is' {
+        It 'Calls an account of another tenant a WrongAccount, which a different account can get past' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ TenantError = $Script:TenantError } {
+                $Verdict = Test-OmadaLogonPageError -Message $TenantError -OnLogonPage
+
+                $Verdict.Category | Should -Be 'WrongAccount'
+                $Verdict.Recoverable | Should -BeTrue
+            }
+        }
+
+        It 'Recognizes the same condition by its code alone, for a page served in another language' {
+            # Only the number survives translation, and losing the category there would lose the one
+            # remedy that works.
+            InModuleScope 'OmadaWeb.PS' {
+                foreach ($Code in @('AADSTS50020', 'AADSTS50178', 'AADSTS51004')) {
+                    $Verdict = Test-OmadaLogonPageError -Message ("{0}: Fout bij aanmelden." -f $Code) -OnLogonPage
+
+                    $Verdict.Category | Should -Be 'WrongAccount' -Because "$Code names an account the tenant does not know"
+                    $Verdict.Recoverable | Should -BeTrue
+                }
+            }
+        }
+
+        It 'Does not offer another account for an application the tenant rejected' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Verdict = Test-OmadaLogonPageError -Message "Error: 'unauthorized_client'. The client does not exist." -OnLogonPage
+
+                $Verdict.Category | Should -Be 'AppRegistration'
+                $Verdict.Recoverable | Should -BeFalse
+            }
+        }
+
+        It 'Does not offer another account for an account that is simply not assigned' {
+            # Same tenant, no assignment. Another account is a guess, and the answer is usually an
+            # administrator's to give.
+            InModuleScope 'OmadaWeb.PS' {
+                $Verdict = Test-OmadaLogonPageError -Message 'AADSTS50105: The signed in user cannot access the application.' -OnLogonPage
+
+                $Verdict.Category | Should -Be 'Authorization'
+                $Verdict.Recoverable | Should -BeFalse
+            }
+        }
+
+        It 'Leaves a page without an error uncategorized' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Verdict = Test-OmadaLogonPageError -Message ''
+
+                $Verdict.Category | Should -Be 'None'
+                $Verdict.Recoverable | Should -BeFalse
+            }
+        }
+
+        It 'Does not categorize an error the user can still correct in the open window' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Verdict = Test-OmadaLogonPageError -Message 'The user name or password is incorrect.' -OnLogonPage -HasLogonForm
+
+                $Verdict.IsFatal | Should -BeFalse
+                $Verdict.Recoverable | Should -BeFalse
+            }
+        }
+
+        It 'Marks a page that is final only by its shape as Unknown rather than recoverable' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Verdict = Test-OmadaLogonPageError -Message 'Something went wrong.' -OnLogonPage
+
+                $Verdict.IsFatal | Should -BeTrue
+                $Verdict.Category | Should -Be 'Unknown'
+                $Verdict.Recoverable | Should -BeFalse
+            }
+        }
+    }
+
 }

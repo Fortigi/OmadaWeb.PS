@@ -82,7 +82,7 @@ function Get-WebDriverLogonPageError {
 
     "Get-WebDriverLogonPageError - Terminal logon page error found in '{0}'" -f $Verdict.Source | Write-Verbose
 
-    Stop-OmadaLogin -Message $Verdict.Message -Code $Verdict.Code -Reason $Verdict.Reason -Url $PageUrl -Engine "EdgeWebDriver" | Out-Null
+    Stop-OmadaLogin -Message $Verdict.Message -Code $Verdict.Code -Reason $Verdict.Reason -Url $PageUrl -Engine "EdgeWebDriver" -Category $Verdict.Category | Out-Null
 
     return $true
 }
