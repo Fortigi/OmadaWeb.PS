@@ -38,6 +38,11 @@ function Get-OmadaSessionContext {
         BaseUrl             = $null
         AuthCookie          = $AuthCookie
         Credential          = $null
+        # The account this session signs in as, from -UserName or from the user name of -Credential.
+        # It is what the sign-in request is told to ask for, so it has to outlive the call that
+        # supplied it: the WebView2 window runs in a blocking dialog that cannot see the call stack.
+        UserName            = $null
+        SelectAccount       = $false
         PreferredMfaMethod  = $null
         LastSessionType     = $null
         WebView2Used        = $false
@@ -48,6 +53,10 @@ function Get-OmadaSessionContext {
         LoginCount          = 0
         WebView2ProfilePath = (Join-Path $Script:WebView2UserProfileBasePath ("OmadaWebView2Profile_{0}" -f $KeyHash.Substring(0, 16)))
         WebViewEnv          = $null
+        # Which way single sign-on with the Windows account was configured when WebViewEnv was
+        # created. A CoreWebView2Environment cannot be reconfigured after the fact, so a later call
+        # that asks for a different answer has to be given a new one - see Start-WebView2Login.
+        WebViewEnvSingleSignOn = $null
     }
 
     $Script:OmadaSessions[$Key] = $SessionContext

@@ -170,6 +170,24 @@ The values are the method identifiers Entra ID itself uses, so they mean the sam
 When the account does not offer the requested method, a warning is written and the most secure method it does offer is used instead, so a preference never fails a sign-in that would otherwise succeed.
 
 IMPORTANT: This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. Supplying it with any other authentication type raises a terminating error.'
+    New-DynamicParam -Name "UserName" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The account to sign in with, as its user principal name. Use it when the browser would otherwise sign in as somebody else - the Windows account you are logged on with, or whoever used this session last - which is what happens when a tenant has more than one identity available and nobody says which one to use.
+
+The name is sent to Entra ID as part of the sign-in request itself (login_hint, with prompt=login), so it decides which account is used before any sign-in screen is drawn. That is the difference between this parameter and typing a name into the window: an existing session for another account can no longer answer the request silently.
+
+No password is needed. When one is supplied, through -Credential, it is filled in as before; when it is not, the account name is filled in and the sign-in waits in the open window for you to complete it - with a passwordless method, or by typing the password yourself.
+
+Each account gets its own session: its own cookie cache and its own browser profile. Signing in to the same environment as two different accounts therefore does not require signing out in between.
+
+Leave it out to keep the current behaviour, where the browser decides which account to use.
+
+IMPORTANT: This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. It cannot be combined with -Credential, which carries a user name of its own, nor with -SelectAccount, because Entra ID accepts an account name or an account picker but not both."
+    New-DynamicParam -Name "SelectAccount" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Ask Entra ID which account to sign in with, instead of letting it choose one.
+
+The sign-in request is sent with prompt=select_account, so Entra shows the account picker - every account the browser already knows, and the option to use one it does not. Use it when you do not want to name an account in advance but the automatic choice is wrong, which is what an 'AADSTS50178 ... does not exist in tenant' refusal means.
+
+Single sign-on with the Windows account is turned off for this sign-in, since it is the thing that made the choice being overruled.
+
+IMPORTANT: This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. It cannot be combined with -UserName or with the user name of -Credential: Entra ID accepts an account name or an account picker, not both."
     New-DynamicParam -Name "DebugWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to enable WebView2 browser debugging options like Developer Tools"
     New-DynamicParam -Name "SessionKey" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Explicitly discriminate the reusable authentication session (cookie, base URL, WebView2/Selenium profile) to use for this call, in addition to the base URL, -AuthenticationType and -Credential (when supplied). Use this to keep multiple concurrent sessions apart when they would otherwise share the same base URL, authentication type and credential - for example two interactive Browser/WebView2 logins to the same tenant before either has a known user identity. Has no effect on which cookie/base URL etc. is used beyond distinguishing sessions from each other; defaults to an empty value, which reproduces prior single-session-per-(base URL, AuthenticationType, Credential) behavior."
 

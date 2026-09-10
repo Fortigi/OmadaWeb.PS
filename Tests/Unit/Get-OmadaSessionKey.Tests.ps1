@@ -89,4 +89,37 @@ Describe 'Get-OmadaSessionKey' -Tag 'Unit' {
 
 AfterAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
+
+    It 'Should keep two accounts named with -UserName in separate sessions' {
+        # Separate sessions mean separate cookies and separate browser profiles, which is what stops
+        # the browser signing the second account in silently as the first.
+        InModuleScope 'OmadaWeb.PS' {
+            $Uri = [System.Uri]::new('https://example.omada.cloud/')
+
+            $KeyA = Get-OmadaSessionKey -Uri $Uri -AuthenticationType 'WebView2' -UserName 'user-a@example.com'
+            $KeyB = Get-OmadaSessionKey -Uri $Uri -AuthenticationType 'WebView2' -UserName 'user-b@example.com'
+
+            $KeyA | Should -Not -Be $KeyB
+        }
+    }
+
+    It 'Should resolve -UserName and the user name of a Credential to the same session' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Uri = [System.Uri]::new('https://example.omada.cloud/')
+            $Credential = New-Object System.Management.Automation.PSCredential('user-a@example.com', (ConvertTo-SecureString 'x' -AsPlainText -Force))
+
+            Get-OmadaSessionKey -Uri $Uri -AuthenticationType 'WebView2' -UserName 'USER-A@example.com' |
+                Should -Be (Get-OmadaSessionKey -Uri $Uri -AuthenticationType 'WebView2' -Credential $Credential)
+        }
+    }
+
+    It 'Should keep an account out of the session of a call that named none' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Uri = [System.Uri]::new('https://example.omada.cloud/')
+
+            Get-OmadaSessionKey -Uri $Uri -AuthenticationType 'WebView2' -UserName 'user-a@example.com' |
+                Should -Not -Be (Get-OmadaSessionKey -Uri $Uri -AuthenticationType 'WebView2')
+        }
+    }
+
 }

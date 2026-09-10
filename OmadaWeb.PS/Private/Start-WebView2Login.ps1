@@ -164,23 +164,43 @@ function Start-WebView2Login {
         $Script:WebView2.ZoomFactor = 1
         $Script:WebView2.add_SourceChanged($Script:WebView_SourceChanged)
 
+        # Single sign-on with the Windows account is what makes the ordinary sign-in instant: WebView2
+        # presents the account the machine is logged on with and Entra waves it through. It is also
+        # precisely what takes the choice away when that account is the wrong one - which is what an
+        # 'AADSTS50178 ... does not exist in tenant' refusal is. So it stays on by default, and is
+        # turned off for exactly the sign-ins where the caller has said which account to use, or has
+        # asked to be shown the picker.
+        $UseOsPrimaryAccount = [string]::IsNullOrWhiteSpace($Script:CurrentWebView2Session.UserName) -and -not $Script:CurrentWebView2Session.SelectAccount
+
         # Create the env once per session and reuse it for all WebView2 instances of that session -
         # a CoreWebView2Environment is bound 1:1 to the UserDataFolder it was created against, so it
         # must be scoped to the same session as the profile folder above.
+        #
+        # It is also bound to the options it was created with, and those cannot be changed afterwards.
+        # A session that signed in once without naming an account and is now asked for a different one
+        # would otherwise silently reuse an environment that still signs in with the Windows account,
+        # and the parameter the caller passed would do nothing at all.
+        if ($null -ne $Script:CurrentWebView2Session.WebViewEnv -and $Script:CurrentWebView2Session.WebViewEnvSingleSignOn -ne $UseOsPrimaryAccount) {
+            "{0} - Single sign-on with the Windows account is now {1} for this session, which the existing WebView2 environment cannot be told, so a new one is created." -f $MyInvocation.MyCommand, $(if ($UseOsPrimaryAccount) { "wanted" } else { "not wanted" }) | Write-Verbose
+            $Script:CurrentWebView2Session.WebViewEnv = $null
+        }
+
         if ($null -eq $Script:CurrentWebView2Session.WebViewEnv) {
-            "{0} - Creating CoreWebView2Environment..." -f $MyInvocation.MyCommand | Write-Verbose
+            "{0} - Creating CoreWebView2Environment (single sign-on with the Windows account: {1})..." -f $MyInvocation.MyCommand, $UseOsPrimaryAccount | Write-Verbose
             $EnvOptions = [Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions]::new()
-            $EnvOptions.AllowSingleSignOnUsingOSPrimaryAccount = $true
+            $EnvOptions.AllowSingleSignOnUsingOSPrimaryAccount = $UseOsPrimaryAccount
             try {
                 "{0} - Try to start CoreWebView2Environment using implicit configuration..." -f $MyInvocation.MyCommand | Write-Verbose
                 $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $WebView2ProfilePath, $EnvOptions)
                 $Script:CurrentWebView2Session.WebViewEnv = $Task.GetAwaiter().GetResult()
+                $Script:CurrentWebView2Session.WebViewEnvSingleSignOn = $UseOsPrimaryAccount
             }
             catch {
                 try {
                     "{0} - Failed to start CoreWebView2Environment using implicit configuration, now try explicit Edge WebView path: '{1}'..." -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
                     $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($Script:InstalledEdgeWebView2Path, $WebView2ProfilePath, $EnvOptions)
                     $Script:CurrentWebView2Session.WebViewEnv = $Task.GetAwaiter().GetResult()
+                    $Script:CurrentWebView2Session.WebViewEnvSingleSignOn = $UseOsPrimaryAccount
                 }
                 catch {
                     $Script:StopError = $true

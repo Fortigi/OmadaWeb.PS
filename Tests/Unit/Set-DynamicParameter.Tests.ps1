@@ -12,7 +12,7 @@ Describe 'Set-DynamicParameter' -Tag 'Unit' {
         InModuleScope 'OmadaWeb.PS' {
             $Dictionary = Set-DynamicParameter -FunctionName 'Invoke-RestMethod'
             $Dictionary | Should -BeOfType [System.Management.Automation.RuntimeDefinedParameterDictionary]
-            foreach ($Name in @('AuthenticationType', 'EntraIdTenantId', 'CookiePath', 'ForceAuthentication', 'InPrivate', 'UseWebView2', 'SessionKey')) {
+            foreach ($Name in @('AuthenticationType', 'EntraIdTenantId', 'CookiePath', 'ForceAuthentication', 'InPrivate', 'UseWebView2', 'SessionKey', 'UserName', 'SelectAccount')) {
                 $Dictionary.ContainsKey($Name) | Should -Be $true
             }
         }

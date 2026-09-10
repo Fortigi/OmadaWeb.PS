@@ -8,7 +8,10 @@ function Get-OmadaCookieFileName {
         [System.Management.Automation.PSCredential]$Credential,
 
         [AllowNull()]
-        [string]$SessionKey
+        [string]$SessionKey,
+
+        [AllowNull()]
+        [string]$UserName
     )
 
     # Matches Get-OmadaSessionKey's identity resolution (including case normalization), so a given
@@ -19,7 +22,10 @@ function Get-OmadaCookieFileName {
     # Windows filenames, so it's replaced rather than passed through.
     $Authority = $Uri.Authority.ToLowerInvariant() -replace ":", "_"
     $Identity = $null
-    if ($null -ne $Credential -and -not [string]::IsNullOrWhiteSpace($Credential.UserName)) {
+    if (-not [string]::IsNullOrWhiteSpace($UserName)) {
+        $Identity = $UserName.Trim().ToLowerInvariant()
+    }
+    elseif ($null -ne $Credential -and -not [string]::IsNullOrWhiteSpace($Credential.UserName)) {
         $Identity = $Credential.UserName.Trim().ToLowerInvariant()
     }
     elseif (-not [string]::IsNullOrWhiteSpace($SessionKey)) {

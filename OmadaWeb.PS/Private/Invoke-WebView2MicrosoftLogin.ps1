@@ -175,8 +175,19 @@ $(Get-EntraElementVisibilityScript)
             return $false
         }
 
-        # No user name means nothing to fill in, so the user signs in by hand in the open window.
-        if (-not $Script:CurrentWebView2Session.Credential -or [string]::IsNullOrWhiteSpace($Script:CurrentWebView2Session.Credential.UserName)) {
+        # No user name means nothing to fill in, so the user signs in by hand in the open window. The
+        # account can be named without a password - -UserName, or a credential carrying only a user
+        # name - which is why this asks the session for the account rather than the credential for
+        # its user name.
+        if ([string]::IsNullOrWhiteSpace($Script:CurrentWebView2Session.UserName)) {
+            # Said once per window, and worth saying: this is the module deciding to do nothing, and
+            # a trace that shows the browser reaching Entra and then falling silent otherwise looks
+            # like a failure. It is also what tells a reader that the account was the browser's
+            # choice rather than the caller's.
+            if (-not $Script:EntraSignInAccountReported) {
+                $Script:EntraSignInAccountReported = $true
+                "Invoke-WebView2MicrosoftLogin - No account was named for this sign-in, so the browser decides which account to use and the page is left to you." | Write-Verbose
+            }
             return $false
         }
 
@@ -243,10 +254,17 @@ $(Get-EntraElementVisibilityScript)
             }
 
             "Deciding" {
+                # A sign-in can be driven with an account name and no password at all: -UserName
+                # supplies no credential, and a PSCredential is allowed to carry an empty one. The
+                # network credential is therefore read only when there is a credential to read, and
+                # everything below asks $HasPassword rather than assuming one exists.
                 $HasPassword = $false
-                $NetworkCredential = $Script:CurrentWebView2Session.Credential.GetNetworkCredential()
-                if (-not [string]::IsNullOrEmpty($NetworkCredential.Password)) {
-                    $HasPassword = $true
+                $NetworkCredential = $null
+                if ($null -ne $Script:CurrentWebView2Session.Credential) {
+                    $NetworkCredential = $Script:CurrentWebView2Session.Credential.GetNetworkCredential()
+                    if (-not [string]::IsNullOrEmpty($NetworkCredential.Password)) {
+                        $HasPassword = $true
+                    }
                 }
 
                 $PreferredMfaMethod = $null
@@ -254,7 +272,7 @@ $(Get-EntraElementVisibilityScript)
                     $PreferredMfaMethod = [string]$Script:CurrentWebView2Session.PreferredMfaMethod
                 }
 
-                $Decision = Resolve-EntraSignInScreen -PageState $Script:PageState -UserName $Script:CurrentWebView2Session.Credential.UserName.Trim() -HasPassword:$HasPassword -PreferredMfaMethod $PreferredMfaMethod -MfaRequestDisplayed:$Script:MfaRequestDisplayed
+                $Decision = Resolve-EntraSignInScreen -PageState $Script:PageState -UserName $Script:CurrentWebView2Session.UserName.Trim() -HasPassword:$HasPassword -PreferredMfaMethod $PreferredMfaMethod -MfaRequestDisplayed:$Script:MfaRequestDisplayed
 
                 # The code and the reason travel with the screen, because between them they are the
                 # difference between "Microsoft changed the page" and "Entra refused this request",
@@ -395,6 +413,16 @@ $(Get-EntraElementVisibilityScript)
                         $Value = $Decision.Value
                         if ($Decision.ValueSource -eq "Password") {
                             # Read here and nowhere else, so the secret never travels in the decision.
+                            #
+                            # The resolver only asks for a password when it was told there is one, so
+                            # reaching this with no credential at all would be a bug in that agreement
+                            # rather than a state to type an empty string into: an empty password is
+                            # one of the attempts an account has before Entra ID locks it out.
+                            if ($null -eq $NetworkCredential) {
+                                "Invoke-WebView2MicrosoftLogin - The sign-in page asked for a password and none was supplied, so nothing is submitted." | Write-Verbose
+                                return $false
+                            }
+
                             $Value = $NetworkCredential.Password
                         }
 

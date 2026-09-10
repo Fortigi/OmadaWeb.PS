@@ -223,6 +223,50 @@ Two things worth knowing:
 
 A session still has to be established once, interactively, before any of this works - the switch uses a session, it never creates one.
 
+### Choosing the account to sign in with
+
+By default the browser decides. It signs in with the account Windows is logged on with, or with whoever used this session last, and for a workstation that belongs to the tenant you are administering that is exactly right - the sign-in is instant and nobody is asked anything.
+
+It is wrong the moment more than one identity is in play. A consultant's own account, a guest account in the customer's tenant, an acceptance account and a production account: the browser picks one silently, and Entra ID answers with a refusal that names neither what it picked nor what it wanted.
+
+```text
+AADSTS50178: User account '{EUII Hidden}' from identity provider 'https://sts.windows.net/<tenant id>/'
+does not exist in tenant '<tenant> production' and cannot access the application ... in that tenant.
+```
+
+Two parameters take that choice back:
+
+```powershell
+# Sign in as a named account. No password is needed.
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/..." -UserName "mark@example.com"
+
+# Or be shown the account picker, including the option to use an account the browser does not know.
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/..." -SelectAccount
+```
+
+**The account is named in the sign-in request, not typed into the page.** `-UserName` is sent to Entra ID as `login_hint` together with `prompt=login`, and `-SelectAccount` as `prompt=select_account`. That is the whole point: a session for somebody else can no longer answer the request before a page is ever drawn, which is what the refusal above is. Single sign-on with the Windows account is turned off for these sign-ins for the same reason.
+
+Nothing else in the request is touched - `state`, `nonce` and the redirect URI stay exactly as Omada built them, and a `prompt` that Omada sets itself is left alone.
+
+| | |
+|---|---|
+| `-UserName "mark@example.com"` | that account signs in |
+| `-Credential $Credential` | the credential's user name is the account; its password is filled in when it has one |
+| `-SelectAccount` | Entra asks which account to use |
+| neither | unchanged: the browser decides |
+
+The two cannot be combined - Entra ID accepts an account name or an account picker, not both - and `-UserName` cannot be combined with `-Credential`, which carries a user name of its own. Both apply to `-AuthenticationType "WebView2"` (and to `"Browser"` once it runs on WebView2); supplying them with any other type is refused rather than silently ignored.
+
+**A password is optional.** `-UserName` supplies none at all, and a `-Credential` may carry an empty one:
+
+```powershell
+$Credential = [System.Management.Automation.PSCredential]::new("mark@example.com", [System.Security.SecureString]::new())
+```
+
+The account name is filled in, an empty password is never submitted - that is one of the attempts an account has before Entra ID locks it out - and if Entra offers a passwordless method the module takes it. When it insists on a password anyway, the window stays open and waits for you to type it.
+
+**Each account gets its own session**, meaning its own cookie cache and its own browser profile, keyed on the account name exactly as `-Credential` and `-SessionKey` already are. Two accounts against the same Omada environment therefore no longer need signing out in between, and neither can be silently signed in as the other.
+
 ### Signing in, and what happens when Microsoft changes the sign-in page
 
 Every browser-based authentication type signs in the same way a person does: a browser window opens on your Omada instance, and you complete the sign-in there. Passing a `-Credential` for an Entra tenant adds one convenience on top of that - the module recognizes the Microsoft sign-in pages and fills the fields in for you.

@@ -63,4 +63,27 @@ Describe 'Get-OmadaCookieFileName' -Tag 'Unit' {
 
 AfterAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
+
+    It 'Should give an account named with -UserName its own cookie file' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Uri = [System.Uri]::new('http://localhost:19000/')
+
+            $Name = Get-OmadaCookieFileName -Uri $Uri -UserName 'user-a@example.com'
+
+            $Name | Should -BeLike 'localhost_19000_*.cookie'
+            $Name | Should -Not -Be (Get-OmadaCookieFileName -Uri $Uri -UserName 'user-b@example.com')
+        }
+    }
+
+    It 'Should resolve -UserName and the same name on a Credential to one file' {
+        # The two are the same account named two ways, and they must not end up with two cookies.
+        InModuleScope 'OmadaWeb.PS' {
+            $Uri = [System.Uri]::new('http://localhost:19000/')
+            $Credential = New-Object System.Management.Automation.PSCredential('user-a@example.com', (ConvertTo-SecureString 'x' -AsPlainText -Force))
+
+            Get-OmadaCookieFileName -Uri $Uri -UserName 'USER-A@example.com' |
+                Should -Be (Get-OmadaCookieFileName -Uri $Uri -Credential $Credential)
+        }
+    }
+
 }
