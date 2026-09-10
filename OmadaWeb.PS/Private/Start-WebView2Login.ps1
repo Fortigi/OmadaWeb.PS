@@ -180,8 +180,17 @@ function Start-WebView2Login {
         # A session that signed in once without naming an account and is now asked for a different one
         # would otherwise silently reuse an environment that still signs in with the Windows account,
         # and the parameter the caller passed would do nothing at all.
+        $PreviousWebViewEnv = $null
         if ($null -ne $Script:CurrentWebView2Session.WebViewEnv -and $Script:CurrentWebView2Session.WebViewEnvSingleSignOn -ne $UseOsPrimaryAccount) {
             "{0} - Single sign-on with the Windows account is now {1} for this session, which the existing WebView2 environment cannot be told, so a new one is created." -f $MyInvocation.MyCommand, $(if ($UseOsPrimaryAccount) { "wanted" } else { "not wanted" }) | Write-Verbose
+
+            # Kept, not dropped. WebView2 refuses to create a second environment over a user data
+            # folder that is still in use with different options, and a browser process from the
+            # window that just closed can still be on its way out. Failing the sign-in over that
+            # would be the wrong trade: the option only decides whether the Windows account is
+            # offered without being asked for, while what actually settles the account is the prompt
+            # parameter on the request itself, which is sent either way.
+            $PreviousWebViewEnv = $Script:CurrentWebView2Session.WebViewEnv
             $Script:CurrentWebView2Session.WebViewEnv = $null
         }
 
@@ -203,8 +212,17 @@ function Start-WebView2Login {
                     $Script:CurrentWebView2Session.WebViewEnvSingleSignOn = $UseOsPrimaryAccount
                 }
                 catch {
-                    $Script:StopError = $true
-                    "{0} - Error creating CoreWebView2Environment. You can consider to install the Evergreen Standalone Installer from 'https://developer.microsoft.com/en-us/Microsoft-edge/webview2/' and try again: {1}" -f $MyInvocation.MyCommand, $_.Exception | Write-Error -ErrorAction Stop
+                    if ($null -ne $PreviousWebViewEnv) {
+                        # Only the reconfiguration failed. The sign-in itself has an environment to
+                        # run in, and the request still carries the parameter that decides the
+                        # account, so it goes ahead in the one this session already had.
+                        "{0} - Could not create a WebView2 environment with single sign-on {1}, so this sign-in reuses the environment this session already has: {2}" -f $MyInvocation.MyCommand, $(if ($UseOsPrimaryAccount) { "enabled" } else { "disabled" }), $_.Exception.Message | Write-Verbose
+                        $Script:CurrentWebView2Session.WebViewEnv = $PreviousWebViewEnv
+                    }
+                    else {
+                        $Script:StopError = $true
+                        "{0} - Error creating CoreWebView2Environment. You can consider to install the Evergreen Standalone Installer from 'https://developer.microsoft.com/en-us/Microsoft-edge/webview2/' and try again: {1}" -f $MyInvocation.MyCommand, $_.Exception | Write-Error -ErrorAction Stop
+                    }
                 }
             }
         }
