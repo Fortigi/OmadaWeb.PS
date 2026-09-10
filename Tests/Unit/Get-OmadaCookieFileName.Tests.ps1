@@ -59,10 +59,6 @@ Describe 'Get-OmadaCookieFileName' -Tag 'Unit' {
             $NameBoth | Should -Be $NameCredentialOnly
         }
     }
-}
-
-AfterAll {
-    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 
     It 'Should give an account named with -UserName its own cookie file' {
         InModuleScope 'OmadaWeb.PS' {
@@ -85,5 +81,8 @@ AfterAll {
                 Should -Be (Get-OmadaCookieFileName -Uri $Uri -Credential $Credential)
         }
     }
+}
 
+AfterAll {
+    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 }

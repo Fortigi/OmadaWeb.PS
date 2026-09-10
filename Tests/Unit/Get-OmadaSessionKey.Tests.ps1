@@ -85,10 +85,6 @@ Describe 'Get-OmadaSessionKey' -Tag 'Unit' {
             $Key1 | Should -Be $Key2
         }
     }
-}
-
-AfterAll {
-    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 
     It 'Should keep two accounts named with -UserName in separate sessions' {
         # Separate sessions mean separate cookies and separate browser profiles, which is what stops
@@ -121,5 +117,8 @@ AfterAll {
                 Should -Not -Be (Get-OmadaSessionKey -Uri $Uri -AuthenticationType 'WebView2')
         }
     }
+}
 
+AfterAll {
+    Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
 }
