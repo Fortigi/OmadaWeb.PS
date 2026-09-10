@@ -25,9 +25,9 @@ function Test-SignInAccountRecovery {
             the tenant saying the same thing again, and a browser window that keeps reappearing is
             worse than an error message.
           - Somebody is there to answer. An account picker in a session with no interactive desktop
-            is a window nobody will ever click, and the call would hang where it used to fail with a
-            message. The check is Environment.UserInteractive, which is false exactly where that is
-            true - a service, a session-0 scheduled task.
+            is a window nobody will ever click, and the call would hang there where it used to fail
+            with a message that says what is wrong. The check is Environment.UserInteractive, which
+            is false in exactly those places - a Windows service, a session-0 scheduled task.
 
     .PARAMETER Category
         The refusal category recorded by Stop-OmadaLogin.
