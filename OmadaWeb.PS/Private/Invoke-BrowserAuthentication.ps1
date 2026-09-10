@@ -24,6 +24,21 @@ function Invoke-BrowserAuthentication {
         $SessionContext.Credential = $BoundParams['Credential']
     }
 
+    # One account, from either of the two places a caller can name it. Resolved here so that nothing
+    # downstream has to ask the question twice, and carried on the session for the same reason the
+    # credential is: the WebView2 sign-in runs inside a blocking dialog whose handlers cannot see
+    # this call stack. Left null when nobody named an account, which is what keeps the default
+    # behaviour - the browser decides - exactly as it was.
+    $SessionContext.UserName = $null
+    if ($BoundParams.keys -contains "UserName" -and -not [string]::IsNullOrWhiteSpace($BoundParams['UserName'])) {
+        $SessionContext.UserName = $BoundParams['UserName'].Trim()
+    }
+    elseif ($null -ne $SessionContext.Credential -and -not [string]::IsNullOrWhiteSpace($SessionContext.Credential.UserName)) {
+        $SessionContext.UserName = $SessionContext.Credential.UserName.Trim()
+    }
+
+    $SessionContext.SelectAccount = $BoundParams.keys -contains "SelectAccount" -and [bool]$BoundParams['SelectAccount']
+
     # Carried on the session rather than passed down: the WebView2 sign-in runs inside a blocking
     # WinForm dialog whose event handlers cannot see this call stack, and the session context is how
     # everything else - the credential included - reaches them.
@@ -120,7 +135,7 @@ function Invoke-BrowserAuthentication {
         # filename (previously this used the cookie's own .domain attribute, which may lack the port,
         # producing a different filename than what the read path looked for). Built from
         # $BoundParams['Uri'] directly rather than relying on the caller's $Uri local.
-        $CookieFileName = Get-OmadaCookieFileName -Uri ([System.Uri]::new($BoundParams['Uri'])) -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
+        $CookieFileName = Get-OmadaCookieFileName -Uri ([System.Uri]::new($BoundParams['Uri'])) -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey'] -UserName $BoundParams['UserName']
         $CookiePath = (Join-Path $($BoundParams['CookiePath']) -ChildPath $CookieFileName)
 
         # Protected at rest, through the same writer as the default cache below. This used to be a

@@ -263,6 +263,13 @@ $Script:UnmatchedPageSince = $null
 # It is cleared once per sign-in rather than once per window: surviving the window closing is exactly
 # what lets the driver see why the window closed.
 $Script:LoginAbortReason = $null
+# Per-window state of the account the sign-in request asks for. The counter is the loop guard on the
+# navigation rewrite in Initialize-WebView2 - a redirect chain may carry more than one authorization
+# request, but a browser going round the same loop is worse than one that stops trying. The flag
+# keeps "no account was named" to one line per window instead of one per 150 ms tick. Both are
+# cleared by Reset-LoginAutomationState.
+$Script:EntraSignInRequestRewriteCount = 0
+$Script:EntraSignInAccountReported = $false
 # State of the logon-page scrape in Get-WebView2LogonPageError. Per browser window, so it is cleared
 # by Reset-LoginAutomationState along with the rest of the per-window automation state.
 $Script:LogonPageErrorTask = $null

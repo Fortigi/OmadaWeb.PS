@@ -61,6 +61,72 @@ function Initialize-WebView2 {
 
                     "Initialize-WebView2 - WebView2 Settings:`n{0}" -f ($sender.CoreWebView2.Settings | Format-List | Out-String) | Write-Verbose
 
+                    # Which account signs in is settled in the authorization request, not on the page
+                    # it leads to. Omada builds that request and Entra ID answers it - and when the
+                    # browser already holds a session, it answers it without drawing anything at all,
+                    # which is how a sign-in ends up being made as an account nobody chose. By the
+                    # time the timer below sees a page, the choice has been made.
+                    #
+                    # NavigationStarting is the last point at which it can be influenced. It fires for
+                    # redirects as well as for typed navigations, which is what this needs: the
+                    # authorization request arrives as a redirect from Omada. Cancelling and
+                    # navigating to the rewritten request is the documented way to do this, and only
+                    # ever adds parameters, so what Entra validates is still the request Omada built.
+                    try {
+                        $sender.CoreWebView2.add_NavigationStarting({
+                                param($NavigationSender, $NavigationArgs)
+
+                                try {
+                                    if ($null -eq $Script:CurrentWebView2Session) {
+                                        return
+                                    }
+
+                                    $SignInAccount = Get-OmadaSignInAccount -SessionContext $Script:CurrentWebView2Session
+                                    $Rewritten = New-EntraSignInUri -Uri $NavigationArgs.Uri -UserName $SignInAccount.UserName -SelectAccount:$SignInAccount.SelectAccount
+                                    if ([string]::IsNullOrWhiteSpace($Rewritten)) {
+                                        return
+                                    }
+
+                                    # A redirect chain can legitimately carry more than one
+                                    # authorization request, so this is a cap rather than a single
+                                    # shot - but a browser going round the same loop is worse than one
+                                    # that stops trying, and the sign-in still works without the
+                                    # rewrite. It just picks the account itself, which is the
+                                    # behaviour this module had before.
+                                    if ($Script:EntraSignInRequestRewriteCount -ge 3) {
+                                        "Initialize-WebView2 - The sign-in request has already been redirected {0} times to ask for this account, so it is left alone now." -f $Script:EntraSignInRequestRewriteCount | Write-Verbose
+                                        return
+                                    }
+
+                                    $Script:EntraSignInRequestRewriteCount++
+
+                                    # The account name is in that URI, so only its path is reported -
+                                    # the same rule every other diagnostic here follows.
+                                    "Initialize-WebView2 - Asking Entra ID for the account this call named, on {0}" -f ([System.Uri]::new($Rewritten)).GetLeftPart([System.UriPartial]::Path) | Write-Verbose
+
+                                    $NavigationArgs.Cancel = $true
+                                    $NavigationSender.Navigate($Rewritten)
+                                }
+                                catch {
+                                    # A failure here must not take the sign-in with it: without the
+                                    # rewrite the browser simply chooses the account itself, which is
+                                    # what it did before this existed.
+                                    #
+                                    # Reported by type and not by message. The exception raised while
+                                    # rewriting a sign-in request routinely quotes the URI it was
+                                    # given, and that URI is the one place the account name appears -
+                                    # so printing the message here would put an account name on the
+                                    # console for a failure that is not even fatal. The type says
+                                    # which of the two steps broke, which is what a reader needs.
+                                    [Console]::WriteLine("Error in NavigationStarting: {0}" -f $_.Exception.GetType().FullName)
+                                }
+                            })
+                    }
+                    catch {
+                        # Same rule as the handler above: the type, not the message.
+                        [Console]::WriteLine("Could not watch navigation for the sign-in account: {0}" -f $_.Exception.GetType().FullName)
+                    }
+
                     $Script:WebView2.Visible = $true
                     $Script:OmadaWatchdogStart = $null
                     $Script:OmadaWatchdogRunning = $false
