@@ -16,8 +16,8 @@ function Switch-ToManualLogin {
         browser is on - the three things needed to fix the selector table afterwards.
 
         Not every handover is a selector break, though, and saying so when it is not is worse than
-        saying nothing. -Cause names which of three things happened, and only the wording follows
-        from it - the switch itself is made the same way in all three cases:
+        saying nothing. -Cause names which of the four cases below happened, and only the wording
+        follows from it - the switch itself is made the same way in every one of them:
 
           - UnrecognizedScreen. The page matched no known sign-in step. This is the case the
             function was written for: the markup is the suspect, the missing selectors are the
