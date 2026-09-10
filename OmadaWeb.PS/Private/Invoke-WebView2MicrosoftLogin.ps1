@@ -177,9 +177,10 @@ $(Get-EntraElementVisibilityScript)
 
         # No user name means nothing to fill in, so the user signs in by hand in the open window. The
         # account can be named without a password - -UserName, or a credential carrying only a user
-        # name - which is why this asks the session for the account rather than the credential for
-        # its user name.
-        if ([string]::IsNullOrWhiteSpace($Script:CurrentWebView2Session.UserName)) {
+        # name - so the question of which account this is goes to Get-OmadaSignInAccount, which knows
+        # about both routes.
+        $SignInAccount = Get-OmadaSignInAccount -SessionContext $Script:CurrentWebView2Session
+        if ([string]::IsNullOrWhiteSpace($SignInAccount.UserName)) {
             # Said once per window, and worth saying: this is the module deciding to do nothing, and
             # a trace that shows the browser reaching Entra and then falling silent otherwise looks
             # like a failure. It is also what tells a reader that the account was the browser's
@@ -272,7 +273,7 @@ $(Get-EntraElementVisibilityScript)
                     $PreferredMfaMethod = [string]$Script:CurrentWebView2Session.PreferredMfaMethod
                 }
 
-                $Decision = Resolve-EntraSignInScreen -PageState $Script:PageState -UserName $Script:CurrentWebView2Session.UserName.Trim() -HasPassword:$HasPassword -PreferredMfaMethod $PreferredMfaMethod -MfaRequestDisplayed:$Script:MfaRequestDisplayed
+                $Decision = Resolve-EntraSignInScreen -PageState $Script:PageState -UserName (Get-OmadaSignInAccount -SessionContext $Script:CurrentWebView2Session).UserName -HasPassword:$HasPassword -PreferredMfaMethod $PreferredMfaMethod -MfaRequestDisplayed:$Script:MfaRequestDisplayed
 
                 # The code and the reason travel with the screen, because between them they are the
                 # difference between "Microsoft changed the page" and "Entra refused this request",

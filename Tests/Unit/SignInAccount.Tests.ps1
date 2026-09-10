@@ -27,6 +27,14 @@ Describe 'Naming the account a sign-in uses' -Tag 'Unit' {
                 # tests are about - and no browser is opened to find that out.
                 $SessionContext.AuthCookie = [PSCustomObject]@{ Name = 'oisauthtoken'; Value = 'cookie-value'; domain = ([System.Uri]::new($BaseUrl)).Host }
 
+                # Invoke-BrowserAuthentication ends by writing the cookie cache, whose path
+                # Invoke-OmadaRequest normally fills in. These tests are about the account it resolves
+                # on the way there, and a unit test has no business writing one, so the caching is
+                # switched off rather than pointed somewhere.
+                if (-not $BoundParams.ContainsKey("SkipCookieCache")) {
+                    $BoundParams["SkipCookieCache"] = $true
+                }
+
                 return New-OmadaRequestContext -BoundParams $BoundParams -Session ([Microsoft.PowerShell.Commands.WebRequestSession]::new()) -SessionContext $SessionContext
             }
         }

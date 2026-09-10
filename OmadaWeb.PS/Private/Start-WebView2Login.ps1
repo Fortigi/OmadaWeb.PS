@@ -170,7 +170,8 @@ function Start-WebView2Login {
         # 'AADSTS50178 ... does not exist in tenant' refusal is. So it stays on by default, and is
         # turned off for exactly the sign-ins where the caller has said which account to use, or has
         # asked to be shown the picker.
-        $UseOsPrimaryAccount = [string]::IsNullOrWhiteSpace($Script:CurrentWebView2Session.UserName) -and -not $Script:CurrentWebView2Session.SelectAccount
+        $SignInAccount = Get-OmadaSignInAccount -SessionContext $Script:CurrentWebView2Session
+        $UseOsPrimaryAccount = [string]::IsNullOrWhiteSpace($SignInAccount.UserName) -and -not $SignInAccount.SelectAccount
 
         # Create the env once per session and reuse it for all WebView2 instances of that session -
         # a CoreWebView2Environment is bound 1:1 to the UserDataFolder it was created against, so it

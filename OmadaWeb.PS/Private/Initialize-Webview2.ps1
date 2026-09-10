@@ -81,7 +81,8 @@ function Initialize-WebView2 {
                                         return
                                     }
 
-                                    $Rewritten = New-EntraSignInUri -Uri $NavigationArgs.Uri -UserName $Script:CurrentWebView2Session.UserName -SelectAccount:$Script:CurrentWebView2Session.SelectAccount
+                                    $SignInAccount = Get-OmadaSignInAccount -SessionContext $Script:CurrentWebView2Session
+                                    $Rewritten = New-EntraSignInUri -Uri $NavigationArgs.Uri -UserName $SignInAccount.UserName -SelectAccount:$SignInAccount.SelectAccount
                                     if ([string]::IsNullOrWhiteSpace($Rewritten)) {
                                         return
                                     }
