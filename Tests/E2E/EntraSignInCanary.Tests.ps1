@@ -124,7 +124,7 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
 
         # The diagnostic that names a broken selector: the state, the selectors expected but absent,
         # the ones present, and the page path. Reported verbatim rather than summarized.
-        $Script:FallbackWarning = @($Script:CanaryWarning | Where-Object { $_ -match 'Automated Microsoft sign-in could not continue' })
+        $Script:FallbackWarning = @($Script:CanaryWarning | Where-Object { $_ -match 'Automated Microsoft sign-in' })
 
         if ($Script:FallbackWarning.Count -gt 0) {
             "::group::Entra sign-in canary diagnostic" | Write-Host

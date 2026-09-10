@@ -243,6 +243,18 @@ The warning names the state, the elements that were expected but absent, and the
 
 The module waits 60 seconds without progress before it gives up on autofill, so a slow round trip to Microsoft is not mistaken for a changed page. Waiting for you to approve a sign-in request in your authenticator app does not count against that.
 
+A page that asks for something the command was never given is not a changed page, and is not reported as one. A `-Credential` that carries a user name but no password is a normal way to use the module: the user name is filled in, an empty password is never submitted, and when Entra insists on a password anyway the module says so and leaves the window open for you.
+
+```text
+WARNING: Automated Microsoft sign-in is waiting for you - handing control back to you.
+  State            : Deciding/PasswordRequired
+  Page URL         : https://login.microsoftonline.com/common/login
+  Reason           : The credential has no password and this page offers no way to sign in without one.
+Entra ID is asking for something that was not supplied to this command - a password, or a verification code from your device. Please complete the sign-in yourself in the browser window that is open; it stays open and waits for you. Nothing is broken and there is nothing to report.
+```
+
+No selector is named there, and no bug report is asked for, because nothing about the page is broken.
+
 You should not normally be the one to find out. A scheduled job signs in to Entra ID once a day in a real browser and opens an issue when autofill stops recognising a screen, so a change on Microsoft's side is usually already known - and often already fixed - by the time you meet it. See [the Entra sign-in canary](docs/entra-canary.md).
 
 ### When Omada refuses the sign-in
@@ -260,10 +272,18 @@ WARNING: Sign-in was refused and will not be retried.
   Engine     : WebView2
   Message    : AADSTS50178: User account '...' from identity provider '...' does not exist in tenant 'Example' and cannot access the application '...' in that tenant. The account needs to be added as an external user in the tenant first.
   Meaning    : The account that signed in is not known in the tenant the Omada application is registered in.
-Opening the sign-in window again would land on this same page, so no further attempts are made. ...
+  Account in : tenant be4c52b6-1a23-493e-a8ce-f36325d16462
+  Needed in  : tenant 'Example'
+  Application: example.com (Omada) (a1880835-5fff-4d48-b926-44471e6f3c6c)
+  Correlation: 53b30bf1-f9c9-4ad1-8bba-5442011f3a7c
+  Trace      : c5936087-19ec-4f9d-bbfa-9202d9218900
+This account cannot be used for this application however often the sign-in is repeated, so no further attempts are made. Sign in with an account of tenant 'Example', or have this account invited into it as a guest, and try again.
+Entra ID withholds the account name from this message because it identifies an end user. Look the attempt up by its correlation ID in the sign-in logs of the tenant that refused it to see which account was used.
 ```
 
-The request then fails with that same message rather than with a bare "could not authenticate", so what to do next - sign in with an account from the application's own tenant, or have yours invited into it - is in the error itself. Add `-ForceAuthentication` to the retry so the sign-in starts from a clean browser session.
+The request then fails with that same message rather than with a bare "could not authenticate", so what to do next is in the error itself. Add `-ForceAuthentication` to the retry so the sign-in starts from a clean browser session.
+
+Everything under `Meaning` is lifted out of the message Entra wrote, because all of it is something you have to paste into a portal to get any further and none of it was anywhere you could see it. One thing is deliberately missing: the account name. Entra replaces it with `{EUII Hidden}` in a message it hands to an application, so the sign-in logs of the tenant that refused the sign-in - searched by the correlation ID above - are the only place the account can be identified.
 
 **Only errors a retry cannot change stop the sign-in.** An error you can correct in the window that is open - a wrong password on Omada's own logon form - is reported once and otherwise left alone, and so is one the identity provider may recover from by itself, such as `server_error` or `temporarily_unavailable`. An error whose wording the module does not recognize is treated as final only when the page offers no way to sign in again, which is what a failed federated sign-in looks like whatever the Omada version calls it.
 
