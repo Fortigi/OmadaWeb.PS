@@ -296,7 +296,13 @@ function Start-WebView2Login {
         # captures the verbose stream - a scheduled task, a CI job, the sign-in canary - sees only
         # what is written here, and "Error occurred" on its own sent issue #90 looking for a changed
         # Microsoft sign-in page that had nothing to do with it.
-        "{0} - Error occurred: {1}" -f $MyInvocation.MyCommand, $PSItem.Exception.Message | Write-Verbose
+        #
+        # Read once and redacted once. A failure this deep in a sign-in can quote the request it fell
+        # over on, and an authorization request carries an account name in its query string, so the
+        # message goes through Protect-LogMessage like every other logged exception message in the
+        # module - and both the trace and the console line below say the same redacted thing.
+        $SafeErrorMessage = Protect-LogMessage -Message $PSItem.Exception.Message
+        "{0} - Error occurred: {1}" -f $MyInvocation.MyCommand, $SafeErrorMessage | Write-Verbose
         try {
             "{0} - Reset-Timer" -f $MyInvocation.MyCommand | Write-Verbose
             Reset-Timer
@@ -314,7 +320,7 @@ function Start-WebView2Login {
             }
         }
         catch {}
-        Write-Host ("Error in Start-WebView2Login: {0}" -f $PSItem.Exception.Message) -ForegroundColor Red
+        Write-Host ("Error in Start-WebView2Login: {0}" -f $SafeErrorMessage) -ForegroundColor Red
         $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }

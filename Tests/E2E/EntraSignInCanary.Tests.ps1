@@ -338,7 +338,16 @@ Describe 'Entra ID sign-in canary - a sign-in that waits for the user' -Tag 'E2E
         # The trace has been read and echoed into the job log by now, so what is left on disk is a
         # copy of it. Removed because it is a sign-in trace, and a runner's temp folder is not where
         # one should be left lying about.
-        Remove-Item -LiteralPath $Script:WatchedSignInOutputPath, $Script:WatchedSignInErrorPath -Force -ErrorAction SilentlyContinue
+        #
+        # Each path is tested before it is passed. A BeforeAll that died before assigning them would
+        # otherwise turn this into a parameter-binding failure on a null LiteralPath - which
+        # -ErrorAction cannot suppress, and which would be reported in place of whatever actually
+        # went wrong.
+        foreach ($Path in @($Script:WatchedSignInOutputPath, $Script:WatchedSignInErrorPath)) {
+            if (-not [string]::IsNullOrWhiteSpace($Path)) {
+                Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 
     It 'Put the account into the sign-in request' -Skip:($Scenario -ne 'UserNameOnly') {
