@@ -320,13 +320,7 @@ function Invoke-OmadaRequest {
                         }
                         $Parameters = Set-RequestParameter -RequestContext $RequestContext
 
-                        try {
-                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
-                        }
-                        catch {
-                            Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
-                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
-                        }
+                        $CommandInfo = Resolve-OmadaNativeCommand -Name $_ -FullyQualifiedModule $FullyQualifiedModule
                         "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
 
                         $Return = Invoke-OmadaRetryableRequest -CommandInfo $CommandInfo -Parameters $Parameters @RetryPolicy
@@ -381,13 +375,7 @@ function Invoke-OmadaRequest {
                     }
                     "Invoke-WebRequest" {
                         $Parameters = Set-RequestParameter -RequestContext $RequestContext
-                        try {
-                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
-                        }
-                        catch {
-                            Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
-                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
-                        }
+                        $CommandInfo = Resolve-OmadaNativeCommand -Name $_ -FullyQualifiedModule $FullyQualifiedModule
                         "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                         $Return = Invoke-OmadaRetryableRequest -CommandInfo $CommandInfo -Parameters $Parameters @RetryPolicy
 
