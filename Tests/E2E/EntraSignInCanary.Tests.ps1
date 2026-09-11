@@ -233,9 +233,12 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:RunPasswordSce
 # Entra ID. It is the one arrangement where "the sign-in did not complete" is the correct outcome,
 # and where a module that quietly submitted an empty password instead would look like a success.
 #
-# So the sign-in runs in a background job and is watched rather than awaited. The job is a separate
-# process, which is what makes it stoppable: the WinForms dialog blocks the thread it is shown on, so
-# nothing inside that process can be interrupted once the window is up. The observation window is
+# So the sign-in runs in a child process started -STA and is watched rather than awaited. Out of
+# process is what makes it stoppable: the WinForms dialog blocks the thread it is shown on, so nothing
+# inside that process can be interrupted once the window is up. -STA is what makes it work at all: a
+# background job is out of process too, but its runspace thread is MTA, and WebView2 cannot be created
+# there - see the comment on the launch below and Tests/E2E/Start-WatchedSignIn.ps1. The observation
+# window is
 # fixed rather than cut short at the first marker, because the last thing these check - the handover
 # that says the sign-in is waiting for you - only happens after the module has seen no progress for
 # $Script:LoginAutomationFallbackTimeout seconds.
@@ -259,57 +262,63 @@ Describe 'Entra ID sign-in canary - a sign-in that waits for the user' -Tag 'E2E
 
         $UserNameForScenario = if ($Scenario -eq 'UserNameOnly') { $Env:OMADAWEBPS_CANARY_USERNAME } else { '' }
 
-        $SignIn = Start-Job -ScriptBlock {
-            param($ModulePath, $ResourceUrl, $UserName)
+        # A separate process, started -STA, rather than a background job.
+        #
+        # Out of process is what makes this stoppable at all: the WinForms dialog blocks the thread it
+        # is shown on, so nothing inside the process showing it can be interrupted once the window is
+        # up. A background job is out of process too - but its runspace thread is MTA, and WebView2 is
+        # COM that needs a single-threaded apartment. CoreWebView2Environment::CreateAsync came back
+        # with "Cannot change thread mode after it is set (RPC_E_CHANGED_MODE)", no browser was ever
+        # created, and every assertion below failed because the sign-in had not happened - which the
+        # canary duly reported as a changed Microsoft sign-in page (issue #90). PasswordAutofill was
+        # green throughout, because it runs in the Pester host, which is STA.
+        #
+        # The same host this runs in, so a 5.1 leg would drive 5.1 rather than silently swapping hosts.
+        $WatchedSignInLogFolder = if ([string]::IsNullOrWhiteSpace($Env:RUNNER_TEMP)) { [System.IO.Path]::GetTempPath() } else { $Env:RUNNER_TEMP }
+        $Script:WatchedSignInOutputPath = Join-Path $WatchedSignInLogFolder ("canary-watched-{0}-{1}.log" -f $Scenario, [guid]::NewGuid().ToString("N"))
+        $Script:WatchedSignInErrorPath = [System.IO.Path]::ChangeExtension($Script:WatchedSignInOutputPath, ".err.log")
 
-            $VerbosePreference = 'Continue'
-            Import-Module $ModulePath -Force -ErrorAction Stop
+        $WatchedSignInArgument = [System.Collections.Generic.List[string]]::new()
+        $WatchedSignInArgument.AddRange([string[]]@(
+                "-STA", "-NoLogo", "-NoProfile",
+                "-File", ('"{0}"' -f (Join-Path $PSScriptRoot 'Start-WatchedSignIn.ps1')),
+                "-ModulePath", ('"{0}"' -f $ModulePath),
+                "-ResourceUrl", ('"{0}"' -f $Script:RelyingParty.ResourceUrl)
+            ))
 
-            $Parameter = @{
-                Uri                = $ResourceUrl
-                AuthenticationType = 'WebView2'
-                SkipCookieCache    = $true
-            }
-
-            # PowerShell 7 refuses to send a credential over an unencrypted connection without being
-            # told to, and the stand-in serves plain HTTP on loopback. Guarded by version because the
-            # parameter does not exist on Windows PowerShell 5.1.
-            if ($PSVersionTable.PSVersion.Major -ge 6) {
-                $Parameter['AllowUnencryptedAuthentication'] = $true
-            }
-
-            if (-not [string]::IsNullOrWhiteSpace($UserName)) {
-                $Parameter['UserName'] = $UserName
-            }
-
-            # Every stream, as strings, as they are produced. The verbose trace is the product here:
-            # what is being asserted is which decisions the module took on a page it could read
-            # perfectly well, and those are only ever reported there.
-            Invoke-OmadaWebRequest @Parameter -Verbose *>&1 | ForEach-Object { $_.ToString() }
-        } -ArgumentList $ModulePath, $Script:RelyingParty.ResourceUrl, $UserNameForScenario
-
-        $Deadline = [DateTime]::Now.AddSeconds($ObservationSeconds)
-        $Captured = [System.Collections.Generic.List[string]]::new()
-
-        while ([DateTime]::Now -lt $Deadline -and $SignIn.State -eq 'Running') {
-            foreach ($Record in @(Receive-Job -Job $SignIn -ErrorAction SilentlyContinue)) {
-                $Captured.Add([string]$Record)
-            }
-            Start-Sleep -Milliseconds 500
+        # Left off entirely rather than passed as an empty string: an empty argument through a command
+        # line is the one value that does not survive the trip intact, and "no account was named" is
+        # precisely what the NoUserName scenario asserts about.
+        if (-not [string]::IsNullOrWhiteSpace($UserNameForScenario)) {
+            $WatchedSignInArgument.AddRange([string[]]@("-UserName", ('"{0}"' -f $UserNameForScenario)))
         }
 
-        # Stopped, then drained: a job that buffered rather than streamed still hands over everything
-        # it wrote, so the assertions below never depend on how promptly a record crossed the process
-        # boundary.
-        Stop-Job -Job $SignIn -ErrorAction SilentlyContinue
-        foreach ($Record in @(Receive-Job -Job $SignIn -ErrorAction SilentlyContinue)) {
-            $Captured.Add([string]$Record)
+        # Captured to a file rather than read from a pipe. The process is killed at the deadline, and
+        # a trace that only existed in a pipe nobody drained would go with it - which is the same
+        # reason the workflow redirects each attempt to a file.
+        $SignIn = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList $WatchedSignInArgument.ToArray() `
+            -RedirectStandardOutput $Script:WatchedSignInOutputPath -RedirectStandardError $Script:WatchedSignInErrorPath `
+            -NoNewWindow -PassThru
+
+        if (-not $SignIn.WaitForExit($ObservationSeconds * 1000)) {
+            # Expected, not a failure: these two sign-ins are meant to still be waiting. The window is
+            # open for a person who is not there, and the observation window has simply run out.
+            try { $SignIn.Kill($true) } catch { "Could not stop the watched sign-in cleanly: {0}" -f $_.Exception.Message | Write-Host }
         }
-        Remove-Job -Job $SignIn -Force -ErrorAction SilentlyContinue
 
         # The browser belongs to a process that has just been killed, and the next attempt must not
         # inherit one that is still holding the profile.
         Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+        # Read after the kill, so a trace written up to the last moment is still read in full. Both
+        # streams, because a failure that reached the error stream is as much a part of what happened
+        # as the verbose trace is.
+        $Captured = [System.Collections.Generic.List[string]]::new()
+        foreach ($Path in @($Script:WatchedSignInOutputPath, $Script:WatchedSignInErrorPath)) {
+            foreach ($Line in @(Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+                $Captured.Add([string]$Line)
+            }
+        }
 
         $Script:Trace = $Captured -join [System.Environment]::NewLine
 
@@ -325,6 +334,20 @@ Describe 'Entra ID sign-in canary - a sign-in that waits for the user' -Tag 'E2E
 
     AfterAll {
         Stop-CanaryRelyingParty -RelyingParty $Script:RelyingParty
+
+        # The trace has been read and echoed into the job log by now, so what is left on disk is a
+        # copy of it. Removed because it is a sign-in trace, and a runner's temp folder is not where
+        # one should be left lying about.
+        #
+        # Each path is tested before it is passed. A BeforeAll that died before assigning them would
+        # otherwise turn this into a parameter-binding failure on a null LiteralPath - which
+        # -ErrorAction cannot suppress, and which would be reported in place of whatever actually
+        # went wrong.
+        foreach ($Path in @($Script:WatchedSignInOutputPath, $Script:WatchedSignInErrorPath)) {
+            if (-not [string]::IsNullOrWhiteSpace($Path)) {
+                Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 
     It 'Put the account into the sign-in request' -Skip:($Scenario -ne 'UserNameOnly') {
