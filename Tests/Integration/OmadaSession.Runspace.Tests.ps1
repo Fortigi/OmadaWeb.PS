@@ -169,6 +169,10 @@ BeforeAll {
             Value                = $null
             ErrorId              = $null
             ErrorType            = $null
+            # Carried back as well as the id, because an assertion on the id alone reports only
+            # that it was wrong - and the worker's own error stream cannot be read from here.
+            ErrorMessage         = $null
+            ErrorStack           = $null
         }
 
         $RequestParameters = @{
@@ -202,6 +206,8 @@ BeforeAll {
         catch {
             $Result.ErrorId = $PSItem.FullyQualifiedErrorId
             $Result.ErrorType = $PSItem.Exception.GetType().FullName
+            $Result.ErrorMessage = $PSItem.Exception.Message
+            $Result.ErrorStack = $PSItem.ScriptStackTrace
         }
 
         return [PSCustomObject]$Result
@@ -234,7 +240,7 @@ Describe 'Export-OmadaSession / Import-OmadaSession across runspaces' -Tag 'Inte
             $Result.SessionsBeforeImport | Should -Be 0
             $Result.Imported | Should -BeTrue
 
-            $Result.ErrorId | Should -BeNullOrEmpty
+            $Result.ErrorId | Should -BeNullOrEmpty -Because ("the worker reported: {0}`n{1}" -f $Result.ErrorMessage, $Result.ErrorStack)
             $Result.Value | Should -Be 'served'
 
             # The request went out on the cookie that was exported here, not on one the worker
@@ -277,7 +283,7 @@ Describe 'Export-OmadaSession / Import-OmadaSession across runspaces' -Tag 'Inte
 
             $Result = $Worker.Output | Select-Object -Last 1
             $Result.Imported | Should -BeTrue
-            $Result.ErrorId | Should -BeLike 'OmadaSessionExpired*'
+            $Result.ErrorId | Should -BeLike 'OmadaSessionExpired*' -Because ("the worker reported: {0}`n{1}" -f $Result.ErrorMessage, $Result.ErrorStack)
             $Result.ErrorType | Should -Be 'System.Security.Authentication.AuthenticationException'
 
             # One request and no more: the 401 was not followed by a re-authentication and a replay.

@@ -666,11 +666,7 @@ Takes the state object Export-OmadaSession produced in the runspace that signed 
 
 Nothing is read from or written to disk, and no request is made: this only puts the session in place.
 
-A seeded session may not sign in. Everything that could open a browser window is refused for it, whether or not the call asked for -NoInteractiveAuthentication, because a worker runspace usually has no desktop to put a window on and nobody watching it. When the session turns out to be dead - refused here because its cookie has already expired, or refused later because the server answers HTTP 401 - the caller gets a terminating error it can catch:
-
-try { Import-OmadaSession -State $State Invoke-OmadaRestMethod -Uri $Uri -ErrorAction Stop } catch [System.Security.Authentication.AuthenticationException] { "The session handed to this worker is gone." | Write-Warning }
-
-The FullyQualifiedErrorId of that error starts with OmadaSessionExpired. Use -AllowInteractiveAuthentication only where a sign-in window would actually be welcome.
+A seeded session may not sign in. Everything that could open a browser window is refused for it, whether or not the call asked for -NoInteractiveAuthentication, because a worker runspace usually has no desktop to put a window on and nobody watching it. When the session turns out to be dead - refused here because its cookie has already expired, or refused later because the server answers HTTP 401 - the caller gets a terminating error it can catch: an AuthenticationException whose FullyQualifiedErrorId starts with OmadaSessionExpired. The third example below shows the shape. Use -AllowInteractiveAuthentication only where a sign-in window would actually be welcome.
 
 The state is protected with DPAPI, so it can only be imported by the user who exported it, on the machine it was exported from. A state that cannot be read - from another user, from another machine, or damaged in transit - is refused as one error rather than silently ignored.
 
