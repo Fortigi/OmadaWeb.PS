@@ -306,6 +306,33 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Count | Should -Be 0
         }
 
+        It 'Should treat an expiry it cannot read as one that was never declared' {
+            # A cast would raise a FormatException here and escape the OmadaSessionExpired contract
+            # the caller catches on. Reading it the way a cookie's own expiry is read answers "not
+            # declared" instead, and the session is left to the server - which raises the same error
+            # on 401 if it really is dead.
+            Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
+            $State = Export-OmadaSession -Uri $Script:TestBaseUrl
+            $State.ExpiresOn = 'not a date at all'
+
+            Clear-TestSessions
+            { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Not -Throw
+
+            $Seeded = InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Values | Select-Object -First 1 }
+            $Seeded.AuthCookie.value | Should -Be $Script:TokenValue
+        }
+
+        It 'Should still refuse an expiry that arrives as a string, when that string is in the past' {
+            # The other half of the same change: reading defensively must not mean reading loosely.
+            Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
+            $State = Export-OmadaSession -Uri $Script:TestBaseUrl
+            $State.ExpiresOn = [datetime]::UtcNow.AddMinutes(-5).ToString('o')
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Throw -PassThru
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionExpired*'
+        }
+
         It 'Should refuse a state whose protected half cannot be read' {
             Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl

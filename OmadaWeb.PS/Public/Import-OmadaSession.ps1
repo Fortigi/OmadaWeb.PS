@@ -132,8 +132,15 @@ function Import-OmadaSession {
 
         # Checked before the session is seeded, so a runspace handed a dead session is left with no
         # session at all rather than one that looks usable until the first request comes back 401.
-        if ($null -ne $State.ExpiresOn -and [datetime]$State.ExpiresOn -le [datetime]::UtcNow) {
-            $Message = "The exported Omada session for '{0}' expired at {1:u} and was not imported. Export a fresh session from the runspace that signed in." -f $State.BaseUrl, ([datetime]$State.ExpiresOn)
+        #
+        # Read through the same helper the cookie's own expiry goes through, rather than cast: a
+        # cast raises a FormatException on anything it cannot read, and this command's contract is
+        # to raise OmadaSessionExpired. An expiry that cannot be read is treated as one that was
+        # never declared, exactly as a session cookie's is - the session is then left to the server,
+        # which answers 401 and produces the same error by the other route.
+        $ExpiresOn = ConvertTo-OmadaExpiryMoment -Value $State.ExpiresOn
+        if ($null -ne $ExpiresOn -and $ExpiresOn -le [datetime]::UtcNow) {
+            $Message = "The exported Omada session for '{0}' expired at {1:u} and was not imported. Export a fresh session from the runspace that signed in." -f $State.BaseUrl, $ExpiresOn
             throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $State.BaseUrl)
         }
 
