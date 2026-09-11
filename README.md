@@ -1206,6 +1206,8 @@ Every release has a CycloneDX Software Bill of Materials (`OmadaWeb.PS-<version>
 
 Contributions are welcome! If you have ideas for improvements or bug fixes, feel free to open a pull request on [GitHub](https://github.com/Fortigi/OmadaWeb.PS).
 
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) first — it covers where the tests live, how to run them, how a pull request gets validated, and the one rule we ask every change to follow: **every bug fix ships with the test that would have caught it**.
+
 The COMMANDS, SYNTAX, EXAMPLES and PARAMETERS sections of this README are generated from the module, so help is written once:
 
 - Comment-based help in `OmadaWeb.PS/Public/*.ps1` is the source of every synopsis, description and example, and of the parameter descriptions of commands that declare their parameters normally. It is the same help `Get-Help` shows.
