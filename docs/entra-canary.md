@@ -30,12 +30,15 @@ browser window, and two of them are sign-ins that deliberately never finish.
 | `UserNameOnly` | a user name, no password | the account reaches Entra **inside the authorization request** (`login_hint`), the password page is reached, no empty password is submitted, and the window is handed back saying it is waiting for you |
 | `NoUserName` | neither | nothing is added to the request and nothing is driven at all — the default has to stay indistinguishable from the module not being involved in the choice |
 
-The last two never complete, so they are watched rather than awaited: the sign-in runs in a
-background job for a fixed 135 seconds — long enough for the redirect chain, the sign-in page, and
-the 60 seconds of no progress that ends in the handover — and is then stopped from inside the test,
-which asserts against everything the module traced. A separate process is what makes that possible at
-all: the WinForms dialog blocks the thread it is shown on, so nothing inside that process can be
-interrupted once the window is up.
+The last two never complete, so they are watched rather than awaited: the sign-in runs in a child
+process for a fixed 135 seconds — long enough for the redirect chain, the sign-in page, and the 60
+seconds of no progress that ends in the handover — and is then stopped from inside the test, which
+asserts against everything the module traced. A separate process is what makes that possible at all:
+the WinForms dialog blocks the thread it is shown on, so nothing inside that process can be
+interrupted once the window is up. That process is started `-STA`, because WebView2 is COM and cannot
+be created on a multi-threaded apartment — which is what a PowerShell background job is, and why
+these two scenarios failed on their first scheduled run
+([#90](https://github.com/Fortigi/OmadaWeb.PS/issues/90)).
 
 `UserNameOnly` and `NoUserName` are given an authorization request carrying **no** `prompt` and **no**
 `login_hint`. For the first that is the point — whatever reaches Entra must have been put there by
@@ -246,6 +249,15 @@ through a second literal replacement of all four values, because that text is ab
      that was revoked.
    - *"Actually travelled through Entra and back"* failed → the browser never reached Entra. Look at
      the runner and the listener, not at the selector table.
+   - The trace stops at *"Failed to start CoreWebView2Environment"* → no browser was ever created, so
+     nothing downstream of it ran and every assertion in that scenario failed for the one reason.
+     Read the line after it: since [#90](https://github.com/Fortigi/OmadaWeb.PS/issues/90)
+     `Start-WebView2Login` prints why. `Cannot change thread mode after it is set
+     (RPC_E_CHANGED_MODE)` means the sign-in was driven from a multi-threaded apartment — a
+     PowerShell background job, or a runspace created without `ApartmentState.STA` — which WebView2
+     cannot live in; the two watched scenarios are driven from a `-STA` child process for exactly
+     this reason, see `Tests/E2E/Start-WatchedSignIn.ps1`. Anything else there is the runner or the
+     WebView2 runtime, and the selector table is ruled out either way.
    - The **browser host check** failed instead, and no issue was filed → the runner could not open a
      window at all. Nothing about the sign-in page is implicated.
 3. **Fix a selector break** by updating `$Script:EntraSignInElementId` in
