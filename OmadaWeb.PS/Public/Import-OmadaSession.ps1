@@ -93,6 +93,18 @@ function Import-OmadaSession {
                     throw "-State expects the object returned by Export-OmadaSession."
                 }
 
+                # The type name alone is not enough. Nothing stops a caller building an object that
+                # carries it, and every property read below would then fail as "property ... cannot
+                # be found" under the StrictMode this module runs with - which says nothing about
+                # what was actually wrong with the argument. Checked here so the complaint names the
+                # parameter and the missing property instead.
+                $Missing = @(foreach ($Required in @("SessionId", "StateVersion", "ProtectedState", "BaseUrl")) {
+                        if ($null -eq $_.PSObject.Properties[$Required]) { $Required }
+                    })
+                if ($Missing.Count -gt 0) {
+                    throw ("-State is missing the {0} property. Pass the object returned by Export-OmadaSession unchanged." -f ($Missing -join ", "))
+                }
+
                 $true
             })]
         $State,
@@ -169,7 +181,11 @@ function Import-OmadaSession {
                 PSTypeName                     = "OmadaWeb.PS.SeededSession"
                 BaseUrl                        = $BaseUrl
                 SessionId                      = $State.SessionId
-                ExpiresOn                      = $State.ExpiresOn
+                # The normalized moment, not the raw property: this is what the import actually
+                # evaluated, so a state whose expiry arrived as a string reports a DateTime here,
+                # and one whose expiry could not be read reports nothing rather than the unreadable
+                # value it was given.
+                ExpiresOn                      = $ExpiresOn
                 AllowInteractiveAuthentication = [bool]$AllowInteractiveAuthentication
             }
         }

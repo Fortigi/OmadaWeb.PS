@@ -215,6 +215,22 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Summary.AllowInteractiveAuthentication | Should -BeFalse
         }
 
+        It 'Should report the expiry the import actually evaluated, not the raw property' {
+            # A state that crossed a process boundary can carry its expiry as a string. The summary
+            # is the only place a worker can observe what was seeded, so it has to report the moment
+            # the import judged the session by - not the value it happened to be handed.
+            Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
+            $State = Export-OmadaSession -Uri $Script:TestBaseUrl
+            $Expected = [datetime]$State.ExpiresOn
+            $State.ExpiresOn = $Expected.ToString('o')
+
+            Clear-TestSessions
+            $Summary = Import-OmadaSession -State $State -PassThru
+
+            $Summary.ExpiresOn | Should -BeOfType [datetime]
+            $Summary.ExpiresOn | Should -Be $Expected
+        }
+
         It 'Should accept the state from the pipeline' {
             Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl
@@ -358,6 +374,20 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
 
         It 'Should refuse an object that did not come from Export-OmadaSession' {
             { Import-OmadaSession -State ([PSCustomObject]@{ BaseUrl = 'https://tenant.omada.cloud' }) -ErrorAction Stop } | Should -Throw
+        }
+
+        It 'Should name the missing property rather than fail on reading it' {
+            # The type name alone proves nothing - a caller can build an object carrying it. Without
+            # this check every read below would fail as "property ... cannot be found" under
+            # StrictMode, which says nothing about which argument was wrong or why.
+            $Malformed = [PSCustomObject]@{
+                PSTypeName = 'OmadaWeb.PS.SessionState'
+                BaseUrl    = 'https://tenant.omada.cloud'
+                SessionId  = 'abc'
+            }
+
+            { Import-OmadaSession -State $Malformed -ErrorAction Stop } |
+                Should -Throw -ExpectedMessage '*StateVersion, ProtectedState*'
         }
     }
 }
