@@ -121,6 +121,17 @@ function Invoke-OmadaRequest {
             # this particular call took the -CookiePath branch instead on its first-ever use of this session.
             $SessionContext.CookieCacheFilePath = Get-OmadaCookieCacheFilePath -SessionKey $SessionKey
 
+            # A session seeded by Import-OmadaSession carries the same refusal as the switch, so
+            # everything below this line treats the two as one question. It is widened here, after
+            # the session context exists, rather than at the assignment above: the -ForceAuthentication
+            # conflict is refused there and must stay a conflict between two things the caller
+            # actually typed. A seeded session plus an explicit -ForceAuthentication is not refused
+            # up front - it is allowed to reach the sign-in site and be turned away there, with a
+            # message that says the session was imported.
+            if ($SessionContext.NoInteractiveAuthentication) {
+                $NoInteractiveAuthentication = $true
+            }
+
             # The three pieces of per-request state the private helpers work on, bundled so they can
             # take them as a parameter instead of reading them out of this function's scope. The
             # context aliases the objects below rather than copying them, so the locals stay valid.
@@ -423,7 +434,12 @@ function Invoke-OmadaRequest {
                     # before the "Authentication needed!" host message, because under this switch
                     # nothing is going to authenticate and announcing it would be untrue.
                     if ($NoInteractiveAuthentication) {
-                        $Message = "The Omada session for '{0}' has expired or was rejected (HTTP 401) and -NoInteractiveAuthentication was specified, so no sign-in was attempted. Sign in once without -NoInteractiveAuthentication, then retry." -f $SessionContext.BaseUrl
+                        $Message = if ($SessionContext.Seeded) {
+                            "The Omada session imported for '{0}' has expired or was rejected (HTTP 401), so no sign-in was attempted. Export a fresh session from the runspace that signed in, or import it with -AllowInteractiveAuthentication." -f $SessionContext.BaseUrl
+                        }
+                        else {
+                            "The Omada session for '{0}' has expired or was rejected (HTTP 401) and -NoInteractiveAuthentication was specified, so no sign-in was attempted. Sign in once without -NoInteractiveAuthentication, then retry." -f $SessionContext.BaseUrl
+                        }
                         # The original 401 is carried as the inner exception: it holds the response
                         # this verdict was reached from, which is the only place the server's own
                         # explanation survives.
