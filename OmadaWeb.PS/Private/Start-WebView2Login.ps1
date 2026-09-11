@@ -28,6 +28,21 @@ function Start-WebView2Login {
             $OriginalTreatControlCAsInput = [Console]::TreatControlCAsInput
         }
 
+        # Asked before anything is built, and answered plainly. WebView2 is COM that needs a
+        # single-threaded apartment: on an MTA thread the WinForms objects below are all created
+        # happily and then CoreWebView2Environment::CreateAsync comes back with "Cannot change thread
+        # mode after it is set", which reads as a COM fault rather than as "this host cannot show a
+        # window". Both fallbacks fail the same way, so the trace showed two attempts and no reason,
+        # and the sign-in canary reported the missing browser as a changed Microsoft sign-in page
+        # (issue #90). Stopping here says which host is the problem and what to do instead.
+        #
+        # $Script:StopError, because retrying is pointless: a thread's apartment cannot be changed
+        # once it is set, so the next of the three login attempts would fail identically.
+        if (-not (Test-OmadaStaThread)) {
+            $Script:StopError = $true
+            "{0} - WebView2 needs a single-threaded apartment (STA), and this host is multi-threaded (MTA), so no browser window can be created here. A PowerShell background job and any runspace created without ApartmentState.STA are MTA. Start the host with -STA, run the sign-in in its own STA process, or use -AuthenticationType Selenium." -f $MyInvocation.MyCommand | Write-Error -ErrorAction Stop
+        }
+
         [System.Windows.Forms.Application]::EnableVisualStyles()
         $Script:WinForm = New-Object System.Windows.Forms.Form
         [Microsoft.Web.WebView2.WinForms.WebView2] $Script:WebView2 = New-Object Microsoft.Web.WebView2.WinForms.WebView2
@@ -277,7 +292,11 @@ function Start-WebView2Login {
 
     }
     catch {
-        "{0} - Error occurred" -f $MyInvocation.MyCommand | Write-Verbose
+        # The reason travels with the trace, not only with the terminating error. A caller that
+        # captures the verbose stream - a scheduled task, a CI job, the sign-in canary - sees only
+        # what is written here, and "Error occurred" on its own sent issue #90 looking for a changed
+        # Microsoft sign-in page that had nothing to do with it.
+        "{0} - Error occurred: {1}" -f $MyInvocation.MyCommand, $PSItem.Exception.Message | Write-Verbose
         try {
             "{0} - Reset-Timer" -f $MyInvocation.MyCommand | Write-Verbose
             Reset-Timer
@@ -295,7 +314,7 @@ function Start-WebView2Login {
             }
         }
         catch {}
-        Write-Host "Error in Start-WebView2Login" -ForegroundColor Red
+        Write-Host ("Error in Start-WebView2Login: {0}" -f $PSItem.Exception.Message) -ForegroundColor Red
         $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }
