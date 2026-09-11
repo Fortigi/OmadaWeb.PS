@@ -55,6 +55,11 @@ function Get-OmadaSessionContext {
         CookieCacheFilePath = $null
         LoginRetryCount     = 0
         LoginCount          = 0
+        # How many times Invoke-OmadaRequest has re-authenticated this session and retried without
+        # the server accepting the result yet. Distinct from LoginRetryCount, which counts sign-in
+        # windows inside a single Get-DataFromWebView2/Get-DataFromWebDriver call and is reset every
+        # time one starts - which is why it cannot bound the retry recursion across calls.
+        ReAuthenticationCount = 0
         WebView2ProfilePath = (Join-Path $Script:WebView2UserProfileBasePath ("OmadaWebView2Profile_{0}" -f $KeyHash.Substring(0, 16)))
         WebViewEnv          = $null
         # Which way single sign-on with the Windows account was configured when WebViewEnv was

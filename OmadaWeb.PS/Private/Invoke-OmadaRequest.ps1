@@ -366,6 +366,9 @@ function Invoke-OmadaRequest {
                             }
                         }
                         $SessionContext.LoginCount++
+                        # This session is answering again, so the re-authentication budget spent
+                        # getting here is returned - the next expiry gets a full one.
+                        $SessionContext.ReAuthenticationCount = 0
                         return $Return
                     }
                     "Invoke-WebRequest" {
@@ -385,6 +388,8 @@ function Invoke-OmadaRequest {
                             throw $CustomErrorTrigger
                         }
                         $SessionContext.LoginCount++
+                        # See the matching reset in the Invoke-RestMethod branch above.
+                        $SessionContext.ReAuthenticationCount = 0
                         return $Return
                     }
                     default {
@@ -427,6 +432,24 @@ function Invoke-OmadaRequest {
                         # The original 401 is carried as the inner exception: it holds the response
                         # this verdict was reached from, which is the only place the server's own
                         # explanation survives.
+                        throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $SessionContext.BaseUrl -InnerException $PSItem.Exception)
+                    }
+
+                    # Nothing else bounds the recursion at the end of this branch.
+                    # Get-DataFromWebView2 and Get-DataFromWebDriver each cap the number of sign-in
+                    # windows they open, but both reset that count on entry, so every recursion
+                    # starts their counter over. A server that answers 401 to a cookie the browser
+                    # keeps handing back therefore recursed without end - each turn opening another
+                    # sign-in window - until the call stack ran out.
+                    # The count lives on the session context and is cleared on the first successful
+                    # response (next to LoginCount++), so a long-lived session is never eventually
+                    # refused a re-authentication it legitimately needs.
+                    $SessionContext.ReAuthenticationCount++
+                    if ($SessionContext.ReAuthenticationCount -gt $Script:MaxLoginRetries) {
+                        $Message = "Re-authentication for '{0}' was attempted {1} time(s) and the server still answered HTTP 401. Giving up instead of signing in again." -f $SessionContext.BaseUrl, ($SessionContext.ReAuthenticationCount - 1)
+                        $SessionContext.ReAuthenticationCount = 0
+                        # The last 401 is carried as the inner exception: it holds the response the
+                        # verdict was reached from, which is where the server's own explanation is.
                         throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $SessionContext.BaseUrl -InnerException $PSItem.Exception)
                     }
 
