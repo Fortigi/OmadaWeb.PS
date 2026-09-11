@@ -65,11 +65,14 @@ BeforeAll {
 
     # Readiness: poll rather than sleep a fixed amount. Deliberately not the shared harness's probe,
     # which counted a request of its own against the very counters these tests assert on.
+    # No -SkipHttpErrorCheck: it does not exist in Windows PowerShell 5.1, which is one of the two
+    # legs the build runs, and it is not needed - the listener answers 200 until a test tells it
+    # otherwise, and any other answer throws into the catch and is simply retried.
     $Ready = $false
     $Deadline = [System.Diagnostics.Stopwatch]::StartNew()
     while (-not $Ready -and $Deadline.Elapsed.TotalSeconds -lt 30) {
         try {
-            Invoke-WebRequest -Uri $Script:ServerUri -TimeoutSec 2 -SkipHttpErrorCheck | Out-Null
+            Invoke-WebRequest -Uri $Script:ServerUri -TimeoutSec 2 -UseBasicParsing | Out-Null
             $Ready = $true
         }
         catch { Start-Sleep -Milliseconds 250 }
@@ -117,7 +120,9 @@ BeforeAll {
 
 AfterAll {
     if ($null -ne $Script:ServerState) { $Script:ServerState.Stop = $true }
-    try { Invoke-WebRequest -Uri $Script:ServerUri -TimeoutSec 2 -SkipHttpErrorCheck | Out-Null } catch { }
+    # One last request so the listener's blocking GetContext returns and the loop can see Stop.
+    # Its answer is irrelevant, hence the empty catch.
+    try { Invoke-WebRequest -Uri $Script:ServerUri -TimeoutSec 2 -UseBasicParsing | Out-Null } catch { }
     try { $Script:ServerShell.Stop() } catch { }
     try { $Script:ServerRunspace.Dispose() } catch { }
 }

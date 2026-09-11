@@ -103,10 +103,16 @@ Describe 'Omada cookie cache - write path' -Tag 'Unit' {
         # take the caller's request down with it.
         $Path = Join-Path ([System.IO.Path]::GetTempPath()) ("omadaCookieNoSuchFolder_{0}\x.cookie" -f ([guid]::NewGuid().ToString("N")))
 
+        $Warnings = $null
         $Result = InModuleScope 'OmadaWeb.PS' -Parameters @{ PathA = $Path; CookieA = $Script:SampleCookie } {
-            Export-OmadaCookieFile -Path $PathA -AuthCookie $CookieA -WarningAction SilentlyContinue
-        }
+            Export-OmadaCookieFile -Path $PathA -AuthCookie $CookieA
+        } -WarningVariable Warnings
+
         $Result | Should -Be $false
+        # The warning is half the contract: without it the cookie silently stops being cached and
+        # every later call pays for a sign-in with nothing said about why.
+        $Warnings | Should -Not -BeNullOrEmpty
+        ($Warnings -join " ") | Should -Match "Unable to write the cookie file"
     }
 
     It 'should accept a null cookie without throwing' {
