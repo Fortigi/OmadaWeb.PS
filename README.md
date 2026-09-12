@@ -249,7 +249,9 @@ $null = $PowerShell.AddScript({
 $PowerShell.Invoke()
 ```
 
-Nothing is written to disk on this path. The session cookie is a live bearer token, so it is never a property of the state object: it is encrypted with DPAPI for the current user on the current machine and carried as ciphertext in `ProtectedState`. The object can be logged, queued or passed as a job argument without leaking the token, and it names neither the account nor the tenant's session key - only a hash that lets you match it to a log line.
+Neither command touches the disk. The session cookie is a live bearer token, so it is never a property of the state object: it is encrypted with DPAPI for the current user on the current machine and carried as ciphertext in `ProtectedState`. The object can be logged, queued or passed as a job argument without leaking the token, and it names neither the account nor the tenant's session key - only a hash that lets you match it to a log line.
+
+The worker's *requests* behave as they always do, which includes refreshing the encrypted cookie cache under `%LOCALAPPDATA%\OmadaWeb.PS` - the same DPAPI-protected file any other successful request writes, never a plaintext token. Pass `-SkipCookieCache` on the worker's calls if you would rather it left no trace on disk at all.
 
 That protection is also the limit of what this supports. A state can be imported by the user who exported it, on the machine it was exported from, and nowhere else. Anything else - another user, another computer, a state altered in transit - is refused as `OmadaSessionStateUnreadable` rather than quietly ignored.
 
@@ -623,7 +625,7 @@ Returns the session this PowerShell session already signed in with, as one opaqu
 
 This exists because authentication state is per module instance. A background runspace imports its own copy of OmadaWeb.PS, so it starts with no session at all and would try to sign in interactively even though the calling application authenticated seconds earlier.
 
-Nothing is written to disk. The session cookie is a live bearer token, so it never appears in the returned object: it is encrypted with DPAPI for the current user on the current machine and carried in the ProtectedState property as ciphertext. The object can therefore be passed through a job argument, a queue or a variable without leaking the token, and a copy that leaves this machine is inert. The same binding is the limit of what this supports: a session can be seeded into another runspace of the same user on the same machine, not into another user's session and not onto another computer.
+This command writes nothing to disk, and neither does Import-OmadaSession. The session cookie is a live bearer token, so it never appears in the returned object: it is encrypted with DPAPI for the current user on the current machine and carried in the ProtectedState property as ciphertext. The object can therefore be passed through a job argument, a queue or a variable without leaking the token, and a copy that leaves this machine is inert. The same binding is the limit of what this supports: a session can be seeded into another runspace of the same user on the same machine, not into another user's session and not onto another computer.
 
 The command reads the session that is already there. It never creates one, and it never signs in: when there is no authenticated session for the arguments given, it says so and stops. The arguments are the same ones that identified the session when it was created - the Omada URL, the authentication type, and whichever of -UserName, -Credential or -SessionKey the original call used - because sessions are keyed by all three.
 

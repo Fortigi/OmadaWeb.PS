@@ -13,9 +13,10 @@ function Export-OmadaSession {
         imports its own copy of OmadaWeb.PS, so it starts with no session at all and would try to
         sign in interactively even though the calling application authenticated seconds earlier.
 
-        Nothing is written to disk. The session cookie is a live bearer token, so it never appears
-        in the returned object: it is encrypted with DPAPI for the current user on the current
-        machine and carried in the ProtectedState property as ciphertext. The object can therefore
+        This command writes nothing to disk, and neither does Import-OmadaSession. The session
+        cookie is a live bearer token, so it never appears in the returned object: it is encrypted
+        with DPAPI for the current user on the current machine and carried in the ProtectedState
+        property as ciphertext. The object can therefore
         be passed through a job argument, a queue or a variable without leaking the token, and a
         copy that leaves this machine is inert. The same binding is the limit of what this supports:
         a session can be seeded into another runspace of the same user on the same machine, not into
