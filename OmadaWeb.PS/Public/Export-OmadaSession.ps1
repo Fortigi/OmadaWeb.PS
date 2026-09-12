@@ -97,7 +97,20 @@ function Export-OmadaSession {
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
     param(
+        # The [System.Uri] converter happily builds a relative URI out of "tenant.omada.cloud" - the
+        # obvious thing to type when the scheme slips your mind. Everything below reads .Authority
+        # and GetLeftPart(), which a relative URI does not support: .Authority answers $null rather
+        # than throwing, so the session key would be built wrong before GetLeftPart() failed with
+        # "This operation is not supported for a relative URI" - a message naming neither the
+        # parameter nor the fix. Refused here, where the complaint can name both.
         [Parameter(Mandatory)]
+        [ValidateScript({
+                if (-not $_.IsAbsoluteUri) {
+                    throw ("-Uri must be the full URL of the Omada environment, including the scheme - for example 'https://{0}' rather than '{0}'." -f $_.OriginalString)
+                }
+
+                $true
+            })]
         [System.Uri]$Uri,
 
         [Parameter()]

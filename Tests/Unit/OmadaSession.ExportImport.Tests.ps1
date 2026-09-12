@@ -146,6 +146,16 @@ Describe 'Export-OmadaSession' -Tag 'Unit' {
             $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionExpired*'
         }
 
+        It 'Should refuse a URL with no scheme, naming the parameter and the fix' {
+            # "tenant.omada.cloud" converts to a relative URI, whose .Authority answers $null instead
+            # of throwing - so without this the session key would be built wrong and the failure
+            # would surface later as "This operation is not supported for a relative URI".
+            Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
+
+            { Export-OmadaSession -Uri 'tenant.omada.cloud' -ErrorAction Stop } |
+                Should -Throw -ExpectedMessage '*must be the full URL*'
+        }
+
         It 'Should refuse -UserName together with -Credential' {
             Set-TestSession -UserName 'someone@example.com' -Expires ([datetime]::UtcNow.AddMinutes(10))
             $Credential = [System.Management.Automation.PSCredential]::new('someone-else@example.com', (ConvertTo-SecureString 'x' -AsPlainText -Force))
