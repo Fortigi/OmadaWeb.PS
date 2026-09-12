@@ -369,6 +369,54 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Count | Should -Be 0
         }
 
+        It 'Should refuse a state whose visible environment is blank' {
+            # An absent value is no more the exported one than a different value is, so it must not
+            # skip the comparison.
+            Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
+            $State = Export-OmadaSession -Uri $Script:TestBaseUrl
+            $State.BaseUrl = '   '
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateMismatch*'
+            $Failure.Exception.Message | Should -BeLike '*names no environment*'
+        }
+
+        It 'Should refuse a payload environment that is not a usable URL, rather than fault on it' {
+            # A payload that decrypts but carries something that is not an absolute URL would raise
+            # UriFormatException from the [Uri] construction and escape the mismatch contract. Only
+            # reachable for a state crafted by the same user on the same machine, but the contract
+            # should hold whatever it is handed.
+            InModuleScope 'OmadaWeb.PS' {
+                $Payload = @{
+                    SessionKey      = 'tenant.omada.cloud::webview2::'
+                    BaseUrl         = 'not a url'
+                    AuthCookie      = [PSCustomObject]@{ name = 'oisauthtoken'; value = 'x'; domain = 'tenant.omada.cloud' }
+                    UserName        = $null
+                    WebView2Used    = $true
+                    LastSessionType = $null
+                }
+
+                $Script:CraftedState = [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = 'not a url'
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload $Payload)
+                }
+            }
+
+            $Crafted = InModuleScope 'OmadaWeb.PS' { $Script:CraftedState }
+            $Failure = { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateMismatch*'
+            $Failure.Exception | Should -Not -BeOfType [System.UriFormatException]
+            $Failure.Exception.Message | Should -BeLike '*not a valid URL*'
+        }
+
         It 'Should refuse a state whose protected half cannot be read' {
             Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl

@@ -153,10 +153,38 @@ function Import-OmadaSession {
         # here, or by an edit. Either way the state is not the one that was exported, and importing
         # it would seed one environment while every message about it named another.
         $BaseUrl = [string]$Payload.BaseUrl
-        if ([string]::IsNullOrWhiteSpace($BaseUrl) -or
-            (-not [string]::IsNullOrWhiteSpace([string]$State.BaseUrl) -and [string]$State.BaseUrl -ne $BaseUrl)) {
+        $VisibleBaseUrl = [string]$State.BaseUrl
+
+        # Both have to be there and agree. An empty visible BaseUrl used to skip the comparison,
+        # which weakened the check for no reason: an absent value is no more the exported one than a
+        # different value is.
+        $Mismatch = $null
+        if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+            $Mismatch = "the session inside it names no environment at all"
+        }
+        elseif ([string]::IsNullOrWhiteSpace($VisibleBaseUrl)) {
+            $Mismatch = "it names no environment, where the session inside it is for '{0}'" -f $BaseUrl
+        }
+        elseif ($VisibleBaseUrl -ne $BaseUrl) {
+            $Mismatch = "it names '{0}', where the session inside it is for '{1}'" -f $VisibleBaseUrl, $BaseUrl
+        }
+
+        # TryCreate rather than the constructor: a payload that decrypts but carries something that
+        # is not an absolute URL would otherwise raise UriFormatException from here and escape the
+        # contract this block exists to keep. Every way the environment can be wrong ends in the
+        # same error.
+        $ParsedBaseUrl = $null
+        if ($null -eq $Mismatch -and -not [System.Uri]::TryCreate($BaseUrl, [System.UriKind]::Absolute, [ref]$ParsedBaseUrl)) {
+            $Mismatch = "the environment it names, '{0}', is not a valid URL" -f $BaseUrl
+        }
+
+        if ($null -eq $Mismatch -and [string]::IsNullOrWhiteSpace($ParsedBaseUrl.Host)) {
+            $Mismatch = "the environment it names, '{0}', has no host" -f $BaseUrl
+        }
+
+        if ($null -ne $Mismatch) {
             $Exception = [System.InvalidOperationException]::new(
-                ("The exported Omada session does not match its own protected contents and was not imported. It names '{0}' where the session inside it is for '{1}'. Export it again in the runspace that signed in." -f $State.BaseUrl, $(if ([string]::IsNullOrWhiteSpace($BaseUrl)) { "no environment at all" } else { $BaseUrl }))
+                ("The exported Omada session does not match its own protected contents and was not imported: {0}. Export it again in the runspace that signed in." -f $Mismatch)
             )
             throw [System.Management.Automation.ErrorRecord]::new(
                 $Exception,
@@ -166,7 +194,7 @@ function Import-OmadaSession {
             )
         }
 
-        $AuthorityHost = ([System.Uri]::new($BaseUrl)).Host
+        $AuthorityHost = $ParsedBaseUrl.Host
 
         # Checked before the session is seeded, so a runspace handed a dead session is left with no
         # session at all rather than one that looks usable until the first request comes back 401.
