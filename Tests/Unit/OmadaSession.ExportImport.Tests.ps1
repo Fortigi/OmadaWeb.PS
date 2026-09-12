@@ -349,6 +349,26 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionExpired*'
         }
 
+        It 'Should refuse a state whose visible environment disagrees with its protected contents' {
+            # BaseUrl sits outside the protection, so it can be edited while the ciphertext stays
+            # readable. Seeding then used the protected value while the messages named the edited
+            # one - two different tenants in one operation.
+            Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
+            $State = Export-OmadaSession -Uri $Script:TestBaseUrl
+            $State.BaseUrl = 'https://someone-elses-tenant.omada.cloud'
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateMismatch*'
+            # Both environments are named, because which one was expected is the whole question.
+            $Failure.Exception.Message | Should -BeLike '*someone-elses-tenant.omada.cloud*'
+            $Failure.Exception.Message | Should -BeLike '*tenant.omada.cloud*'
+
+            $Count = InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Count }
+            $Count | Should -Be 0
+        }
+
         It 'Should refuse a state whose protected half cannot be read' {
             Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl

@@ -670,6 +670,8 @@ A seeded session may not sign in. Everything that could open a browser window is
 
 The state is protected with DPAPI, so it can only be imported by the user who exported it, on the machine it was exported from. A state that cannot be read - from another user, from another machine, or damaged in transit - is refused as one error rather than silently ignored.
 
+The protected contents are also the authority on which environment the session belongs to. The BaseUrl property beside them is a convenience for the caller and sits outside the protection, so if the two disagree the state is not the one that was exported and it is refused too, rather than seeding one environment while every message about it names another.
+
 #### Example 1
 
 ```powershell

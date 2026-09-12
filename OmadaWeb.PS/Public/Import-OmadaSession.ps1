@@ -26,6 +26,11 @@ function Import-OmadaSession {
         another machine, or damaged in transit - is refused as one error rather than silently
         ignored.
 
+        The protected contents are also the authority on which environment the session belongs to.
+        The BaseUrl property beside them is a convenience for the caller and sits outside the
+        protection, so if the two disagree the state is not the one that was exported and it is
+        refused too, rather than seeding one environment while every message about it names another.
+
     .PARAMETER State
         The object returned by Export-OmadaSession. Accepted from the pipeline.
 
@@ -142,6 +147,27 @@ function Import-OmadaSession {
             )
         }
 
+        # The protected payload is the authority on which environment this session belongs to, and
+        # everything below reads it from there. The BaseUrl property beside it is a convenience for
+        # the caller, outside the protection, so the two can disagree - by an accident on the way
+        # here, or by an edit. Either way the state is not the one that was exported, and importing
+        # it would seed one environment while every message about it named another.
+        $BaseUrl = [string]$Payload.BaseUrl
+        if ([string]::IsNullOrWhiteSpace($BaseUrl) -or
+            (-not [string]::IsNullOrWhiteSpace([string]$State.BaseUrl) -and [string]$State.BaseUrl -ne $BaseUrl)) {
+            $Exception = [System.InvalidOperationException]::new(
+                ("The exported Omada session does not match its own protected contents and was not imported. It names '{0}' where the session inside it is for '{1}'. Export it again in the runspace that signed in." -f $State.BaseUrl, $(if ([string]::IsNullOrWhiteSpace($BaseUrl)) { "no environment at all" } else { $BaseUrl }))
+            )
+            throw [System.Management.Automation.ErrorRecord]::new(
+                $Exception,
+                "OmadaSessionStateMismatch",
+                [System.Management.Automation.ErrorCategory]::InvalidData,
+                $State.SessionId
+            )
+        }
+
+        $AuthorityHost = ([System.Uri]::new($BaseUrl)).Host
+
         # Checked before the session is seeded, so a runspace handed a dead session is left with no
         # session at all rather than one that looks usable until the first request comes back 401.
         #
@@ -152,14 +178,8 @@ function Import-OmadaSession {
         # which answers 401 and produces the same error by the other route.
         $ExpiresOn = ConvertTo-OmadaExpiryMoment -Value $State.ExpiresOn
         if ($null -ne $ExpiresOn -and $ExpiresOn -le [datetime]::UtcNow) {
-            $Message = "The exported Omada session for '{0}' expired at {1:u} and was not imported. Export a fresh session from the runspace that signed in." -f $State.BaseUrl, $ExpiresOn
-            throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $State.BaseUrl)
-        }
-
-        $BaseUrl = [string]$Payload.BaseUrl
-        $AuthorityHost = $null
-        if (-not [string]::IsNullOrWhiteSpace($BaseUrl)) {
-            $AuthorityHost = ([System.Uri]::new($BaseUrl)).Host
+            $Message = "The exported Omada session for '{0}' expired at {1:u} and was not imported. Export a fresh session from the runspace that signed in." -f $BaseUrl, $ExpiresOn
+            throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $BaseUrl)
         }
 
         $SessionContext = Get-OmadaSessionContext -Key ([string]$Payload.SessionKey) -AuthorityHost $AuthorityHost
