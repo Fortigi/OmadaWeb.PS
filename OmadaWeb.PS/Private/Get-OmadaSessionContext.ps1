@@ -51,6 +51,16 @@ function Get-OmadaSessionContext {
         LastSessionType     = $null
         WebView2Used        = $false
         ForceAuthentication = $false
+        # Set by Import-OmadaSession on a session seeded from another runspace, and read alongside
+        # the -NoInteractiveAuthentication switch wherever that switch is honoured. A seeded session
+        # belongs to a worker that has no desktop to put a sign-in window on and no user watching it,
+        # so the refusal has to be a property of the session rather than something every call site
+        # has to remember to ask for. Import-OmadaSession -AllowInteractiveAuthentication clears it.
+        NoInteractiveAuthentication = $false
+        # Whether this context was seeded by Import-OmadaSession rather than signed in here. Used
+        # only to say so in the refusal message, which is the difference between a caller thinking
+        # their session expired and knowing the state they imported was already dead.
+        Seeded              = $false
         BrowserDataCleared  = $false
         CookieCacheFilePath = $null
         LoginRetryCount     = 0

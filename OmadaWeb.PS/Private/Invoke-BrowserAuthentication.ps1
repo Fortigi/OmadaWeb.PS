@@ -81,8 +81,17 @@ function Invoke-BrowserAuthentication {
         # inside either engine: this is the single point every browser sign-in passes through when no
         # usable cookie is available, so stopping here is what makes "no window can open" a property
         # of the code rather than a claim about it.
-        if ($BoundParams.ContainsKey("NoInteractiveAuthentication") -and [bool]$BoundParams['NoInteractiveAuthentication']) {
-            $Message = "No usable Omada session for '{0}' and -NoInteractiveAuthentication was specified, so no sign-in was attempted. Sign in once without -NoInteractiveAuthentication, then retry." -f $SessionContext.BaseUrl
+        #
+        # The session's own flag counts as well as the switch: a session seeded by
+        # Import-OmadaSession is being used by a worker runspace with no desktop and nobody
+        # watching, so it may not sign in whether or not this particular call remembered to say so.
+        if (($BoundParams.ContainsKey("NoInteractiveAuthentication") -and [bool]$BoundParams['NoInteractiveAuthentication']) -or $SessionContext.NoInteractiveAuthentication) {
+            $Message = if ($SessionContext.Seeded) {
+                "The Omada session imported for '{0}' is no longer usable, so no sign-in was attempted. Export a fresh session from the runspace that signed in, or import it with -AllowInteractiveAuthentication." -f $SessionContext.BaseUrl
+            }
+            else {
+                "No usable Omada session for '{0}' and -NoInteractiveAuthentication was specified, so no sign-in was attempted. Sign in once without -NoInteractiveAuthentication, then retry." -f $SessionContext.BaseUrl
+            }
             throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $SessionContext.BaseUrl)
         }
 
