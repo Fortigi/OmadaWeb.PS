@@ -74,7 +74,12 @@ function Resolve-OmadaNativeCommand {
 
     "{0} - Importing '{1}' so '{2}' can be resolved" -f $MyInvocation.MyCommand, $FullyQualifiedModule.ModuleName, $Name | Write-Verbose
     try {
-        Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
+        # -FullyQualifiedName rather than name plus a version floor, which is what this line used to
+        # do: the specification carries the Guid as well, so the module that gets imported is the
+        # same one the lookup above and below filter on. Importing by name alone could bring in a
+        # different module that happens to share it, and then step 3 would resolve against that.
+        # OmadaWeb.PS.psm1 imports the same specification the same way at load.
+        Import-Module -FullyQualifiedName $FullyQualifiedModule -Force -ErrorAction Stop
         $Command = @(Get-Command $Name -FullyQualifiedModule $FullyQualifiedModule -ErrorAction SilentlyContinue) | Select-Object -First 1
     }
     catch {
