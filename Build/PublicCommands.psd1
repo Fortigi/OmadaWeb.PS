@@ -20,5 +20,7 @@
         "Invoke-OmadaRestMethod" = "Invoke-RestMethod"
         "Invoke-OmadaWebRequest" = "Invoke-WebRequest"
         "Clear-OmadaWebCache"    = ""
+        "Export-OmadaSession"    = ""
+        "Import-OmadaSession"    = ""
     }
 }
