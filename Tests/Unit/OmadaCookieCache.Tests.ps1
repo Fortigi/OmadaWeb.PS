@@ -101,7 +101,10 @@ Describe 'Omada cookie cache - write path' -Tag 'Unit' {
     It 'should warn and report failure rather than throw when the folder does not exist' {
         # A cookie that cannot be cached costs a sign-in, not a failed request, so this must never
         # take the caller's request down with it.
-        $Path = Join-Path ([System.IO.Path]::GetTempPath()) ("omadaCookieNoSuchFolder_{0}\x.cookie" -f ([guid]::NewGuid().ToString("N")))
+        # Build the separator with Join-Path rather than embedding one: a literal "\" is an
+        # ordinary filename character off Windows, so the folder would exist and the write succeed.
+        $MissingFolder = Join-Path ([System.IO.Path]::GetTempPath()) ("omadaCookieNoSuchFolder_{0}" -f ([guid]::NewGuid().ToString("N")))
+        $Path = Join-Path $MissingFolder "x.cookie"
 
         $Warnings = $null
         $Result = InModuleScope 'OmadaWeb.PS' -Parameters @{ PathA = $Path; CookieA = $Script:SampleCookie } {
