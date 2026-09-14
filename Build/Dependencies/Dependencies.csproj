@@ -31,7 +31,7 @@
     <PackageReference Include="Selenium.WebDriver" Version="4.47.0" />
 
     <!-- Hosts the embedded sign-in browser for -AuthenticationType WebView2 (Install-WebView2). -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
 
     <!-- JSON dependency of the Selenium bindings on Windows PowerShell 5.1 (Install-NewtonSoftJson). -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
