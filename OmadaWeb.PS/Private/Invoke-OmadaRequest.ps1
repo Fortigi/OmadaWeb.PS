@@ -73,7 +73,7 @@ function Invoke-OmadaRequest {
             # key/value entries, not .Keys, so a header literally named "Keys" cannot shadow the
             # enumerator.
             $Headers = [System.Collections.Hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
-            if ($BoundParams.Keys -contains "Headers") {
+            if ($BoundParams.Keys -contains "Headers" -and $null -ne $BoundParams['Headers']) {
                 foreach ($Entry in $BoundParams['Headers'].GetEnumerator()) {
                     $Headers[$Entry.Key] = $Entry.Value
                 }

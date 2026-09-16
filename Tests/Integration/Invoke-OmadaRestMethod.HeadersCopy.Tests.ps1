@@ -169,6 +169,19 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
         }
     }
 
+    Context '-Headers $null' {
+        It 'Does not throw and sends the Authorization header for Basic authentication' {
+            Reset-FakeServer
+
+            $Credential = New-Object System.Management.Automation.PSCredential('null-header-user', (ConvertTo-SecureString 'null-header-pass' -AsPlainText -Force))
+            $ExpectedBasic = 'Basic {0}' -f [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes('null-header-user:null-header-pass'))
+
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $null -AllowUnencryptedAuthentication -ErrorAction Stop } | Should -Not -Throw
+
+            $Script:SharedServer.LastAuthorization | Should -Be $ExpectedBasic
+        }
+    }
+
     Context 'Caller-supplied Authorization header' {
         It 'Does not throw, and the module''s own authentication value is what is sent' {
             Reset-FakeServer
