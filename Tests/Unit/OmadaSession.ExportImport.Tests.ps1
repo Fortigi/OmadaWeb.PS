@@ -263,6 +263,45 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Seeded.Seeded | Should -BeTrue
         }
 
+        It 'Should import a payload that carries only SessionKey, AuthCookie and a matching BaseUrl, defaulting the rest' {
+            # UserName, WebView2Used and LastSessionType are all read with a Contains-guarded
+            # fallback, because a payload need not carry them - this proves the fallback values
+            # themselves, not just that reading them does not fault.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl; TokenValue = $Script:TokenValue } {
+                param($BaseUrl, $TokenValue)
+
+                $Payload = @{
+                    SessionKey = 'tenant.omada.cloud::webview2::'
+                    BaseUrl    = $BaseUrl
+                    AuthCookie = [PSCustomObject]@{
+                        name    = 'oisauthtoken'
+                        value   = $TokenValue
+                        domain  = 'tenant.omada.cloud'
+                        expires = [datetime]::UtcNow.AddMinutes(10)
+                    }
+                }
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload $Payload)
+                }
+            }
+
+            Clear-TestSessions
+            { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Not -Throw
+
+            $Seeded = InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Values | Select-Object -First 1 }
+            $Seeded.AuthCookie.value | Should -Be $Script:TokenValue
+            $Seeded.UserName | Should -BeNullOrEmpty
+            $Seeded.WebView2Used | Should -BeFalse
+            $Seeded.LastSessionType | Should -BeNullOrEmpty
+        }
+
         It 'Should seed it under the same key the original session used' {
             Set-TestSession -UserName 'someone@example.com' -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl -UserName 'someone@example.com'
@@ -567,6 +606,41 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateMismatch*'
             $Failure.Exception | Should -Not -BeOfType [System.UriFormatException]
             $Failure.Exception.Message | Should -BeLike '*not a valid URL*'
+        }
+
+        It 'Should refuse a payload that carries a session and cookie but no BaseUrl' {
+            # BaseUrl is read with the same Contains-guarded pattern as UserName, WebView2Used and
+            # LastSessionType below - a payload built without it must not fault on the read, and must
+            # be refused as a mismatch, the same as one whose BaseUrl is present but blank.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl; TokenValue = $Script:TokenValue } {
+                param($BaseUrl, $TokenValue)
+
+                $Payload = @{
+                    SessionKey = 'tenant.omada.cloud::webview2::'
+                    AuthCookie = [PSCustomObject]@{
+                        name    = 'oisauthtoken'
+                        value   = $TokenValue
+                        domain  = 'tenant.omada.cloud'
+                        expires = [datetime]::UtcNow.AddMinutes(10)
+                    }
+                }
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload $Payload)
+                }
+            }
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateMismatch*'
+            $Failure.Exception.Message | Should -BeLike '*names no environment at all*'
         }
 
         It 'Should refuse a state whose protected half cannot be read, without claiming machine binding' {
