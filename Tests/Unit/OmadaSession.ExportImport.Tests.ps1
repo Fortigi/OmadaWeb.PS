@@ -299,6 +299,53 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Seeded.AuthCookie.value | Should -Be $Script:TokenValue
             $Seeded.UserName | Should -BeNullOrEmpty
             $Seeded.WebView2Used | Should -BeFalse
+        }
+
+        It 'Should import a payload whose ProtectedState was built from something other than a Hashtable' {
+            # The guard only proves $Payload is an IDictionary, not that it is specifically a
+            # [hashtable] - PSSerializer round-trips an [ordered] payload back as an
+            # OrderedDictionary rather than collapsing it to a Hashtable, so this is a genuine,
+            # reachable non-Hashtable IDictionary shape for the SessionKey/AuthCookie reads below the
+            # guard to handle without faulting.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl; TokenValue = $Script:TokenValue } {
+                param($BaseUrl, $TokenValue)
+
+                $Payload = [ordered]@{
+                    SessionKey = 'tenant.omada.cloud::webview2::'
+                    BaseUrl    = $BaseUrl
+                    AuthCookie = [PSCustomObject]@{
+                        name    = 'oisauthtoken'
+                        value   = $TokenValue
+                        domain  = 'tenant.omada.cloud'
+                        expires = [datetime]::UtcNow.AddMinutes(10)
+                    }
+                }
+                $Payload | Should -BeOfType [System.Collections.Specialized.OrderedDictionary]
+
+                $Protected = Protect-OmadaSessionPayload -Payload $Payload
+                $RoundTripped = Unprotect-OmadaSessionPayload -ProtectedPayload $Protected
+                # Proves the premise of this test: if PSSerializer ever started collapsing an ordered
+                # payload back to a plain Hashtable, this test would no longer exercise a non-Hashtable
+                # shape, and should say so rather than pass for the wrong reason.
+                $RoundTripped | Should -Not -BeOfType ([hashtable])
+                $RoundTripped | Should -BeOfType ([System.Collections.IDictionary])
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = $Protected
+                }
+            }
+
+            Clear-TestSessions
+            { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Not -Throw
+
+            $Seeded = InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Values | Select-Object -First 1 }
+            $Seeded.AuthCookie.value | Should -Be $Script:TokenValue
             $Seeded.LastSessionType | Should -BeNullOrEmpty
         }
 

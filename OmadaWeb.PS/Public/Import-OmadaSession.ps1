@@ -159,6 +159,13 @@ function Import-OmadaSession {
             )
         }
 
+        # Read once, by indexer, and used everywhere below instead of $Payload.SessionKey /
+        # $Payload.AuthCookie: the guard above only proves $Payload is an IDictionary, not that it is
+        # a [hashtable] specifically, and dot notation on some other IDictionary implementation is
+        # not guaranteed the same StrictMode-safe-when-present behaviour a hashtable gives it.
+        $PayloadSessionKey = $Payload['SessionKey']
+        $PayloadAuthCookie = $Payload['AuthCookie']
+
         # The protected payload is the authority on which environment this session belongs to, and
         # everything below reads it from there. The BaseUrl property beside it is a convenience for
         # the caller, outside the protection, so the two can disagree - by an accident on the way
@@ -234,7 +241,7 @@ function Import-OmadaSession {
         $RawPayloadExpiry = if ($Payload.Contains('ExpiresOn')) { $Payload['ExpiresOn'] } else { $null }
         $ExpiresOn = ConvertTo-OmadaExpiryMoment -Value $RawPayloadExpiry
         if ($null -eq $ExpiresOn) {
-            $ExpiresOn = Get-OmadaCookieExpiry -AuthCookie $Payload.AuthCookie
+            $ExpiresOn = Get-OmadaCookieExpiry -AuthCookie $PayloadAuthCookie
         }
 
         if ($null -ne $ExpiresOn -and $ExpiresOn -le [datetime]::UtcNow) {
@@ -242,9 +249,9 @@ function Import-OmadaSession {
             throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $BaseUrl)
         }
 
-        $SessionContext = Get-OmadaSessionContext -Key ([string]$Payload.SessionKey) -AuthorityHost $AuthorityHost
+        $SessionContext = Get-OmadaSessionContext -Key ([string]$PayloadSessionKey) -AuthorityHost $AuthorityHost
         $SessionContext.BaseUrl = $BaseUrl
-        $SessionContext.AuthCookie = $Payload.AuthCookie
+        $SessionContext.AuthCookie = $PayloadAuthCookie
         # UserName, WebView2Used and LastSessionType are optional on the payload - a state exported
         # by an older build, or a crafted one, can omit any of them - so they get the same
         # Contains-guarded read as BaseUrl above, rather than dot notation.
