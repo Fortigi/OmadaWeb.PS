@@ -29,7 +29,10 @@ function Test-SensitiveLogName {
     $NormalizedName = $Name.ToLowerInvariant() -replace '[-_]', ''
 
     foreach ($Pattern in $SubstringPatterns) {
-        if ($NormalizedName -like "*$Pattern*") {
+        # .Contains, not -like: the patterns are plain lowercase literals, not wildcard expressions,
+        # so a "?" or "[" in one (there are none today, but nothing enforces that) must be matched as
+        # itself rather than as a wildcard metacharacter.
+        if ($NormalizedName.Contains($Pattern)) {
             return $true
         }
     }

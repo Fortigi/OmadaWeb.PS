@@ -20,6 +20,15 @@ Describe 'Test-SensitiveLogName' -Tag 'Unit' {
                 Test-SensitiveLogName -Name 'Method' -SubstringPatterns @('csrf') -ExactPatterns @() | Should -BeFalse
             }
         }
+
+        It 'Should treat a pattern containing wildcard metacharacters as a literal, not a wildcard' {
+            InModuleScope 'OmadaWeb.PS' {
+                # "?" and "[" are -like wildcards but plain characters in .Contains - a name that only
+                # fits the wildcard shape, and does not contain the pattern's literal text, must not match.
+                Test-SensitiveLogName -Name 'axc' -SubstringPatterns @('a?c') -ExactPatterns @() | Should -BeFalse
+                Test-SensitiveLogName -Name 'abc' -SubstringPatterns @('a[bx]c') -ExactPatterns @() | Should -BeFalse
+            }
+        }
     }
 
     Context 'Exact patterns' {

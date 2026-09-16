@@ -139,7 +139,12 @@ function ConvertTo-RedactedLogValue {
         # so it is stripped here before the regex net ever sees the string.
         $AbsoluteUri = $Value.AbsoluteUri
         if (-not [string]::IsNullOrEmpty($Value.UserInfo)) {
-            $AbsoluteUri = $AbsoluteUri.Replace($Value.UserInfo, $RedactedToken)
+            # A literal .Replace of the user-info text would also hit that same text if it happens to
+            # reappear in the path or query string - so only the authority segment right after the
+            # scheme is matched. '${1}' (braced) keeps the replacement's "1" from being read as part
+            # of a longer group number; $RedactedToken is inserted as a literal, not interpreted as a
+            # regex replacement token, since -replace only special-cases "$" in the pattern string.
+            $AbsoluteUri = $AbsoluteUri -replace ('^(' + [regex]::Escape($Value.Scheme) + '://)' + [regex]::Escape($Value.UserInfo) + '@'), ('${1}' + $RedactedToken + '@')
         }
 
         return (Protect-LogMessage -Message $AbsoluteUri)

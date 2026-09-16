@@ -145,6 +145,15 @@ Describe 'ConvertTo-RedactedLogString' -Tag 'Unit' {
                 $Result | Should -Match 'tenant\.omada\.cloud/OData'
             }
         }
+
+        It 'Should only strip the authority user-info, not the same text reappearing in the path or query' {
+            InModuleScope 'OmadaWeb.PS' {
+                # A literal string replace would also hit "bob:pw" where it happens to reappear later
+                # in the URI - only the one right after the scheme, in the authority, is the secret.
+                $Result = ConvertTo-RedactedLogString -InputObject ([System.Uri]::new('https://bob:pw@host/bob:pw/path?x=bob:pw'))
+                $Result | Should -Match '^"https://\*\*\*REDACTED\*\*\*@host/bob:pw/path\?x=bob:pw"$'
+            }
+        }
     }
 
     Context 'ToString fallback for a property-less object' {
