@@ -80,9 +80,10 @@ function Protect-LogMessage {
         # OAuth authorization codes and Azure SAS signatures leak through redirect and blob URLs as
         # query-string parameters - masking that shape, and only that shape, catches the real leak
         # vector without touching a bare "Code" member (the AADSTS/sign-in error code this module
-        # deliberately logs) or an unrelated "code=" pair such as "status code=401".
-        $Result = $Result -replace '(?i)([?&]code=)([^\s&#"'']+)', ('$1{0}' -f $Redacted)
-        $Result = $Result -replace '(?i)([?&]sig=)([^\s&#"'']+)', ('$1{0}' -f $Redacted)
+        # deliberately logs) or an unrelated "code=" pair such as "status code=401". The prefix also
+        # matches "&amp;", since page source and HTML error bodies carry the query string HTML-escaped.
+        $Result = $Result -replace '(?i)((?:[?&]|&amp;)code=)([^\s&#"'']+)', ('$1{0}' -f $Redacted)
+        $Result = $Result -replace '(?i)((?:[?&]|&amp;)sig=)([^\s&#"'']+)', ('$1{0}' -f $Redacted)
 
         # Any Set-Cookie header, whatever the cookie is called.
         $Result = $Result -replace '(?i)(Set-Cookie:\s*)([^\s=;]+)=([^;\s]+)', ('$1$2={0}' -f $Redacted)

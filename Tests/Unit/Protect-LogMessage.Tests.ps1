@@ -140,6 +140,22 @@ Describe 'Protect-LogMessage' -Tag 'Unit' {
             }
         }
 
+        It 'Should mask an OAuth authorization code in an HTML-escaped query string while keeping the rest' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = Protect-LogMessage -Message 'https://host/cb?state=s&amp;code=abc123'
+                $Result | Should -Not -Match 'abc123'
+                $Result | Should -Match 'state=s'
+            }
+        }
+
+        It 'Should mask an Azure SAS signature in an HTML-escaped query string' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = Protect-LogMessage -Message 'https://acct.blob.core.windows.net/c/b?se=2026-01-01&amp;sig=xyz'
+                $Result | Should -Not -Match 'sig=xyz'
+                $Result | Should -Match 'se=2026-01-01'
+            }
+        }
+
         It 'Should mask a bare key=value pair but not key preceded by "-" or "."' {
             InModuleScope 'OmadaWeb.PS' {
                 $Result = Protect-LogMessage -Message 'key=key-secret&x.key=untouched-secret&some-key=also-untouched'
