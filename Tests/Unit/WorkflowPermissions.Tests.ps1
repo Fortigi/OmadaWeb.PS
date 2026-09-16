@@ -31,9 +31,16 @@ BeforeAll {
         $CurrentJob = $null
         $InTopLevelPermissions = $false
         $InJobPermissions = $false
+        $InJobsSection = $false
 
         for ($Index = 0; $Index -lt $Lines.Count; $Index++) {
             $Line = $Lines[$Index]
+
+            if ($Line -match '^jobs:\s*$') {
+                $InJobsSection = $true
+                $InTopLevelPermissions = $false
+                continue
+            }
 
             if ($Line -match '^permissions:\s*$') {
                 $InTopLevelPermissions = $true
@@ -44,6 +51,11 @@ BeforeAll {
 
             if ($Line -match '^\S') {
                 $InTopLevelPermissions = $false
+
+                # Any other column-0 key (on:, concurrency:, another top-level
+                # `jobs:` never repeats, ...) ends the jobs section, so a
+                # two-space-indented key under it is never mistaken for a job.
+                $InJobsSection = $false
             }
 
             if ($InTopLevelPermissions) {
@@ -56,8 +68,10 @@ BeforeAll {
                 }
             }
 
-            # A job name is a two-space-indented key directly under `jobs:`.
-            if ($Line -match '^  (\S[^:]*):\s*$') {
+            # A job name is a two-space-indented key directly under the column-0
+            # `jobs:` key — never a two-space key nested under some other
+            # top-level section such as `on:`.
+            if ($InJobsSection -and $Line -match '^  (\S[^:]*):\s*$') {
                 $CurrentJob = $Matches[1]
                 $InJobPermissions = $false
                 continue
@@ -103,7 +117,43 @@ BeforeAll {
     $Script:ReleasePermissions = Get-JobPermissionBlocks -Lines $Script:ReleaseLines
 }
 
-Describe 'Workflow token permissions are least-privilege' {
+Describe 'Workflow token permissions are least-privilege' -Tag 'Unit' {
+
+    Context 'Get-JobPermissionBlocks' {
+
+        It 'does not treat a two-space key nested under on: as a job' {
+            # `on:` carries its own nested, colon-terminated keys (schedule:,
+            # workflow_dispatch:) at the same two-space indent a real job name
+            # uses, and one can itself contain a line that looks like a job-level
+            # `permissions:` block. Only a two-space key directly under the
+            # column-0 `jobs:` section may be reported as a job.
+            $Fixture = @'
+name: Fixture
+
+on:
+  schedule:
+    permissions:
+      contents: write
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+'@ -split "`r?`n"
+
+            $Parsed = Get-JobPermissionBlocks -Lines $Fixture
+
+            $Parsed.Jobs.Keys | Should -Not -Contain 'schedule'
+            $Parsed.Jobs.Keys | Should -Not -Contain 'workflow_dispatch'
+            $Parsed.Jobs.Keys | Should -Not -Contain 'on'
+            $Parsed.Jobs.Keys | Should -Contain 'build'
+        }
+    }
 
     Context 'nightly.yml' {
 
