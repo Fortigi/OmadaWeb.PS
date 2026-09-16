@@ -2,6 +2,23 @@ param(
     [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
 
+# A minimal concrete WebResponse, defined at script scope (outside Describe) so the type exists at
+# discovery time on both engines. System.Net.WebResponse is abstract but its members are virtual, not
+# abstract, so only GetResponseStream() needs overriding to stand in for what a real HttpWebResponse
+# would hand back on Windows PowerShell 5.1, where Invoke-RestMethod's failure never populates
+# ErrorDetails and the body only survives on the WebException's own Response.
+class FakeOAuthErrorResponse : System.Net.WebResponse {
+    [string]$Body
+
+    FakeOAuthErrorResponse([string]$Body) {
+        $this.Body = $Body
+    }
+
+    [System.IO.Stream] GetResponseStream() {
+        return [System.IO.MemoryStream]::new([System.Text.Encoding]::UTF8.GetBytes($this.Body))
+    }
+}
+
 BeforeAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
     Import-Module $ModulePath -Force -ErrorAction Stop
@@ -482,6 +499,38 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 }
 
                 Should -Invoke Invoke-OAuthTokenRequest -Times 0
+            }
+        }
+    }
+
+    Context 'WebException response body (Windows PowerShell 5.1 path)' {
+        It 'Should parse the identity provider error from a WebException response stream' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ FakeResponse = [FakeOAuthErrorResponse]::new('{"error":"invalid_client","error_description":"AADSTS7000215: Invalid client secret provided."}') } {
+                # PowerShell 7's Invoke-RestMethod populates ErrorDetails.Message for a failed response,
+                # but Windows PowerShell 5.1 never does - the body only survives on a WebException's own
+                # Response, read here through the same GetResponseStream() path New-OAuthTokenRequestError
+                # uses (a real HttpWebResponse has no usable public constructor to fake, so a minimal
+                # WebResponse subclass stands in for it).
+                $WebException = [System.Net.WebException]::new('The remote server returned an error: (400) Bad Request.', $null, [System.Net.WebExceptionStatus]::ProtocolError, $FakeResponse)
+                $ErrorRecord = [System.Management.Automation.ErrorRecord]::new($WebException, 'WebException', [System.Management.Automation.ErrorCategory]::InvalidOperation, $null)
+
+                $Result = New-OAuthTokenRequestError -OAuthUri 'https://idp.example.com/token' -ErrorRecord $ErrorRecord
+
+                $Result.FullyQualifiedErrorId | Should -Match '^OmadaOAuthTokenRequestFailed'
+                $Result.Exception.Message | Should -Match 'invalid_client'
+                $Result.Exception.Message | Should -Match 'AADSTS7000215'
+            }
+        }
+
+        It 'Should fall back to the exception message when the response stream body is empty' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ FakeResponse = [FakeOAuthErrorResponse]::new('') } {
+                $WebException = [System.Net.WebException]::new('The remote server returned an error: (500) Internal Server Error.', $null, [System.Net.WebExceptionStatus]::ProtocolError, $FakeResponse)
+                $ErrorRecord = [System.Management.Automation.ErrorRecord]::new($WebException, 'WebException', [System.Management.Automation.ErrorCategory]::InvalidOperation, $null)
+
+                $Result = New-OAuthTokenRequestError -OAuthUri 'https://idp.example.com/token' -ErrorRecord $ErrorRecord
+
+                $Result.FullyQualifiedErrorId | Should -Match '^OmadaOAuthTokenRequestFailed'
+                $Result.Exception.Message | Should -Match 'Internal Server Error'
             }
         }
     }
