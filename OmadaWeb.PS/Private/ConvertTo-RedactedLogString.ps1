@@ -65,7 +65,8 @@ function ConvertTo-RedactedLogValue {
     # is on, so a per-call array allocation is not free. The pattern list and its name/value variant
     # are defined in OmadaWeb.PS.psm1 alongside the module's other script state.
     $RedactedToken = $Script:RedactedLogToken
-    $SensitiveNamePatterns = $Script:SensitiveLogNamePatterns
+    $SensitiveSubstringPatterns = $Script:SensitiveLogNameSubstringPatterns
+    $SensitiveExactPatterns = $Script:SensitiveLogNameExactPatterns
 
     if ($null -eq $Value) {
         return $null
@@ -133,8 +134,20 @@ function ConvertTo-RedactedLogValue {
 
         # Serialized as its string form rather than walked: a Uri's property graph is large and
         # uninteresting in a log, and an OAuth2/login redirect can carry a token in its query
-        # string - which the regex net masks, but only on text.
-        return (Protect-LogMessage -Message $Value.AbsoluteUri)
+        # string - which the regex net masks, but only on text. UserInfo ("user:pass@host") is not
+        # covered by that net, since AbsoluteUri keeps it out of any query string or header shape -
+        # so it is stripped here before the regex net ever sees the string.
+        $AbsoluteUri = $Value.AbsoluteUri
+        if (-not [string]::IsNullOrEmpty($Value.UserInfo)) {
+            # A literal .Replace of the user-info text would also hit that same text if it happens to
+            # reappear in the path or query string - so only the authority segment right after the
+            # scheme is matched. '${1}' (braced) keeps the replacement's "1" from being read as part
+            # of a longer group number; $RedactedToken is inserted as a literal, not interpreted as a
+            # regex replacement token, since -replace only special-cases "$" in the pattern string.
+            $AbsoluteUri = $AbsoluteUri -replace ('^(' + [regex]::Escape($Value.Scheme) + '://)' + [regex]::Escape($Value.UserInfo) + '@'), ('${1}' + $RedactedToken + '@')
+        }
+
+        return (Protect-LogMessage -Message $AbsoluteUri)
     }
 
     if ($Value -is [ValueType] -or $Value -is [System.Management.Automation.SwitchParameter]) {
@@ -160,17 +173,21 @@ function ConvertTo-RedactedLogValue {
     if ($Value -is [System.Collections.IDictionary]) {
         # See the note further down on name/value pairs - a cookie or header can arrive as a
         # hashtable just as easily as an object, and the same reasoning applies.
-        $Keys = @($Value.Keys)
+        # .psbase.Keys, not .Keys: a hashtable entry literally named "Keys" (or "Values"/"Count")
+        # would otherwise shadow the dictionary's own real .NET property of the same name through
+        # PowerShell's dynamic member resolution, and the walker would see that entry's value where
+        # it expects the key collection. .psbase bypasses that resolution and reaches the real member.
+        $Keys = @($Value.psbase.Keys)
         $KeyNames = @($Keys | ForEach-Object { [string]$_ })
-        $DictionaryPatterns = $SensitiveNamePatterns
+        $DictionaryPatterns = $SensitiveSubstringPatterns
         # -contains is case-insensitive for strings, so this catches name/value as well as Name/Value.
         if ($KeyNames -contains "name" -and $KeyNames -contains "value") {
-            $DictionaryPatterns = $Script:SensitiveLogNamePatternsWithValue
+            $DictionaryPatterns = $Script:SensitiveLogNameSubstringPatternsWithValue
         }
 
         $Result = [ordered]@{}
         foreach ($Key in $Keys) {
-            $Result[[string]$Key] = Get-RedactedMemberValue -Name ([string]$Key) -MemberValue $Value[$Key] -Depth $Depth -MaxDepth $MaxDepth -MaxStringLength $MaxStringLength -Visited $Visited -MaskValues $MaskValues -SensitiveNamePatterns $DictionaryPatterns -RedactedToken $RedactedToken
+            $Result[[string]$Key] = Get-RedactedMemberValue -Name ([string]$Key) -MemberValue $Value[$Key] -Depth $Depth -MaxDepth $MaxDepth -MaxStringLength $MaxStringLength -Visited $Visited -MaskValues $MaskValues -SensitiveNamePatterns $DictionaryPatterns -ExactNamePatterns $SensitiveExactPatterns -RedactedToken $RedactedToken
         }
 
         return $Result
@@ -203,9 +220,9 @@ function ConvertTo-RedactedLogValue {
     # "value" names nothing secret on its own. Within such an object, though, the value is the secret -
     # so mask it there and nowhere else. The rest of the members (domain, path, expiry, httpOnly) are
     # the diagnostics worth keeping.
-    $MemberSensitiveNamePatterns = $SensitiveNamePatterns
+    $MemberSensitiveNamePatterns = $SensitiveSubstringPatterns
     if ($null -ne $Value.PSObject.Properties['Name'] -and $null -ne $Value.PSObject.Properties['Value']) {
-        $MemberSensitiveNamePatterns = $Script:SensitiveLogNamePatternsWithValue
+        $MemberSensitiveNamePatterns = $Script:SensitiveLogNameSubstringPatternsWithValue
     }
 
     # Anything else: walk its properties, tolerating members that throw when read.
@@ -213,7 +230,7 @@ function ConvertTo-RedactedLogValue {
     try {
         foreach ($Property in $Value.PSObject.Properties) {
             try {
-                $Result[$Property.Name] = Get-RedactedMemberValue -Name $Property.Name -MemberValue $Property.Value -Depth $Depth -MaxDepth $MaxDepth -MaxStringLength $MaxStringLength -Visited $Visited -MaskValues $MaskValues -SensitiveNamePatterns $MemberSensitiveNamePatterns -RedactedToken $RedactedToken
+                $Result[$Property.Name] = Get-RedactedMemberValue -Name $Property.Name -MemberValue $Property.Value -Depth $Depth -MaxDepth $MaxDepth -MaxStringLength $MaxStringLength -Visited $Visited -MaskValues $MaskValues -SensitiveNamePatterns $MemberSensitiveNamePatterns -ExactNamePatterns $SensitiveExactPatterns -RedactedToken $RedactedToken
             }
             catch {
                 $Result[$Property.Name] = "<unreadable>"
@@ -225,7 +242,9 @@ function ConvertTo-RedactedLogValue {
     }
 
     if ($Result.Count -le 0) {
-        return $Value.ToString()
+        # No properties to walk - the last text form of this value before it leaves the function, so
+        # it still passes the regex net rather than reaching the log as a raw, unredacted ToString().
+        return (Protect-LogMessage -Message $Value.ToString())
     }
 
     return $Result
@@ -247,6 +266,7 @@ function Get-RedactedMemberValue {
         [System.Collections.Generic.List[object]]$Visited,
         [bool]$MaskValues,
         [string[]]$SensitiveNamePatterns,
+        [string[]]$ExactNamePatterns,
         [string]$RedactedToken
     )
 
@@ -256,10 +276,8 @@ function Get-RedactedMemberValue {
     $HandledByTypeRule = $MemberValue -is [System.Management.Automation.PSCredential] -or $MemberValue -is [System.Net.NetworkCredential] -or $MemberValue -is [System.Security.SecureString]
 
     if (-not $HandledByTypeRule) {
-        foreach ($Pattern in $SensitiveNamePatterns) {
-            if ($Name -like "*$Pattern*") {
-                return $RedactedToken
-            }
+        if (Test-SensitiveLogName -Name $Name -SubstringPatterns $SensitiveNamePatterns -ExactPatterns $ExactNamePatterns) {
+            return $RedactedToken
         }
     }
 
