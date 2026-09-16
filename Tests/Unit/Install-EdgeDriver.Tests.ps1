@@ -15,12 +15,53 @@ Describe 'Install-EdgeDriver' -Tag 'Unit' {
         }
     }
 
-    It 'Should never call GetTempFileName, so no empty temp file is left behind on every run' {
-        # A leaked temp file is invisible from the outside once GetTempFileName ever ran (it is
-        # immediately overwritten by the real download), so the regression is proven by the call
-        # no longer being present in source rather than by an artefact left on disk.
-        $SourcePath = Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\Private\Install-EdgeDriver.ps1'
-        Get-Content -Path $SourcePath -Raw | Should -Not -Match 'GetTempFileName'
+    It 'Should not leave a leaked temp file behind on the happy path' {
+        # This drives the real happy path (only the network/extraction/signature/move steps are
+        # mocked) so the count of files in the redirected temp folder before and after is a direct,
+        # behavioural proof that the removed GetTempFileName call never ran - not merely that its
+        # text is gone from the source.
+        InModuleScope 'OmadaWeb.PS' -Parameters @{ TestDrive = $TestDrive } {
+            $BinFolder = Join-Path $TestDrive 'edge-happy-path'
+            New-Item -ItemType Directory -Path $BinFolder -Force | Out-Null
+            $Script:EdgeDriverPath = Join-Path $BinFolder 'msedgedriver.exe'
+
+            $DownloadedTempFile = Join-Path $TestDrive 'edge-happy-download.tmp'
+            Set-Content -Path $DownloadedTempFile -Value 'fake zip bytes' -NoNewline
+
+            $ExtractedFolder = Join-Path $TestDrive 'edge-happy-extracted'
+            New-Item -ItemType Directory -Path $ExtractedFolder -Force | Out-Null
+            $ExtractedDriverFile = Join-Path $ExtractedFolder 'msedgedriver.exe'
+            Set-Content -Path $ExtractedDriverFile -Value 'fake driver' -NoNewline
+
+            Mock Get-CimInstance { [PSCustomObject]@{ SystemType = 'x64-based PC' } }
+            Mock Invoke-DownloadFile { $DownloadedTempFile }
+            Mock Expand-DownloadFile { Get-Item -LiteralPath $ExtractedFolder }
+            Mock Get-LockedArtifact { [PSCustomObject]@{ SubjectPattern = '*O=Microsoft Corporation*' } }
+            Mock Confirm-AuthenticodeTrust { }
+            Mock Move-Item { } -ParameterFilter { $Destination -eq (Split-Path $Script:EdgeDriverPath) }
+
+            # Redirect TEMP/TMP for the duration of the call: if GetTempFileName ever ran again, it
+            # would create its file here, where it can actually be counted.
+            $TempFolder = Join-Path $TestDrive 'redirected-temp'
+            New-Item -ItemType Directory -Path $TempFolder -Force | Out-Null
+            $OriginalTemp = $Env:TEMP
+            $OriginalTmp = $Env:TMP
+            $Env:TEMP = $TempFolder
+            $Env:TMP = $TempFolder
+            try {
+                $FileCountBefore = (Get-ChildItem -Path $TempFolder -Force).Count
+
+                Install-EdgeDriver -InstalledEdgeFileInfo ([PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '128.0.2739.33' } })
+
+                $FileCountAfter = (Get-ChildItem -Path $TempFolder -Force).Count
+            }
+            finally {
+                $Env:TEMP = $OriginalTemp
+                $Env:TMP = $OriginalTmp
+            }
+
+            $FileCountAfter | Should -Be $FileCountBefore
+        }
     }
 
     It 'Should name the real driver folder when the download fails, without throwing a StrictMode error' {
