@@ -397,9 +397,6 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             # own expiry, inside the protected payload, has not moved; only the wall clock has.
             Clear-TestSessions
 
-            InModuleScope 'OmadaWeb.PS' {} # keep clock reads consistent between the two calls below
-            $RealNow = [datetime]::UtcNow
-
             # Simulated by crafting a payload whose cookie already expired, rather than by editing
             # the visible ExpiresOn - editing that property is covered separately below, and must
             # not be what this refusal depends on.
