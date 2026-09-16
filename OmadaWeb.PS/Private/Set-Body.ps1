@@ -28,8 +28,8 @@ function Set-Body {
         "{0} - Provided -Body will be processed directly without converting it." -f $MyInvocation.MyCommand | Write-Verbose
 
         # The body is passed through exactly as the caller supplied it, so their own Content-Type
-        # (the Headers dictionary is a case-insensitive copy since #103) is left alone; only default
-        # to json when they did not specify one at all.
+        # is left alone; the Headers dictionary is case-insensitive, so this only defaults to json
+        # when they did not specify one at all.
         if ("Content-Type" -notin $BoundParams['Headers'].Keys) {
             $BoundParams['Headers']['Content-Type'] = "application/json"
         }
