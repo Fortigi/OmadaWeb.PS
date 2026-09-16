@@ -120,4 +120,76 @@ Describe 'Install-EdgeDriver' -Tag 'Unit' {
             Test-Path -LiteralPath $ExtractedFolder | Should -BeFalse
         }
     }
+
+    It 'Should name the real driver folder when moving the driver into place fails and an existing driver is present' {
+        InModuleScope 'OmadaWeb.PS' -Parameters @{ TestDrive = $TestDrive } {
+            $BinFolder = Join-Path $TestDrive 'edge-move-fails-existing'
+            New-Item -ItemType Directory -Path $BinFolder -Force | Out-Null
+            $Script:EdgeDriverPath = Join-Path $BinFolder 'msedgedriver.exe'
+            # An existing driver from a previous install - the condition Move-Item's catch checks for.
+            Set-Content -Path $Script:EdgeDriverPath -Value 'existing driver' -NoNewline
+
+            $ExtractedFolder = Join-Path $TestDrive 'edge-move-fails-extracted'
+            New-Item -ItemType Directory -Path $ExtractedFolder -Force | Out-Null
+            Set-Content -Path (Join-Path $ExtractedFolder 'msedgedriver.exe') -Value 'fake driver' -NoNewline
+
+            $DownloadedTempFile = Join-Path $TestDrive 'edge-move-fails-download.tmp'
+            Set-Content -Path $DownloadedTempFile -Value 'fake zip bytes' -NoNewline
+
+            Mock Get-CimInstance { [PSCustomObject]@{ SystemType = 'x64-based PC' } }
+            Mock Invoke-DownloadFile { $DownloadedTempFile }
+            Mock Expand-DownloadFile { Get-Item -LiteralPath $ExtractedFolder }
+            Mock Get-LockedArtifact { [PSCustomObject]@{ SubjectPattern = '*O=Microsoft Corporation*' } }
+            Mock Confirm-AuthenticodeTrust { }
+            Mock Move-Item { throw 'simulated move failure' }
+
+            $CaughtError = $null
+            try {
+                Install-EdgeDriver -InstalledEdgeFileInfo ([PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '128.0.2739.33' } }) -ErrorAction Stop
+            }
+            catch {
+                $CaughtError = $_
+            }
+
+            $CaughtError | Should -Not -BeNullOrEmpty
+            $CaughtError.Exception.Message | Should -Match ([regex]::Escape($BinFolder))
+        }
+    }
+
+    It 'Should surface the original error when moving the driver fails and no existing driver is present' {
+        InModuleScope 'OmadaWeb.PS' -Parameters @{ TestDrive = $TestDrive } {
+            $BinFolder = Join-Path $TestDrive 'edge-move-fails-none'
+            New-Item -ItemType Directory -Path $BinFolder -Force | Out-Null
+            $Script:EdgeDriverPath = Join-Path $BinFolder 'msedgedriver.exe'
+            # Deliberately no existing driver at $Script:EdgeDriverPath, so the catch's Test-Path
+            # check is false and $PSCmdlet.ThrowTerminatingError re-raises the original error as-is.
+
+            $ExtractedFolder = Join-Path $TestDrive 'edge-move-fails-none-extracted'
+            New-Item -ItemType Directory -Path $ExtractedFolder -Force | Out-Null
+            Set-Content -Path (Join-Path $ExtractedFolder 'msedgedriver.exe') -Value 'fake driver' -NoNewline
+
+            $DownloadedTempFile = Join-Path $TestDrive 'edge-move-fails-none-download.tmp'
+            Set-Content -Path $DownloadedTempFile -Value 'fake zip bytes' -NoNewline
+
+            Mock Get-CimInstance { [PSCustomObject]@{ SystemType = 'x64-based PC' } }
+            Mock Invoke-DownloadFile { $DownloadedTempFile }
+            Mock Expand-DownloadFile { Get-Item -LiteralPath $ExtractedFolder }
+            Mock Get-LockedArtifact { [PSCustomObject]@{ SubjectPattern = '*O=Microsoft Corporation*' } }
+            Mock Confirm-AuthenticodeTrust { }
+            Mock Move-Item { throw 'simulated move failure' }
+
+            $CaughtError = $null
+            try {
+                Install-EdgeDriver -InstalledEdgeFileInfo ([PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '128.0.2739.33' } }) -ErrorAction Stop
+            }
+            catch {
+                $CaughtError = $_
+            }
+
+            $CaughtError | Should -Not -BeNullOrEmpty
+            # ThrowTerminatingError re-raises the original caught error verbatim - no friendly
+            # wrapper text - so the original mock exception message survives unchanged.
+            $CaughtError.Exception.Message | Should -Match 'simulated move failure'
+        }
+    }
 }
