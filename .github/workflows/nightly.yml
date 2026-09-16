@@ -5,6 +5,12 @@ on:
     - cron: '17 1 * * *'
   workflow_dispatch: {}
 
+# Least-privilege default: every job only reads the repository unless it declares
+# its own permissions block. Only the release job below needs to push a tag and
+# create a GitHub Release, so it is the only place contents: write is granted.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: Check for new commits
@@ -83,6 +89,11 @@ jobs:
     runs-on: windows-latest
     needs: [check, build]
     if: needs.check.outputs.should_build == 'true'
+
+    # Pushes the nightly tag and publishes a GitHub Release, so this job (only)
+    # needs write access to repository contents.
+    permissions:
+      contents: write
 
     env:
       BUILD_VERSION: ${{ needs.build.outputs.build_version }}
