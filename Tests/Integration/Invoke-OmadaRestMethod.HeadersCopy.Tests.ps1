@@ -22,6 +22,11 @@ BeforeAll {
     $Script:Port = Get-Random -Minimum 19000 -Maximum 21000
     $Script:BaseUrl = "http://127.0.0.1:$Script:Port"
 
+    # -AllowUnencryptedAuthentication does not exist on Windows PowerShell 5.1's Invoke-RestMethod,
+    # only on PowerShell 6+ (see Invoke-OmadaRestMethod.Tests.ps1) - splatted rather than passed as
+    # a literal switch so 5.1 simply gets no such parameter instead of a binding error.
+    $Script:AllowUnencryptedAuthParams = if ($PSVersionTable.PSVersion.Major -ge 6) { @{ AllowUnencryptedAuthentication = $true } } else { @{} }
+
     $Script:SharedServer = [hashtable]::Synchronized(@{
             Listener          = $null
             RequestCount      = 0
@@ -123,11 +128,12 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
     Context 'OAuth authentication' {
         It 'Leaves the caller''s Headers hashtable unchanged and lets it be reused for a second call' {
             Reset-FakeServer
+            $AllowUnencryptedAuthParams = $Script:AllowUnencryptedAuthParams
 
             $Credential = New-Object System.Management.Automation.PSCredential('test-client', (ConvertTo-SecureString 'test-secret' -AsPlainText -Force))
             $CallerHeaders = @{ 'X-Caller' = 'present' }
 
-            $Result1 = Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType OAuth -OAuthUri "$Script:BaseUrl/token" -ClientId 'test-client' -Credential $Credential -Headers $CallerHeaders -AllowUnencryptedAuthentication
+            $Result1 = Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType OAuth -OAuthUri "$Script:BaseUrl/token" -ClientId 'test-client' -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams
 
             $Result1.value | Should -Be 'served'
             $CallerHeaders.Count | Should -Be 1
@@ -138,7 +144,7 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
             # Key in dictionary: 'Authorization'" before the fix, because the first call had added
             # the token straight into the caller's own hashtable.
             Reset-FakeServer
-            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType OAuth -OAuthUri "$Script:BaseUrl/token" -ClientId 'test-client' -Credential $Credential -Headers $CallerHeaders -AllowUnencryptedAuthentication -ErrorAction Stop } | Should -Not -Throw
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType OAuth -OAuthUri "$Script:BaseUrl/token" -ClientId 'test-client' -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams -ErrorAction Stop } | Should -Not -Throw
 
             $CallerHeaders.Count | Should -Be 1
             $CallerHeaders.Keys | Should -Not -Contain 'Authorization'
@@ -148,12 +154,13 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
     Context 'Basic authentication' {
         It 'Leaves the caller''s Headers hashtable unchanged, holds no Base64 credential, and can be reused' {
             Reset-FakeServer
+            $AllowUnencryptedAuthParams = $Script:AllowUnencryptedAuthParams
 
             $Credential = New-Object System.Management.Automation.PSCredential('basic-user', (ConvertTo-SecureString 'basic-pass' -AsPlainText -Force))
             $CallerHeaders = @{ 'X-Caller' = 'present' }
             $ExpectedBasic = 'Basic {0}' -f [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes('basic-user:basic-pass'))
 
-            $Result1 = Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $CallerHeaders -AllowUnencryptedAuthentication
+            $Result1 = Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams
 
             $Result1.value | Should -Be 'served'
             $CallerHeaders.Count | Should -Be 1
@@ -162,7 +169,7 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
             $Script:SharedServer.LastAuthorization | Should -Be $ExpectedBasic
 
             Reset-FakeServer
-            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $CallerHeaders -AllowUnencryptedAuthentication -ErrorAction Stop } | Should -Not -Throw
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams -ErrorAction Stop } | Should -Not -Throw
 
             $CallerHeaders.Count | Should -Be 1
             $Script:SharedServer.LastAuthorization | Should -Be $ExpectedBasic
@@ -172,11 +179,12 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
     Context '-Headers $null' {
         It 'Does not throw and sends the Authorization header for Basic authentication' {
             Reset-FakeServer
+            $AllowUnencryptedAuthParams = $Script:AllowUnencryptedAuthParams
 
             $Credential = New-Object System.Management.Automation.PSCredential('null-header-user', (ConvertTo-SecureString 'null-header-pass' -AsPlainText -Force))
             $ExpectedBasic = 'Basic {0}' -f [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes('null-header-user:null-header-pass'))
 
-            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $null -AllowUnencryptedAuthentication -ErrorAction Stop } | Should -Not -Throw
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $null @AllowUnencryptedAuthParams -ErrorAction Stop } | Should -Not -Throw
 
             $Script:SharedServer.LastAuthorization | Should -Be $ExpectedBasic
         }
@@ -185,12 +193,13 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
     Context 'Caller-supplied Authorization header' {
         It 'Does not throw, and the module''s own authentication value is what is sent' {
             Reset-FakeServer
+            $AllowUnencryptedAuthParams = $Script:AllowUnencryptedAuthParams
 
             $Credential = New-Object System.Management.Automation.PSCredential('basic-user2', (ConvertTo-SecureString 'basic-pass2' -AsPlainText -Force))
             $CallerHeaders = @{ 'Authorization' = 'Bearer caller-supplied-value' }
             $ExpectedBasic = 'Basic {0}' -f [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes('basic-user2:basic-pass2'))
 
-            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $CallerHeaders -AllowUnencryptedAuthentication -ErrorAction Stop } | Should -Not -Throw
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType Basic -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams -ErrorAction Stop } | Should -Not -Throw
 
             $Script:SharedServer.LastAuthorization | Should -Be $ExpectedBasic
             $CallerHeaders['Authorization'] | Should -Be 'Bearer caller-supplied-value' -Because 'the caller''s own hashtable is never mutated'
@@ -212,7 +221,7 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
     }
 
     Context 'Case-insensitive header lookup in the copy' {
-        It 'Coalesces differently-cased Content-Type keys from a case-sensitive caller dictionary into a single header' {
+        It 'Coalesces differently-cased X-Marker keys from a case-sensitive caller dictionary into a single header' {
             Reset-FakeServer
 
             # A case-sensitive .NET dictionary (unlike a PowerShell hashtable literal) can legally
