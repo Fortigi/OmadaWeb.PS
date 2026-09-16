@@ -589,6 +589,56 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Failure.Exception.Message | Should -BeLike '*Windows user account*'
         }
 
+        It 'Should refuse a state whose protected payload decrypts but is missing the keys it needs' {
+            # A payload that decrypts cleanly but was never built with SessionKey/AuthCookie -
+            # crafted, or a state from something other than Export-OmadaSession - must not throw
+            # PropertyNotFoundStrict out of the guard meant to catch exactly this.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl } {
+                param($BaseUrl)
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload @{ BaseUrl = $BaseUrl })
+                }
+            }
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateUnreadable*'
+            $Failure.Exception | Should -BeOfType [System.Security.Cryptography.CryptographicException]
+        }
+
+        It 'Should refuse a state whose protected half decrypts to something other than a payload' {
+            # A protected value can decrypt cleanly to any serialized object, not only a hashtable -
+            # here, a plain string. The guard has to catch that itself rather than fault on a dot or
+            # indexer read further down that assumes a hashtable shape.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl } {
+                param($BaseUrl)
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload 'not a payload')
+                }
+            }
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateUnreadable*'
+            $Failure.Exception | Should -BeOfType [System.Security.Cryptography.CryptographicException]
+        }
+
         It 'Should refuse a state whose shape it does not know' {
             Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl

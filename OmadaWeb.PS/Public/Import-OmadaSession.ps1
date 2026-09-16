@@ -137,7 +137,13 @@ function Import-OmadaSession {
         }
 
         $Payload = Unprotect-OmadaSessionPayload -ProtectedPayload $State.ProtectedState
-        if ($null -eq $Payload -or $null -eq $Payload.SessionKey -or $null -eq $Payload.AuthCookie) {
+        # Indexer reads with Contains checks, not dot notation: a crafted payload can decrypt to a
+        # hashtable that simply omits a key, and under this module's StrictMode dot notation throws
+        # PropertyNotFoundStrict on a missing key instead of answering $null - which would escape
+        # this guard as an unhandled error rather than the OmadaSessionStateUnreadable it means to be.
+        if ($null -eq $Payload -or $Payload -isnot [System.Collections.IDictionary] -or
+            -not $Payload.Contains('SessionKey') -or $null -eq $Payload['SessionKey'] -or
+            -not $Payload.Contains('AuthCookie') -or $null -eq $Payload['AuthCookie']) {
             # One message for every way this can fail, because a caller cannot act on the difference:
             # the protection is bound to the Windows user account that exported it, so anything
             # unreadable means the state did not come from that account, and the answer is always to
@@ -158,7 +164,9 @@ function Import-OmadaSession {
         # the caller, outside the protection, so the two can disagree - by an accident on the way
         # here, or by an edit. Either way the state is not the one that was exported, and importing
         # it would seed one environment while every message about it named another.
-        $BaseUrl = [string]$Payload.BaseUrl
+        # Past the guard above, SessionKey and AuthCookie are known to be there; BaseUrl is not
+        # guaranteed the same way, so it gets the same Contains-guarded read.
+        $BaseUrl = [string]$(if ($Payload.Contains('BaseUrl')) { $Payload['BaseUrl'] } else { $null })
         $VisibleBaseUrl = [string]$State.BaseUrl
 
         # Both have to be there and agree. An empty visible BaseUrl used to skip the comparison,
@@ -237,12 +245,15 @@ function Import-OmadaSession {
         $SessionContext = Get-OmadaSessionContext -Key ([string]$Payload.SessionKey) -AuthorityHost $AuthorityHost
         $SessionContext.BaseUrl = $BaseUrl
         $SessionContext.AuthCookie = $Payload.AuthCookie
-        $SessionContext.UserName = $Payload.UserName
+        # UserName, WebView2Used and LastSessionType are optional on the payload - a state exported
+        # by an older build, or a crafted one, can omit any of them - so they get the same
+        # Contains-guarded read as BaseUrl above, rather than dot notation.
+        $SessionContext.UserName = if ($Payload.Contains('UserName')) { $Payload['UserName'] } else { $null }
         # Carried across so the worker's first request behaves the way the original session did
         # rather than falling back to the defaults: which engine this session runs on, and whether
         # it was an InPrivate one - both of which reset the cookie when they change underneath it.
-        $SessionContext.WebView2Used = [bool]$Payload.WebView2Used
-        $SessionContext.LastSessionType = $Payload.LastSessionType
+        $SessionContext.WebView2Used = [bool]$(if ($Payload.Contains('WebView2Used')) { $Payload['WebView2Used'] } else { $false })
+        $SessionContext.LastSessionType = if ($Payload.Contains('LastSessionType')) { $Payload['LastSessionType'] } else { $null }
         $SessionContext.Seeded = $true
         $SessionContext.NoInteractiveAuthentication = -not $AllowInteractiveAuthentication
 
