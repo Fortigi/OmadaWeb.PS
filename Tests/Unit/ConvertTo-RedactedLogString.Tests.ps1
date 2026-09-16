@@ -39,6 +39,115 @@ Describe 'ConvertTo-RedactedLogString' -Tag 'Unit' {
                 $Result | Should -Match 'tenant\.omada\.cloud'
             }
         }
+
+        It 'Should mask hyphenated and underscored header-style key names' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = ConvertTo-RedactedLogString -InputObject @{
+                    'X-API-Key'                 = 'api-key-secret'
+                    'x-functions-key'           = 'functions-key-secret'
+                    'Ocp-Apim-Subscription-Key' = 'subscription-key-secret'
+                }
+                $Result | Should -Not -Match 'api-key-secret'
+                $Result | Should -Not -Match 'functions-key-secret'
+                $Result | Should -Not -Match 'subscription-key-secret'
+            }
+        }
+
+        It 'Should mask bare key, sig, signature, code, passwd, passphrase and ProtectedState names' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = ConvertTo-RedactedLogString -InputObject @{
+                    key            = 'key-secret'
+                    sig            = 'sig-secret'
+                    signature      = 'signature-secret'
+                    code           = 'code-secret'
+                    passwd         = 'passwd-secret'
+                    passphrase     = 'passphrase-secret'
+                    ProtectedState = 'protected-state-secret'
+                }
+                $Result | Should -Not -Match 'key-secret'
+                $Result | Should -Not -Match 'sig-secret'
+                $Result | Should -Not -Match 'signature-secret'
+                $Result | Should -Not -Match 'code-secret'
+                $Result | Should -Not -Match 'passwd-secret'
+                $Result | Should -Not -Match 'passphrase-secret'
+                $Result | Should -Not -Match 'protected-state-secret'
+            }
+        }
+
+        It 'Should keep ordinary names that merely contain a short exact pattern as a substring' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = ConvertTo-RedactedLogString -InputObject @{
+                    StatusCode  = 200
+                    Keys        = 'a,b,c'
+                    Description = 'a plain description'
+                    KeyCount    = 3
+                    HashCode    = 12345
+                    Design      = 'blueprint'
+                }
+                $Result | Should -Match '200'
+                $Result | Should -Match 'a,b,c'
+                $Result | Should -Match 'a plain description'
+                $Result | Should -Match 'blueprint'
+            }
+        }
+
+        It 'Should keep ordinary names that merely contain a short exact pattern, walked from a PSCustomObject too' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = ConvertTo-RedactedLogString -InputObject ([pscustomobject]@{
+                        StatusCode  = 200
+                        Keys        = 'a,b,c'
+                        Description = 'a plain description'
+                        KeyCount    = 3
+                        HashCode    = 12345
+                        Design      = 'blueprint'
+                    })
+                $Result | Should -Match '200'
+                $Result | Should -Match 'a,b,c'
+                $Result | Should -Match 'a plain description'
+                $Result | Should -Match 'blueprint'
+            }
+        }
+
+        It 'Should not let a "Keys" entry shadow the dictionarys own Keys member during the walk' {
+            InModuleScope 'OmadaWeb.PS' {
+                # Regression test: $Value.Keys on a Hashtable with an entry literally named "Keys"
+                # used to return that entry's value instead of the real key collection, so the walker
+                # built a single bogus property from it instead of walking Keys and Password.
+                { $Script:Result = ConvertTo-RedactedLogString -InputObject @{ Keys = 'a'; Password = 's3cr3t' } } | Should -Not -Throw
+                $Script:Result | Should -Match '"Keys":\s*"a"'
+                $Script:Result | Should -Not -Match 's3cr3t'
+                $Script:Result | Should -Match '\*\*\*REDACTED\*\*\*'
+            }
+        }
+    }
+
+    Context 'Uri user-info' {
+        It 'Should strip credentials from a Uri that carries them' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = ConvertTo-RedactedLogString -InputObject ([System.Uri]::new('https://svc_user:Sup3rSecret!@tenant.omada.cloud/OData'))
+                $Result | Should -Not -Match 'Sup3rSecret'
+                $Result | Should -Not -Match 'svc_user'
+                $Result | Should -Match 'tenant\.omada\.cloud'
+            }
+        }
+
+        It 'Should leave a Uri without user-info unchanged' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = ConvertTo-RedactedLogString -InputObject ([System.Uri]::new('https://tenant.omada.cloud/OData'))
+                $Result | Should -Match 'tenant\.omada\.cloud/OData'
+            }
+        }
+    }
+
+    Context 'ToString fallback for a property-less object' {
+        It 'Should redact secret material in the ToString of an object with no properties to walk' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Value = New-Object System.Object
+                $Value | Add-Member -MemberType ScriptMethod -Name ToString -Value { 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature' } -Force
+                $Result = ConvertTo-RedactedLogString -InputObject @{ Anything = $Value }
+                $Result | Should -Not -Match 'eyJhbGciOiJIUzI1NiJ9'
+            }
+        }
     }
 
     Context 'Type-based masking' {

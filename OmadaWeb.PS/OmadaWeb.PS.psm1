@@ -131,18 +131,24 @@ catch {}
 # Initialize script-level variables
 # Redaction constants for ConvertTo-RedactedLogString. They live here, initialized once per import,
 # because the walker recurses once per property of every object logged and builds its string on every
-# request whether or not -Verbose is on - rebuilding a 16-element array per recursive call is exactly
-# the kind of cost that does not belong on that path. The patterns are matched as case-insensitive
-# substrings, so composites such as X-CSRF-Token, RefreshToken and SessionCookie are covered too.
+# request whether or not -Verbose is on - rebuilding these arrays per recursive call is exactly the
+# kind of cost that does not belong on that path. Matched through Test-SensitiveLogName against a
+# normalized name (lowercased, "-" and "_" stripped), so X-API-Key, api_key and ApiKey are all one
+# name. Two lists: long, unambiguous words are matched as substrings, so composites such as
+# X-CSRF-Token, RefreshToken and SessionCookie are covered too. Short words such as "key", "code" and
+# "sig" would, as substrings, redact ordinary members like StatusCode or Keys - those are matched
+# only when they are the whole normalized name.
 $Script:RedactedLogToken = "***REDACTED***"
-$Script:SensitiveLogNamePatterns = @(
+$Script:SensitiveLogNameSubstringPatterns = @(
     "authorization", "cookie", "credential", "password", "pwd", "secret", "token",
-    "apikey", "api_key", "clientsecret", "sessionkey", "bearer", "csrf", "assertion",
-    "privatekey", "connectionstring"
+    "apikey", "clientsecret", "sessionkey", "bearer", "csrf", "assertion",
+    "privatekey", "connectionstring", "subscriptionkey", "functionskey",
+    "passwd", "passphrase", "protectedstate", "signature"
 )
+$Script:SensitiveLogNameExactPatterns = @("key", "code", "sig")
 # Used only inside an object that pairs a Name member with a Value member - a cookie or a header,
-# where the value is the secret. Precomputed for the same reason as the list above.
-$Script:SensitiveLogNamePatternsWithValue = $Script:SensitiveLogNamePatterns + "value"
+# where the value is the secret. Precomputed for the same reason as the lists above.
+$Script:SensitiveLogNameSubstringPatternsWithValue = $Script:SensitiveLogNameSubstringPatterns + "value"
 # Set per request from -SkipBodyRedaction, and read by the walker instead of being threaded through
 # its recursion. It has to exist before the first request: Set-StrictMode is active, and the walker
 # reads it on every object logged, including the one logged at the end of this file.
