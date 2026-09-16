@@ -66,8 +66,26 @@ function Invoke-OmadaRequest {
                 RetryIntervalSec  = [int]$BoundParams['RetryIntervalSec']
             }
 
-            if ("Headers" -notin $BoundParams.Keys) {
-                $BoundParams.Add("Headers", @{})
+            # Copied into a NEW case-insensitive dictionary rather than kept as the caller's own
+            # object: every header this module adds from here on (the bearer token or Basic
+            # credential below, the default Accept/Content-Type further down) is written into
+            # $BoundParams['Headers'], and until this copy existed that was the caller's own
+            # hashtable - reusing it for a second call then failed with "Item has already been
+            # added. Key in dictionary: 'Authorization'" (issue #103). A caller's -Headers can be
+            # any IDictionary, not only a [hashtable] (see "BoundParameters is not a Hashtable"),
+            # so this copies by enumerating rather than by casting.
+            $CallerHeaders = if ($BoundParams.Keys -contains "Headers") { $BoundParams['Headers'] } else { $null }
+            $HeadersCopy = [System.Collections.Hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
+            if ($null -ne $CallerHeaders) {
+                foreach ($HeaderKey in $CallerHeaders.Keys) {
+                    $HeadersCopy[$HeaderKey] = $CallerHeaders[$HeaderKey]
+                }
+            }
+            if ($BoundParams.Keys -contains "Headers") {
+                $BoundParams['Headers'] = $HeadersCopy
+            }
+            else {
+                $BoundParams.Add("Headers", $HeadersCopy)
             }
 
             $Uri = [System.Uri]::new($BoundParams['Uri'])
@@ -308,15 +326,18 @@ function Invoke-OmadaRequest {
                     "Invoke-RestMethod" {
 
                         if ("Accept" -notin $BoundParams['Headers'].Keys) {
-                            $BoundParams['Headers'].Add("Accept", "application/json")
+                            $BoundParams['Headers']['Accept'] = "application/json"
                         }
 
                         if ("ContentType" -in $BoundParams.Keys) {
-                            $BoundParams['Headers'].Add("Content-Type", $BoundParams['ContentType'])
+                            # -ContentType is the caller's explicit choice, so it wins over a
+                            # Content-Type header already sitting in the (now copied) dictionary -
+                            # indexer assignment rather than .Add, since the key may already be there.
+                            $BoundParams['Headers']['Content-Type'] = $BoundParams['ContentType']
                             $BoundParams.Remove("ContentType") | Out-Null
                         }
                         elseif ("Content-Type" -notin $BoundParams['Headers'].Keys) {
-                            $BoundParams['Headers'].Add("Content-Type", "application/json")
+                            $BoundParams['Headers']['Content-Type'] = "application/json"
                         }
                         $Parameters = Set-RequestParameter -RequestContext $RequestContext
 
