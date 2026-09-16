@@ -67,6 +67,35 @@ Describe 'Install-EdgeDriver' -Tag 'Unit' {
         }
     }
 
+    It 'Should not mask the original error with an undefined-variable error when Get-CimInstance fails before the download URL is built' {
+        InModuleScope 'OmadaWeb.PS' -Parameters @{ TestDrive = $TestDrive } {
+            $BinFolder = Join-Path $TestDrive 'edge-cim-fails'
+            New-Item -ItemType Directory -Path $BinFolder -Force | Out-Null
+            $Script:EdgeDriverPath = Join-Path $BinFolder 'msedgedriver.exe'
+            Set-Content -Path $Script:EdgeDriverPath -Value 'existing driver' -NoNewline
+
+            # Throws before $EdgeWebdriverDownloadUrl is ever assigned in the try - the scenario the
+            # uninitialized-variable bug needed.
+            Mock Get-CimInstance { throw 'simulated CIM failure' }
+
+            $CaughtError = $null
+            try {
+                Install-EdgeDriver -InstalledEdgeFileInfo ([PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '128.0.2739.33' } }) -ErrorAction Stop
+            }
+            catch {
+                $CaughtError = $_
+            }
+
+            $CaughtError | Should -Not -BeNullOrEmpty
+            # A StrictMode "variable is not set" error would replace both of these with its own text
+            # and error id, before the friendly message is ever built.
+            $CaughtError.Exception.Message | Should -Match ([regex]::Escape($BinFolder))
+            $CaughtError.Exception.Message | Should -Match 'simulated CIM failure'
+            $CaughtError.Exception.Message | Should -Match ([regex]::Escape('(not resolved)'))
+            $CaughtError.FullyQualifiedErrorId | Should -Not -Match 'VariableIsUndefined|VariableNotFound|PropertyNotFoundStrict'
+        }
+    }
+
     It 'Should name the real driver folder when the download fails, without throwing a StrictMode error' {
         InModuleScope 'OmadaWeb.PS' -Parameters @{ TestDrive = $TestDrive } {
             $BinFolder = Join-Path $TestDrive 'edge-download-fails'

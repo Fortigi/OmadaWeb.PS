@@ -6,6 +6,11 @@ function Install-EdgeDriver {
     )
 
     $EdgeDriverFileName = "msedgedriver.exe"
+    # Read by the catch below, which reports it in the failure message. Initialized here so that an
+    # error thrown before it is assigned in the try (Get-CimInstance, the architecture switch) still
+    # leaves it defined - otherwise, under StrictMode, formatting the message would itself throw a
+    # "variable is not set" error and the original error would never be seen.
+    $EdgeWebdriverDownloadUrl = $null
 
     try {
         "{0} - Check and install EdgeDriver" -f $MyInvocation.MyCommand | Write-Verbose
@@ -35,7 +40,7 @@ function Install-EdgeDriver {
     }
     catch {
         if (Test-Path (Join-Path (Split-Path $Script:EdgeDriverPath) -ChildPath $EdgeDriverFileName) -PathType Leaf) {
-            "Failed to update '{0}'. Try downloading the webdriver manually from '{1}' and place it here: '{2}'. Error:`r`n {3}" -f $EdgeDriverFileName, $EdgeWebdriverDownloadUrl, (Split-Path $Script:EdgeDriverPath), $_.Exception | Write-Error -ErrorAction Stop
+            "Failed to update '{0}'. Try downloading the webdriver manually from '{1}' and place it here: '{2}'. Error:`r`n {3}" -f $EdgeDriverFileName, $(if ($null -eq $EdgeWebdriverDownloadUrl) { "(not resolved)" } else { $EdgeWebdriverDownloadUrl }), (Split-Path $Script:EdgeDriverPath), $_.Exception | Write-Error -ErrorAction Stop
         }
         else {
             $PSCmdlet.ThrowTerminatingError($PSItem)
