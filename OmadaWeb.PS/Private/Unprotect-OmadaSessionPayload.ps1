@@ -8,10 +8,10 @@ function Unprotect-OmadaSessionPayload {
     Protect-OmadaSessionPayload.
 
     Anything that cannot be read is answered the same way: $null. That covers a string this user
-    cannot decrypt because it was created by someone else or on another machine, a truncated one,
-    and one that was never protected text to begin with. The caller turns that single answer into
-    one clear error, rather than leaking three different failures with three different messages -
-    none of which the caller could act on differently anyway.
+    cannot decrypt because it was created by a different Windows user account, a truncated one, and
+    one that was never protected text to begin with. The caller turns that single answer into one
+    clear error, rather than leaking three different failures with three different messages - none
+    of which the caller could act on differently anyway.
 
     .PARAMETER ProtectedPayload
     The protected text, as held in the ProtectedState property of an exported session.

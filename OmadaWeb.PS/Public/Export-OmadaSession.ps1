@@ -15,12 +15,14 @@ function Export-OmadaSession {
 
         This command writes nothing to disk, and neither does Import-OmadaSession. The session
         cookie is a live bearer token, so it never appears in the returned object: it is encrypted
-        with DPAPI for the current user on the current machine and carried in the ProtectedState
-        property as ciphertext. The object can therefore
-        be passed through a job argument, a queue or a variable without leaking the token, and a
-        copy that leaves this machine is inert. The same binding is the limit of what this supports:
-        a session can be seeded into another runspace of the same user on the same machine, not into
-        another user's session and not onto another computer.
+        with DPAPI for the current Windows user account and carried in the ProtectedState property
+        as ciphertext. The object can therefore be passed through a job argument, a queue or a
+        variable without leaking the token to a reader who is signed in as someone else. That
+        protection is scoped to the account, not the computer: any process already running as that
+        user - on this machine, or on another one where the account's DPAPI keys roam through a
+        roaming profile or credential roaming - can decrypt it. It does not stop someone who runs as
+        the account that exported it, so treat the returned object as a secret, the same as the
+        cookie it carries.
 
         The command reads the session that is already there. It never creates one, and it never
         signs in: when there is no authenticated session for the arguments given, it says so and
@@ -171,7 +173,10 @@ function Export-OmadaSession {
         # Everything that identifies or authenticates the session goes into the protected half - the
         # session key included, because its last segment is the account name or the caller's own
         # -SessionKey value. The module already keeps that out of its logs by hashing it, and an
-        # object a caller may hand around deserves the same treatment.
+        # object a caller may hand around deserves the same treatment. ExpiresOn travels here too,
+        # not only as the visible property below: the visible one sits outside the protection, so
+        # Import-OmadaSession must never let it alone decide whether a session is still usable - an
+        # editor of the returned object could otherwise push a dead session past that check.
         $Payload = @{
             SessionKey      = $Key
             BaseUrl         = $SessionContext.BaseUrl
@@ -179,6 +184,7 @@ function Export-OmadaSession {
             UserName        = $SessionContext.UserName
             WebView2Used    = $SessionContext.WebView2Used
             LastSessionType = $SessionContext.LastSessionType
+            ExpiresOn       = $ExpiresOn
         }
 
         $State = [PSCustomObject]@{

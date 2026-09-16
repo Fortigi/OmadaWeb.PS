@@ -11,10 +11,12 @@ function Protect-OmadaSessionPayload {
     Export-OmadaSession hands a caller something it will move between runspaces and may well put
     somewhere - a queue, a job argument, a variable it forgets about. What it holds is a live bearer
     token, so the token never appears in the object at all; this string does, and it is ciphertext
-    bound by DPAPI to the current user on the current machine. A copy taken off the machine is inert.
+    bound by DPAPI to the current Windows user account. That binds it to the account, not the
+    computer: any process already running as that account can decrypt it, on this machine or on
+    another one where the account's DPAPI keys roam. Treat the returned string as a secret.
 
-    The same binding is why the state is not portable between users or machines, which is the
-    intended limit: seeding another user's session is not a scenario this module supports.
+    The same binding is why the state is not portable between users, which is the intended limit:
+    seeding another user's session is not a scenario this module supports.
 
     The module refuses to load on non-Windows (OmadaWeb.PS.psm1), so DPAPI is always available here.
 
