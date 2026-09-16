@@ -8,9 +8,11 @@ function Test-SensitiveLogName {
         "_" removed, so X-API-Key, x_api_key and ApiKey are all treated the same way).
 
         Substring patterns are long and unambiguous words such as "apikey" or "signature" - safe to
-        match anywhere in the name. Exact patterns such as "key", "code" and "sig" are short enough
-        that matching them as substrings would redact ordinary members like StatusCode or Keys, so
-        they are matched only when they are the whole normalized name.
+        match anywhere in the name. Exact patterns such as "key" and "sig" are short enough that
+        matching them as substrings would redact ordinary members like StatusCode or Keys, so
+        they are matched only when they are the whole normalized name. The exact names are "key"
+        and "sig"; "code" is deliberately not a member-name pattern here, because a sign-in error's
+        Code member is a diagnostic, and is masked only as a URL query parameter by Protect-LogMessage.
     #>
     [CmdletBinding()]
     param(

@@ -135,9 +135,11 @@ catch {}
 # kind of cost that does not belong on that path. Matched through Test-SensitiveLogName against a
 # normalized name (lowercased, "-" and "_" stripped), so X-API-Key, api_key and ApiKey are all one
 # name. Two lists: long, unambiguous words are matched as substrings, so composites such as
-# X-CSRF-Token, RefreshToken and SessionCookie are covered too. Short words such as "key", "code" and
-# "sig" would, as substrings, redact ordinary members like StatusCode or Keys - those are matched
-# only when they are the whole normalized name.
+# X-CSRF-Token, RefreshToken and SessionCookie are covered too. Short words such as "key" and "sig"
+# would, as substrings, redact ordinary members like StatusCode or Keys - those are matched only
+# when they are the whole normalized name. The exact names are "key" and "sig"; "code" is
+# deliberately not a member-name pattern here, because a sign-in error's Code member is a
+# diagnostic, and is masked only as a URL query parameter by Protect-LogMessage.
 $Script:RedactedLogToken = "***REDACTED***"
 $Script:SensitiveLogNameSubstringPatterns = @(
     "authorization", "cookie", "credential", "password", "pwd", "secret", "token",
