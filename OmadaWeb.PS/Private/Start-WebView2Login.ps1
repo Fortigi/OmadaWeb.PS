@@ -59,10 +59,6 @@ function Start-WebView2Login {
             $Script:WebView2.CreationProperties.IsInPrivateModeEnabled = $true
         }
 
-        #https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags
-        #$EnvironmentOptions = "--msSingleSignOnOSForPrimaryAccountIsShared"
-        #$Script:WebView2.CreationProperties.AdditionalBrowserArguments = $EnvironmentOptions
-
         $InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
 
         $Script:WinForm_Load = {
@@ -77,7 +73,7 @@ function Start-WebView2Login {
         $Script:WebView_SourceChanged = {
             try {
                 if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.Source -and $null -ne $Script:WinForm) {
-                    $Script:WinForm.Text = "OmadaWeb.PS - {0}" -f $Script:WebView2.Source.AbsoluteUri
+                    $Script:WinForm.Text = Get-WebView2WindowTitle -Uri $Script:WebView2.Source
                 }
             }
             catch [System.Management.Automation.PipelineStoppedException] {
