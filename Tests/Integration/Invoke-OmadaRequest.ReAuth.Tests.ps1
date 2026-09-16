@@ -1,3 +1,4 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'ModulePath', Justification = 'Used inside the BeforeAll script block, a scope the analyzer does not cross.')]
 param(
     [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
@@ -145,6 +146,18 @@ Describe 'Invoke-OmadaRequest 401 re-authentication' -Tag 'Integration' {
                 secure   = $false
                 sameSite = "Lax"
             }
+        }
+    }
+
+    Context 'A caller-supplied -Headers hashtable' {
+        It 'survives the 401-triggered re-authentication and recursive retry without a duplicate-key error, and is left unchanged' {
+            Reset-ServerState -Unauthorized 1
+            $CallerHeaders = @{ 'X-Caller' = 'present' }
+
+            { Invoke-OmadaRestMethod -Uri $Script:ServerUri -AuthenticationType WebView2 -SkipCookieCache -Headers $CallerHeaders -ErrorAction Stop } | Should -Not -Throw
+
+            $CallerHeaders.Count | Should -Be 1
+            $CallerHeaders.Keys | Should -Not -Contain 'Authorization'
         }
     }
 

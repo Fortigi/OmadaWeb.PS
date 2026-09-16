@@ -145,7 +145,10 @@
         "{0} - The OAuth2 endpoint '{1}' returned no access_token. Continuing with an empty bearer value." -f $MyInvocation.MyCommand, $OAuthUri | Write-Verbose
     }
 
-    $BoundParams['Headers'].Add("Authorization" , "Bearer {0}" -f $AccessToken)
+    # Indexer assignment, not .Add: a caller-supplied Authorization header may already be present,
+    # and the OAuth authentication the caller asked for overrides it rather than throwing on a
+    # duplicate key.
+    $BoundParams['Headers']['Authorization'] = "Bearer {0}" -f $AccessToken
 
     return $RequestContext
 }

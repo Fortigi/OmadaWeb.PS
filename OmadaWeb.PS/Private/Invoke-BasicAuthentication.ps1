@@ -14,7 +14,10 @@ function Invoke-BasicAuthentication {
     }
     $CredentialPair = "{0}:{1}" -f $BoundParams['Credential'].UserName.Trim(), $BoundParams['Credential'].GetNetworkCredential().Password
     $EncodedCredential = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($CredentialPair))
-    $BoundParams['Headers'].Add("Authorization" , ("Basic {0}" -f $EncodedCredential))
+    # Indexer assignment, not .Add: a caller-supplied Authorization header may already be present,
+    # and the Basic authentication the caller asked for overrides it rather than throwing on a
+    # duplicate key.
+    $BoundParams['Headers']['Authorization'] = "Basic {0}" -f $EncodedCredential
 
     return $RequestContext
 }

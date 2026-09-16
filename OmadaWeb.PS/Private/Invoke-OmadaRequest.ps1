@@ -66,9 +66,19 @@ function Invoke-OmadaRequest {
                 RetryIntervalSec  = [int]$BoundParams['RetryIntervalSec']
             }
 
-            if ("Headers" -notin $BoundParams.Keys) {
-                $BoundParams.Add("Headers", @{})
+            # Copied into a NEW case-insensitive dictionary rather than kept as the caller's own
+            # object: this module writes the bearer token or Basic credential, and default
+            # Accept/Content-Type, into $BoundParams['Headers'] below, and the caller's object must
+            # never receive them and must stay reusable for a later call (issue #103). Enumerated as
+            # key/value entries, not .Keys, so a header literally named "Keys" cannot shadow the
+            # enumerator.
+            $Headers = [System.Collections.Hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
+            if ($BoundParams.Keys -contains "Headers" -and $null -ne $BoundParams['Headers']) {
+                foreach ($Entry in $BoundParams['Headers'].GetEnumerator()) {
+                    $Headers[$Entry.Key] = $Entry.Value
+                }
             }
+            $BoundParams['Headers'] = $Headers
 
             $Uri = [System.Uri]::new($BoundParams['Uri'])
             if ($null -ne $Uri) {
@@ -308,15 +318,18 @@ function Invoke-OmadaRequest {
                     "Invoke-RestMethod" {
 
                         if ("Accept" -notin $BoundParams['Headers'].Keys) {
-                            $BoundParams['Headers'].Add("Accept", "application/json")
+                            $BoundParams['Headers']['Accept'] = "application/json"
                         }
 
                         if ("ContentType" -in $BoundParams.Keys) {
-                            $BoundParams['Headers'].Add("Content-Type", $BoundParams['ContentType'])
+                            # -ContentType is the caller's explicit choice, so it wins over a
+                            # Content-Type header that may already be present - indexer assignment
+                            # rather than .Add, since the key may already be there.
+                            $BoundParams['Headers']['Content-Type'] = $BoundParams['ContentType']
                             $BoundParams.Remove("ContentType") | Out-Null
                         }
                         elseif ("Content-Type" -notin $BoundParams['Headers'].Keys) {
-                            $BoundParams['Headers'].Add("Content-Type", "application/json")
+                            $BoundParams['Headers']['Content-Type'] = "application/json"
                         }
                         $Parameters = Set-RequestParameter -RequestContext $RequestContext
 

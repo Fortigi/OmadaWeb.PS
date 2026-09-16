@@ -12,12 +12,9 @@ function Set-Body {
         "{0} - Provided -Body is empty this is mandatory for a {1} command" -f $MyInvocation.MyCommand , $BoundParams['Method'] | Write-Error -ErrorAction "Stop"
     }
 
-    if ("Content-Type" -notin $BoundParams['Headers'].Keys) {
-        $BoundParams['Headers'].Add("Content-Type", "application/json")
-    }
-    else {
-        $BoundParams['Headers'].'Content-Type' = "application/json"
-    }
+    # Indexer assignment, not .Add: a Content-Type header may already be present, and this
+    # function always overrides it to json regardless.
+    $BoundParams['Headers']['Content-Type'] = "application/json"
     if ($BoundParams['Body'].GetType().FullName -in @("System.Collections.Hashtable", "System.Collections.Specialized.OrderedDictionary", "System.Management.Automation.PSCustomObject")) {
         "{0} - Provided -Body data type is {1}, converting it to json" -f $MyInvocation.MyCommand, $BoundParams['Body'].GetType().FullName | Write-Verbose
         # Depth 100 (the maximum PowerShell accepts) so nested request bodies are never
