@@ -8,14 +8,21 @@ on:
       - 'OmadaWeb.PS/**'
   workflow_dispatch:
 
+# Least-privilege default: every job only reads the repository unless it declares
+# its own permissions block, which resets unlisted scopes to none.
 permissions:
-  contents: write
-  checks: write
+  contents: read
 
 jobs:
   build:
     name: Build
     runs-on: windows-latest
+
+    # checkout needs contents: read; publishing the Pester results with
+    # dorny/test-reporter needs checks: write. Nothing else in this job writes.
+    permissions:
+      contents: read
+      checks: write
 
     outputs:
       build_version: ${{ steps.versioning.outputs.build_version }}
@@ -99,6 +106,11 @@ jobs:
     # push to main, so publishing always needs a deliberate human action.
     if: github.event_name == 'workflow_dispatch'
     environment: release
+
+    # Pushes the release tag and publishes a GitHub Release, so this job (only)
+    # needs write access to repository contents.
+    permissions:
+      contents: write
 
     env:
       BUILD_VERSION: ${{ needs.build.outputs.build_version }}
