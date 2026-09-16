@@ -49,11 +49,14 @@ Describe 'Install-EdgeDriver' -Tag 'Unit' {
             $Env:TEMP = $TempFolder
             $Env:TMP = $TempFolder
             try {
-                $FileCountBefore = (Get-ChildItem -Path $TempFolder -Force).Count
+                # @(...) forces an array even when the folder holds 0 or exactly 1 item - under
+                # StrictMode, .Count on a single non-collection object (or $null) throws
+                # PropertyNotFoundException instead of just being wrong.
+                $FileCountBefore = @(Get-ChildItem -Path $TempFolder -Force).Count
 
                 Install-EdgeDriver -InstalledEdgeFileInfo ([PSCustomObject]@{ VersionInfo = [PSCustomObject]@{ ProductVersion = '128.0.2739.33' } })
 
-                $FileCountAfter = (Get-ChildItem -Path $TempFolder -Force).Count
+                $FileCountAfter = @(Get-ChildItem -Path $TempFolder -Force).Count
             }
             finally {
                 $Env:TEMP = $OriginalTemp

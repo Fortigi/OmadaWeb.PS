@@ -248,6 +248,11 @@ function Start-WebView2Login {
 
             # If ForceAuthentication, clear data after initialization
             if ($Script:CurrentWebView2Session.ForceAuthentication -and -not $Script:CurrentWebView2Session.BrowserDataCleared) {
+                # Set before the continuation below is registered, so Test-WebView2NavigationReady
+                # blocks navigation from the moment a clear is committed to. Cleared on every path out
+                # of that continuation - success, and a synchronous failure of the call itself - so a
+                # clear that never runs, or that fails, cannot leave the sign-in window waiting forever.
+                $Script:CurrentWebView2Session.BrowserDataClearPending = $true
                 $InitTask.GetAwaiter().OnCompleted({
                         try {
                             "Start-WebView2Login - WebView2 initialized, clearing browsing data..." | Write-Verbose
@@ -255,11 +260,13 @@ function Start-WebView2Login {
                             $ClearTask.GetAwaiter().OnCompleted({
                                     "Start-WebView2Login - Browsing data cleared" | Write-Verbose
                                     $Script:CurrentWebView2Session.BrowserDataCleared = $true
+                                    $Script:CurrentWebView2Session.BrowserDataClearPending = $false
                                 })
                         }
                         catch {
                             $Msg = "Error clearing data: $_. This is non-terminating error."
                             [Console]::WriteLine($Msg)
+                            $Script:CurrentWebView2Session.BrowserDataClearPending = $false
                         }
                     })
             }
