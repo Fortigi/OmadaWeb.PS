@@ -67,26 +67,18 @@ function Invoke-OmadaRequest {
             }
 
             # Copied into a NEW case-insensitive dictionary rather than kept as the caller's own
-            # object: every header this module adds from here on (the bearer token or Basic
-            # credential below, the default Accept/Content-Type further down) is written into
-            # $BoundParams['Headers'], and until this copy existed that was the caller's own
-            # hashtable - reusing it for a second call then failed with "Item has already been
-            # added. Key in dictionary: 'Authorization'" (issue #103). A caller's -Headers can be
-            # any IDictionary, not only a [hashtable] (see "BoundParameters is not a Hashtable"),
-            # so this copies by enumerating rather than by casting.
-            $CallerHeaders = if ($BoundParams.Keys -contains "Headers") { $BoundParams['Headers'] } else { $null }
-            $HeadersCopy = [System.Collections.Hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
-            if ($null -ne $CallerHeaders) {
-                foreach ($HeaderKey in $CallerHeaders.Keys) {
-                    $HeadersCopy[$HeaderKey] = $CallerHeaders[$HeaderKey]
+            # object: this module writes the bearer token or Basic credential, and default
+            # Accept/Content-Type, into $BoundParams['Headers'] below, and the caller's object must
+            # never receive them and must stay reusable for a later call (issue #103). Enumerated as
+            # key/value entries, not .Keys, so a header literally named "Keys" cannot shadow the
+            # enumerator.
+            $Headers = [System.Collections.Hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
+            if ($BoundParams.Keys -contains "Headers") {
+                foreach ($Entry in $BoundParams['Headers'].GetEnumerator()) {
+                    $Headers[$Entry.Key] = $Entry.Value
                 }
             }
-            if ($BoundParams.Keys -contains "Headers") {
-                $BoundParams['Headers'] = $HeadersCopy
-            }
-            else {
-                $BoundParams.Add("Headers", $HeadersCopy)
-            }
+            $BoundParams['Headers'] = $Headers
 
             $Uri = [System.Uri]::new($BoundParams['Uri'])
             if ($null -ne $Uri) {
@@ -331,8 +323,8 @@ function Invoke-OmadaRequest {
 
                         if ("ContentType" -in $BoundParams.Keys) {
                             # -ContentType is the caller's explicit choice, so it wins over a
-                            # Content-Type header already sitting in the (now copied) dictionary -
-                            # indexer assignment rather than .Add, since the key may already be there.
+                            # Content-Type header that may already be present - indexer assignment
+                            # rather than .Add, since the key may already be there.
                             $BoundParams['Headers']['Content-Type'] = $BoundParams['ContentType']
                             $BoundParams.Remove("ContentType") | Out-Null
                         }

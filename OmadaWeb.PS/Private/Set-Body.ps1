@@ -12,10 +12,8 @@ function Set-Body {
         "{0} - Provided -Body is empty this is mandatory for a {1} command" -f $MyInvocation.MyCommand , $BoundParams['Method'] | Write-Error -ErrorAction "Stop"
     }
 
-    # Indexer assignment, not .Add: the key may already be present in the (now copied) Headers
-    # dictionary, and this function always overrides it to json regardless - issue #105 addresses
-    # that "always json" override behaviour separately, so it is kept as-is here beyond the
-    # .Add -> indexer change.
+    # Indexer assignment, not .Add: a Content-Type header may already be present, and this
+    # function always overrides it to json regardless.
     $BoundParams['Headers']['Content-Type'] = "application/json"
     if ($BoundParams['Body'].GetType().FullName -in @("System.Collections.Hashtable", "System.Collections.Specialized.OrderedDictionary", "System.Management.Automation.PSCustomObject")) {
         "{0} - Provided -Body data type is {1}, converting it to json" -f $MyInvocation.MyCommand, $BoundParams['Body'].GetType().FullName | Write-Verbose

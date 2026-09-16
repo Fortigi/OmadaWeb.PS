@@ -1,3 +1,6 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingAllowUnencryptedAuthentication', '', Justification = 'Exercises the module against an in-process http:// fake endpoint; the switch is required to get past Invoke-RestMethod''s own credential-over-http validator in this test-only scenario.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'ModulePath', Justification = 'Used inside the BeforeAll script block, a scope the analyzer does not cross.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseUsingScopeModifierInNewRunspaces', '', Justification = 'Start-ThreadJob -ArgumentList already passes these in explicitly, received via the script block''s own param() - the analyzer does not associate the two.')]
 param(
     [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )

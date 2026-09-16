@@ -145,9 +145,9 @@
         "{0} - The OAuth2 endpoint '{1}' returned no access_token. Continuing with an empty bearer value." -f $MyInvocation.MyCommand, $OAuthUri | Write-Verbose
     }
 
-    # Indexer assignment, not .Add: the caller may already have supplied an Authorization header
-    # (in the now-copied Headers dictionary - see Invoke-OmadaRequest.ps1), and the authentication
-    # the caller asked for here overrides it rather than throwing on a duplicate key.
+    # Indexer assignment, not .Add: a caller-supplied Authorization header may already be present,
+    # and the OAuth authentication the caller asked for overrides it rather than throwing on a
+    # duplicate key.
     $BoundParams['Headers']['Authorization'] = "Bearer {0}" -f $AccessToken
 
     return $RequestContext
