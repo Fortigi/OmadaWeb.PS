@@ -29,7 +29,7 @@ function Import-OmadaCookieFile {
         [string]$Path
     )
 
-    if (!(Test-Path -Path $Path -PathType Leaf)) {
+    if (!(Test-Path -LiteralPath $Path -PathType Leaf)) {
         return $null
     }
 
@@ -45,7 +45,7 @@ function Import-OmadaCookieFile {
     # defeat the point of protecting it.
     $Bstr = [System.IntPtr]::Zero
     try {
-        $Bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml -Path $Path))
+        $Bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR((Import-Clixml -LiteralPath $Path))
 
         # PtrToStringBSTR, not PtrToStringAuto: SecureStringToBSTR returns a length-prefixed BSTR, so
         # this is the marshaller that reads exactly the right number of characters.

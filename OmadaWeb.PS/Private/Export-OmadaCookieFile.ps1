@@ -48,7 +48,7 @@ function Export-OmadaCookieFile {
         # string before it can go into a SecureString.
         $CookieCliXmlContent = [System.Management.Automation.PSSerializer]::Serialize($CookieObject, [int]::MaxValue)
         $SecureCookieCliXml = ConvertTo-SecureString -String $CookieCliXmlContent -AsPlainText -Force
-        $SecureCookieCliXml | Export-Clixml -Path $Path -Force
+        $SecureCookieCliXml | Export-Clixml -LiteralPath $Path -Force
 
         "{0} - Wrote protected cookie file: {1}" -f $MyInvocation.MyCommand, $Path | Write-Verbose
         return $true

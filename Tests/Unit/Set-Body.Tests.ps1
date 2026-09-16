@@ -64,11 +64,43 @@ Describe 'Set-Body' -Tag 'Unit' {
             }
         }
 
-        It 'Should overwrite an existing Content-Type header with application/json' {
+        It 'Should overwrite an existing Content-Type header with application/json when the body is converted' {
             InModuleScope 'OmadaWeb.PS' {
-                $BoundParams = @{ Method = 'POST'; Headers = @{ 'Content-Type' = 'text/plain' } ; Body = @{ key = 'value' } }
+                $BoundParams = @{ Method = 'POST'; Headers = @{ 'Content-Type' = 'application/x-www-form-urlencoded' } ; Body = @{ key = 'value' } }
                 Set-Body -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
                 $BoundParams.Headers.'Content-Type' | Should -Be 'application/json'
+                ($BoundParams.Body | ConvertFrom-Json).key | Should -Be 'value'
+            }
+        }
+
+        It 'Should keep a caller-supplied Content-Type when the body is a raw string (issue #105)' {
+            # A string body is passed through as-is, so a caller who set their own Content-Type
+            # (e.g. application/xml) must not have it silently overwritten with application/json.
+            InModuleScope 'OmadaWeb.PS' {
+                $BoundParams = @{ Method = 'POST'; Headers = @{ 'Content-Type' = 'application/xml' } ; Body = '<xml>raw</xml>' }
+                Set-Body -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+                $BoundParams.Headers.'Content-Type' | Should -Be 'application/xml'
+                $BoundParams.Body | Should -Be '<xml>raw</xml>'
+            }
+        }
+
+        It 'Should default a raw string body with no Content-Type header to application/json' {
+            InModuleScope 'OmadaWeb.PS' {
+                $BoundParams = @{ Method = 'POST'; Headers = @{} ; Body = '{"already":"json"}' }
+                Set-Body -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+                $BoundParams.Headers.'Content-Type' | Should -Be 'application/json'
+            }
+        }
+
+        It 'Should recognise a caller-supplied Content-Type header regardless of its casing (issue #105)' {
+            # The Headers dictionary is a case-insensitive copy since #103, so a lowercase
+            # "content-type" from the caller must be recognised as already present.
+            InModuleScope 'OmadaWeb.PS' {
+                $Headers = [System.Collections.Hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
+                $Headers['content-type'] = 'application/xml'
+                $BoundParams = @{ Method = 'POST'; Headers = $Headers ; Body = '<xml>raw</xml>' }
+                Set-Body -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
+                $BoundParams.Headers['content-type'] | Should -Be 'application/xml'
             }
         }
     }
