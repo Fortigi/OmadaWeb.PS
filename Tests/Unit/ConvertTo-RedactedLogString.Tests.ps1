@@ -53,13 +53,12 @@ Describe 'ConvertTo-RedactedLogString' -Tag 'Unit' {
             }
         }
 
-        It 'Should mask bare key, sig, signature, code, passwd, passphrase and ProtectedState names' {
+        It 'Should mask bare key, sig, signature, passwd, passphrase and ProtectedState names' {
             InModuleScope 'OmadaWeb.PS' {
                 $Result = ConvertTo-RedactedLogString -InputObject @{
                     key            = 'key-secret'
                     sig            = 'sig-secret'
                     signature      = 'signature-secret'
-                    code           = 'code-secret'
                     passwd         = 'passwd-secret'
                     passphrase     = 'passphrase-secret'
                     ProtectedState = 'protected-state-secret'
@@ -67,10 +66,19 @@ Describe 'ConvertTo-RedactedLogString' -Tag 'Unit' {
                 $Result | Should -Not -Match 'key-secret'
                 $Result | Should -Not -Match 'sig-secret'
                 $Result | Should -Not -Match 'signature-secret'
-                $Result | Should -Not -Match 'code-secret'
                 $Result | Should -Not -Match 'passwd-secret'
                 $Result | Should -Not -Match 'passphrase-secret'
                 $Result | Should -Not -Match 'protected-state-secret'
+            }
+        }
+
+        It 'Should keep a bare Code member, which carries the AADSTS/sign-in error code the module logs' {
+            InModuleScope 'OmadaWeb.PS' {
+                # Get-EntraErrorVerdict.ps1, Stop-OmadaLogin.ps1, Test-OmadaLogonPageError.ps1 and
+                # Resolve-EntraSignInScreen.ps1 all build an object whose Code member is exactly this -
+                # the one thing a reader needs to diagnose a failed sign-in (issues #76/#77).
+                $Result = ConvertTo-RedactedLogString -InputObject @{ Code = 'AADSTS50058'; Message = 'x' }
+                $Result | Should -Match 'AADSTS50058'
             }
         }
 

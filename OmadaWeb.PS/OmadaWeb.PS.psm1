@@ -145,7 +145,7 @@ $Script:SensitiveLogNameSubstringPatterns = @(
     "privatekey", "connectionstring", "subscriptionkey", "functionskey",
     "passwd", "passphrase", "protectedstate", "signature"
 )
-$Script:SensitiveLogNameExactPatterns = @("key", "code", "sig")
+$Script:SensitiveLogNameExactPatterns = @("key", "sig")
 # Used only inside an object that pairs a Name member with a Value member - a cookie or a header,
 # where the value is the secret. Precomputed for the same reason as the lists above.
 $Script:SensitiveLogNameSubstringPatternsWithValue = $Script:SensitiveLogNameSubstringPatterns + "value"

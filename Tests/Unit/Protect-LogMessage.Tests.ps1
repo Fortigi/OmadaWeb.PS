@@ -103,12 +103,49 @@ Describe 'Protect-LogMessage' -Tag 'Unit' {
             }
         }
 
-        It 'Should mask bare key, code and sig only as exact JSON keys, never as a substring of another key' {
+        It 'Should mask bare key and sig only as exact JSON keys, never as a substring of another key' {
             InModuleScope 'OmadaWeb.PS' {
-                $Result = Protect-LogMessage -Message '{"key": "key-secret", "code": "code-secret", "sig": "sig-secret"}'
+                $Result = Protect-LogMessage -Message '{"key": "key-secret", "sig": "sig-secret"}'
                 $Result | Should -Not -Match 'key-secret'
-                $Result | Should -Not -Match 'code-secret'
                 $Result | Should -Not -Match 'sig-secret'
+            }
+        }
+
+        It 'Should keep a bare code member in JSON text, which carries the AADSTS/sign-in error code' {
+            InModuleScope 'OmadaWeb.PS' {
+                Protect-LogMessage -Message '{"code":"AADSTS50058"}' | Should -Match 'AADSTS50058'
+            }
+        }
+
+        It 'Should mask an OAuth authorization code in a redirect URL query string while keeping the rest' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = Protect-LogMessage -Message 'https://host/cb?code=abc123&state=s'
+                $Result | Should -Not -Match 'abc123'
+                $Result | Should -Match 'state=s'
+            }
+        }
+
+        It 'Should leave a bare "code" outside a query string untouched' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Message = 'status code=401'
+                Protect-LogMessage -Message $Message | Should -Be $Message
+            }
+        }
+
+        It 'Should mask an Azure SAS signature in a URL query string' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = Protect-LogMessage -Message 'https://acct.blob.core.windows.net/c/b?sig=abc123%3D&se=2026-01-01'
+                $Result | Should -Not -Match 'abc123'
+                $Result | Should -Match 'se=2026-01-01'
+            }
+        }
+
+        It 'Should mask a bare key=value pair but not key preceded by "-" or "."' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = Protect-LogMessage -Message 'key=key-secret&x.key=untouched-secret&some-key=also-untouched'
+                $Result | Should -Not -Match 'key=key-secret'
+                $Result | Should -Match 'x.key=untouched-secret'
+                $Result | Should -Match 'some-key=also-untouched'
             }
         }
 
@@ -136,6 +173,21 @@ Describe 'Protect-LogMessage' -Tag 'Unit' {
                 Protect-LogMessage -Message $Message | Should -Be $Message
             }
         }
+
+        It 'Should mask a token embedded as URL user-info with no colon, as a PAT would be' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = Protect-LogMessage -Message 'Fetching https://ghp_Sup3rSecretToken@github.com/org/repo.git'
+                $Result | Should -Not -Match 'ghp_Sup3rSecretToken'
+                $Result | Should -Match 'github\.com/org/repo\.git'
+            }
+        }
+
+        It 'Should leave a plain email address with no scheme untouched' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Message = 'Contact mark@example.com for access'
+                Protect-LogMessage -Message $Message | Should -Be $Message
+            }
+        }
     }
 
     Context 'Cookies' {
@@ -145,6 +197,23 @@ Describe 'Protect-LogMessage' -Tag 'Unit' {
                 $Result | Should -Not -Match 'a=1'
                 $Result | Should -Not -Match 'oisauthtoken=x'
                 $Result | Should -Match 'Cookie:'
+            }
+        }
+
+        It 'Should mask both cookies in "Cookie: a=1; b=2"' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = Protect-LogMessage -Message 'Cookie: a=1; b=2'
+                $Result | Should -Not -Match 'a=1'
+                $Result | Should -Not -Match 'b=2'
+            }
+        }
+
+        It 'Should not let the Cookie-header rule reach into a Set-Cookie line and mask its attributes' {
+            InModuleScope 'OmadaWeb.PS' {
+                $Result = Protect-LogMessage -Message 'Set-Cookie: oisauthtoken=cookie-secret-value; Path=/; HttpOnly'
+                $Result | Should -Not -Match 'cookie-secret-value'
+                $Result | Should -Match 'Path=/'
+                $Result | Should -Match 'HttpOnly'
             }
         }
 
