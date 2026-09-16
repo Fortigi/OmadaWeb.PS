@@ -16,9 +16,8 @@ BeforeAll {
     # received so the assertions can tell the module's own copy of -Headers apart from whatever
     # the caller still holds.
     #
-    # -OAuthUri is pointed at this same http:// listener for the OAuth scenario below. Issue #102
-    # will require -OAuthUri to be https; until that lands, http is the only way to exercise the
-    # OAuth authentication path against an in-process fake endpoint.
+    # -OAuthUri must be https (issue #102), so the OAuth scenario below mocks the Invoke-OAuthTokenRequest
+    # seam instead of pointing the token call at this http:// listener - see the comment on that test.
     $Script:Port = Get-Random -Minimum 19000 -Maximum 21000
     $Script:BaseUrl = "http://127.0.0.1:$Script:Port"
 
@@ -130,21 +129,31 @@ Describe 'Invoke-TestOmadaRestMethod does not mutate the caller''s -Headers' -Ta
             Reset-FakeServer
             $AllowUnencryptedAuthParams = $Script:AllowUnencryptedAuthParams
 
+            # -OAuthUri must be https (issue #102), so the token call can no longer be pointed at this
+            # file's http:// in-process fake server. Invoke-OAuthTokenRequest is the seam
+            # Invoke-OAuth2Authentication calls for the token itself; mocked here instead of
+            # Invoke-RestMethod, because mocking the cmdlet directly breaks Set-DynamicParameter's
+            # introspection of it, which Invoke-OmadaRestMethod's own dynamicparam block relies on.
+            # The request under test still goes to the real listener below, which is what 'served' is
+            # asserted from - the header-copy assertions stay end-to-end.
+            Mock -ModuleName OmadaWeb.PS Invoke-OAuthTokenRequest { [pscustomobject]@{ access_token = 'fake-oauth-token' } }
+
             $Credential = New-Object System.Management.Automation.PSCredential('test-client', (ConvertTo-SecureString 'test-secret' -AsPlainText -Force))
             $CallerHeaders = @{ 'X-Caller' = 'present' }
 
-            $Result1 = Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType OAuth -OAuthUri "$Script:BaseUrl/token" -ClientId 'test-client' -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams
+            $Result1 = Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType OAuth -OAuthUri 'https://login.example.test/token' -ClientId 'test-client' -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams
 
             $Result1.value | Should -Be 'served'
             $CallerHeaders.Count | Should -Be 1
             $CallerHeaders.Keys | Should -Not -Contain 'Authorization'
             $Script:SharedServer.LastAuthorization | Should -Be 'Bearer fake-oauth-token'
+            Should -Invoke -ModuleName OmadaWeb.PS Invoke-OAuthTokenRequest -Times 1
 
             # Reused for a second call - this is exactly what threw "Item has already been added.
             # Key in dictionary: 'Authorization'" before the fix, because the first call had added
             # the token straight into the caller's own hashtable.
             Reset-FakeServer
-            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType OAuth -OAuthUri "$Script:BaseUrl/token" -ClientId 'test-client' -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams -ErrorAction Stop } | Should -Not -Throw
+            { Invoke-TestOmadaRestMethod -Uri "$Script:BaseUrl/data" -AuthenticationType OAuth -OAuthUri 'https://login.example.test/token' -ClientId 'test-client' -Credential $Credential -Headers $CallerHeaders @AllowUnencryptedAuthParams -ErrorAction Stop } | Should -Not -Throw
 
             $CallerHeaders.Count | Should -Be 1
             $CallerHeaders.Keys | Should -Not -Contain 'Authorization'

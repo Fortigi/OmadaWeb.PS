@@ -79,7 +79,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 
         It 'Should return the same context instance it was given' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
-                Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
 
                 $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
 
@@ -122,7 +122,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
         It 'Should send a signed client assertion instead of a client secret' {
             $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate } {
                 $Captured = $null
-                Mock Invoke-RestMethod {
+                Mock Invoke-OAuthTokenRequest {
                     $Script:CapturedBody = $Body
                     return [PSCustomObject]@{ access_token = 'certificate-token' }
                 }
@@ -152,7 +152,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 
         It 'Should bind the assertion to the token endpoint that is actually called' {
             $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate } {
-                Mock Invoke-RestMethod {
+                Mock Invoke-OAuthTokenRequest {
                     $Script:CapturedBody = $Body
                     return [PSCustomObject]@{ access_token = 'token' }
                 }
@@ -180,7 +180,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
         It 'Should not take the client id from the credential when a certificate is used' {
             {
                 InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate; Credential = $Script:Credential } {
-                    Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
+                    Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
 
                     # A credential is present, so its user name could be read - and deliberately is
                     # not. It may belong to something else entirely, and an assertion signed for the
@@ -195,7 +195,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 
         It 'Should warn that the client secret is ignored when both credentials are supplied' {
             $Warnings = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate; Credential = $Script:Credential } {
-                Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
 
                 $BoundParams = @{ ClientId = 'client'; Credential = $Credential; OAuthCertificate = $Certificate; EntraIdTenantId = 'tenant'; Headers = @{} }
 
@@ -213,7 +213,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
             # to the next call, so disposing that one would break the second request in every script
             # that holds its certificate in a variable.
             $Assertions = InModuleScope 'OmadaWeb.PS' -Parameters @{ Certificate = $Script:ClientCertificate } {
-                Mock Invoke-RestMethod {
+                Mock Invoke-OAuthTokenRequest {
                     $Script:CapturedBody = $Body
                     return [PSCustomObject]@{ access_token = 'token' }
                 }
@@ -238,7 +238,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
             # same file must both sign, which they cannot do if the first one released something the
             # second still needed.
             $Assertions = InModuleScope 'OmadaWeb.PS' -Parameters @{ Path = $Script:CertificateFilePath; Password = $Script:CertificateFilePassword } {
-                Mock Invoke-RestMethod {
+                Mock Invoke-OAuthTokenRequest {
                     $Script:CapturedBody = $Body
                     return [PSCustomObject]@{ access_token = 'token' }
                 }
@@ -266,7 +266,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 
         It 'Should still send a client secret when no certificate is supplied' {
             $Body = InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
-                Mock Invoke-RestMethod {
+                Mock Invoke-OAuthTokenRequest {
                     $Script:CapturedBody = $Body
                     return [PSCustomObject]@{ access_token = 'token' }
                 }
@@ -286,13 +286,13 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
     Context 'Token request' {
         It 'Should build the Entra ID token URL from EntraIdTenantId and add the Authorization header' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
-                Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'test-token'; token_type = 'Bearer' } } -Verifiable
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'test-token'; token_type = 'Bearer' } } -Verifiable
 
                 $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'c1ec94c3-4a7a-4568-9321-79b0a74b8e70'; Headers = @{} }
 
                 Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
-                Should -Invoke Invoke-RestMethod -ParameterFilter {
+                Should -Invoke Invoke-OAuthTokenRequest -ParameterFilter {
                     $Uri -eq 'https://login.microsoftonline.com/c1ec94c3-4a7a-4568-9321-79b0a74b8e70/oauth2/v2.0/token'
                 }
                 $BoundParams.Headers.Authorization | Should -Be 'Bearer test-token'
@@ -301,20 +301,20 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 
         It 'Should use a custom OAuthUri when provided instead of EntraIdTenantId' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
-                Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'custom-token' } }
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'custom-token' } }
 
                 $BoundParams = @{ Credential = $Credential; OAuthUri = 'https://idp.example.com/oauth2/token'; Headers = @{} }
 
                 Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
-                Should -Invoke Invoke-RestMethod -ParameterFilter { $Uri -eq 'https://idp.example.com/oauth2/token' }
+                Should -Invoke Invoke-OAuthTokenRequest -ParameterFilter { $Uri -eq 'https://idp.example.com/oauth2/token' }
                 $BoundParams.Headers.Authorization | Should -Be 'Bearer custom-token'
             }
         }
 
         It 'Should default the scope to "<BaseUrl>/.default" when OAuthScope is not provided' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
-                Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
 
                 # The default scope comes from the context's SessionContext.BaseUrl, which is the
                 # only member of it this helper reads.
@@ -322,19 +322,166 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 
                 Invoke-OAuth2Authentication -RequestContext $RequestContext | Out-Null
 
-                Should -Invoke Invoke-RestMethod -ParameterFilter { $Body.scope -eq 'https://example.omada.cloud/.default' }
+                Should -Invoke Invoke-OAuthTokenRequest -ParameterFilter { $Body.scope -eq 'https://example.omada.cloud/.default' }
             }
         }
 
         It 'Should use a custom OAuthScope when provided' {
             InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
-                Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
 
                 $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'tenant'; OAuthScope = 'customScope'; Headers = @{} }
 
                 Invoke-OAuth2Authentication -RequestContext (New-TestRequestContext -BoundParams $BoundParams) | Out-Null
 
-                Should -Invoke Invoke-RestMethod -ParameterFilter { $Body.scope -eq 'customScope' }
+                Should -Invoke Invoke-OAuthTokenRequest -ParameterFilter { $Body.scope -eq 'customScope' }
+            }
+        }
+    }
+
+    Context 'Token request failure' {
+        It 'Should throw a terminating error carrying the identity provider error when the token request fails' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-OAuthTokenRequest {
+                    # Shape of what PowerShell 7's Invoke-RestMethod actually throws for a non-success
+                    # JSON response: an ErrorRecord whose ErrorDetails.Message carries the body. Built
+                    # by hand and thrown as an ErrorRecord (not wrapped in a plain exception), because
+                    # PowerShell preserves an ErrorRecord thrown this way exactly as given.
+                    $ResponseException = [System.Exception]::new('Response status code does not indicate success: 400 (Bad Request).')
+                    $IdpErrorRecord = [System.Management.Automation.ErrorRecord]::new($ResponseException, 'WebCmdletWebResponseException', [System.Management.Automation.ErrorCategory]::InvalidOperation, $null)
+                    $IdpErrorRecord.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('{"error":"invalid_client","error_description":"AADSTS7000215: Invalid client secret provided.","error_codes":[7000215]}')
+                    throw $IdpErrorRecord
+                }
+
+                $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
+                $RequestContext = New-TestRequestContext -BoundParams $BoundParams
+
+                $CaughtError = $null
+                try {
+                    Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop
+                }
+                catch {
+                    $CaughtError = $_
+                }
+
+                $CaughtError | Should -Not -BeNullOrEmpty
+                $CaughtError.FullyQualifiedErrorId | Should -Match '^OmadaOAuthTokenRequestFailed'
+                $CaughtError.CategoryInfo.Category | Should -Be 'AuthenticationError'
+                $CaughtError.Exception.Message | Should -Match 'invalid_client'
+                $CaughtError.Exception.Message | Should -Match 'AADSTS7000215'
+                $BoundParams.Headers.ContainsKey('Authorization') | Should -BeFalse
+            }
+        }
+
+        It 'Should still throw a terminating error when the failed response has no parseable body' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-OAuthTokenRequest {
+                    throw [System.Exception]::new('Unable to connect to the remote server.')
+                }
+
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
+
+                $CaughtError = $null
+                try {
+                    Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop
+                }
+                catch {
+                    $CaughtError = $_
+                }
+
+                $CaughtError | Should -Not -BeNullOrEmpty
+                $CaughtError.FullyQualifiedErrorId | Should -Match '^OmadaOAuthTokenRequestFailed'
+                $CaughtError.Exception.Message | Should -Match 'Unable to connect to the remote server'
+            }
+        }
+
+        It 'Should throw a terminating error when the token response has no access_token' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ token_type = 'Bearer' } }
+
+                $BoundParams = @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
+                $RequestContext = New-TestRequestContext -BoundParams $BoundParams
+
+                $CaughtError = $null
+                try {
+                    Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop
+                }
+                catch {
+                    $CaughtError = $_
+                }
+
+                $CaughtError | Should -Not -BeNullOrEmpty
+                $CaughtError.FullyQualifiedErrorId | Should -Match '^OmadaOAuthTokenRequestFailed'
+                $CaughtError.Exception.Message | Should -Match 'no access_token'
+                $BoundParams.Headers.ContainsKey('Authorization') | Should -BeFalse
+            }
+        }
+
+        It 'Should redact a secret-looking value carried in the identity provider error description' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-OAuthTokenRequest {
+                    $ResponseException = [System.Exception]::new('Response status code does not indicate success: 400 (Bad Request).')
+                    $IdpErrorRecord = [System.Management.Automation.ErrorRecord]::new($ResponseException, 'WebCmdletWebResponseException', [System.Management.Automation.ErrorCategory]::InvalidOperation, $null)
+                    $IdpErrorRecord.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('{"error":"invalid_request","error_description":"client_secret=abc123XYZ is malformed"}')
+                    throw $IdpErrorRecord
+                }
+
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; EntraIdTenantId = 'tenant'; Headers = @{} }
+
+                $CaughtError = $null
+                try {
+                    Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop
+                }
+                catch {
+                    $CaughtError = $_
+                }
+
+                $CaughtError.Exception.Message | Should -Not -Match 'abc123XYZ'
+                $CaughtError.Exception.Message | Should -Match 'REDACTED'
+            }
+        }
+    }
+
+    Context 'OAuthUri validation' {
+        It 'Should refuse a non-https OAuthUri before any request' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
+
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; OAuthUri = 'http://idp.example.com/oauth2/token'; Headers = @{} }
+
+                { Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop } | Should -Throw '*https*'
+                Should -Invoke Invoke-OAuthTokenRequest -Times 0
+            }
+        }
+    }
+
+    Context 'EntraIdTenantId validation' {
+        It 'Should accept a GUID tenant id' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; EntraIdTenantId = 'c1ec94c3-4a7a-4568-9321-79b0a74b8e70'; Headers = @{} }
+                { Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop } | Should -Not -Throw
+            }
+        }
+
+        It 'Should accept a DNS-style tenant domain name' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; EntraIdTenantId = 'contoso.onmicrosoft.com'; Headers = @{} }
+                { Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop } | Should -Not -Throw
+            }
+        }
+
+        It 'Should refuse an invalid tenant id before any request' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
+
+                foreach ($InvalidTenantId in @('contoso/../x', 'a?b', 'a#b', 'bad tenant', '.leading')) {
+                    $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; EntraIdTenantId = $InvalidTenantId; Headers = @{} }
+                    { Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop } | Should -Throw
+                }
+
+                Should -Invoke Invoke-OAuthTokenRequest -Times 0
             }
         }
     }
