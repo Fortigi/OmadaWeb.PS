@@ -324,11 +324,14 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
 
                 $Protected = Protect-OmadaSessionPayload -Payload $Payload
                 $RoundTripped = Unprotect-OmadaSessionPayload -ProtectedPayload $Protected
-                # Proves the premise of this test: if PSSerializer ever started collapsing an ordered
-                # payload back to a plain Hashtable, this test would no longer exercise a non-Hashtable
-                # shape, and should say so rather than pass for the wrong reason.
-                $RoundTripped | Should -Not -BeOfType ([hashtable])
                 $RoundTripped | Should -BeOfType ([System.Collections.IDictionary])
+                # Windows PowerShell 5.1's PSSerializer collapses an ordered payload back to a plain
+                # Hashtable on deserialize, unlike PowerShell 7's, so only 7+ can prove this round
+                # trip stays a non-Hashtable shape; 5.1 still exercises the same code path below, just
+                # through a Hashtable like every other test here.
+                if ($PSVersionTable.PSVersion.Major -ge 6) {
+                    $RoundTripped | Should -Not -BeOfType ([hashtable])
+                }
 
                 [PSCustomObject]@{
                     PSTypeName     = "OmadaWeb.PS.SessionState"
