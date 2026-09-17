@@ -44,23 +44,15 @@ Describe 'Invoke-OAuthTokenRequest' -Tag 'Unit' {
 
     It 'Should set -UseBasicParsing only on Windows PowerShell (major version below 6)' {
         InModuleScope 'OmadaWeb.PS' {
-            Mock Invoke-RestMethod {
-                # Captured from inside the mock's own invocation, where $PSBoundParameters reflects
-                # exactly what Invoke-OAuthTokenRequest passed on - the ParameterFilter script block
-                # does not reliably expose an unbound parameter as a variable, and this engine's
-                # UseBasicParsing branch is not taken at all when the test runs on PowerShell 6+.
-                $Script:CapturedHasUseBasicParsing = $PSBoundParameters.ContainsKey('UseBasicParsing')
-                [PSCustomObject]@{ access_token = 'token' }
-            }
+            # $PSBoundParameters inside the mock body does not reliably reflect UseBasicParsing on
+            # Windows PowerShell 5.1 (ContainsKey came back $false there even though it was passed),
+            # so the parameter is asserted through Should -Invoke's own ParameterFilter instead, where
+            # $UseBasicParsing is bound directly to the value the call actually carried.
+            Mock Invoke-RestMethod { [PSCustomObject]@{ access_token = 'token' } }
 
             Invoke-OAuthTokenRequest -Uri 'https://idp.example.com/token' -Body @{ grant_type = 'client_credentials' } | Out-Null
 
-            if ($PSVersionTable.PSVersion.Major -lt 6) {
-                $Script:CapturedHasUseBasicParsing | Should -BeTrue
-            }
-            else {
-                $Script:CapturedHasUseBasicParsing | Should -BeFalse
-            }
+            Should -Invoke Invoke-RestMethod -Times 1 -Exactly -ParameterFilter { [bool]$UseBasicParsing -eq ($PSVersionTable.PSVersion.Major -lt 6) }
         }
     }
 }
