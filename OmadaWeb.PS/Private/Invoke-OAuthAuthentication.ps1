@@ -55,13 +55,45 @@
         if ($null -ne $BoundParams['OAuthUri']) {
             "Using OAuth2 authentication with a provided EntraIdTenantId. Parameter OAuthUri is also provided, but will not be used!" -f $MyInvocation.MyCommand | Write-Warning
         }
-        $OAuthUri = ("https://login.microsoftonline.com/{0}/oauth2/v2.0/token" -f $BoundParams['EntraIdTenantId'])
+
+        $EntraIdTenantId = $BoundParams['EntraIdTenantId']
+
+        # This value is formatted straight into the token endpoint URL below, so it is validated as one
+        # of the two shapes Entra ID actually accepts for a tenant - a GUID, or a DNS-style name such
+        # as 'contoso.onmicrosoft.com' (a single label like 'common' is also a real Entra ID tenant
+        # value and is a syntactically valid DNS name, so it is accepted too). Anything else - a
+        # path segment, a query string, a fragment, whitespace, an empty label - is refused here rather
+        # than escaped, because escaping it would just send a well-formed request to a host the caller
+        # never actually named.
+        $ParsedTenantGuid = [guid]::Empty
+        $TenantIsGuid = [guid]::TryParse($EntraIdTenantId, [ref]$ParsedTenantGuid)
+        $TenantIsDnsName = $EntraIdTenantId -match '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'
+        if (-not $TenantIsGuid -and -not $TenantIsDnsName) {
+            "{0} - EntraIdTenantId '{1}' is neither a GUID nor a DNS-style tenant name (e.g. 'contoso.onmicrosoft.com'). Refusing to build a token endpoint from it." -f $MyInvocation.MyCommand, $EntraIdTenantId | Write-Error -ErrorAction "Stop"
+        }
+
+        $OAuthUri = ("https://login.microsoftonline.com/{0}/oauth2/v2.0/token" -f $EntraIdTenantId)
     }
     elseif ( $null -ne $BoundParams['OAuthUri']) {
         $OAuthUri = $BoundParams['OAuthUri']
     }
     else {
         "{0} - Neither EntraIdTenantId nor OAuthUri provided! Cannot proceed with OAuth authentication!" -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+    }
+
+    # The token request body carries the client secret (or, for the certificate flow, a signed
+    # assertion) form-encoded over the wire, so a non-https endpoint - most often a plain typo of
+    # 'http://' for 'https://' - would send it in clear text. Refused here, before anything is built
+    # from it, rather than left to whatever a plain-HTTP POST happens to do.
+    $OAuthUriScheme = $null
+    try {
+        $OAuthUriScheme = ([System.Uri]$OAuthUri).Scheme
+    }
+    catch {
+        $OAuthUriScheme = $null
+    }
+    if ($OAuthUriScheme -ne [System.Uri]::UriSchemeHttps) {
+        "{0} - -OAuthUri '{1}' must use https. A non-https token endpoint would send the client secret in clear text." -f $MyInvocation.MyCommand, $OAuthUri | Write-Error -ErrorAction "Stop"
     }
 
     $EntraApplicationIdUri = $SessionContext.BaseUrl
@@ -116,33 +148,34 @@
         $RequestBody['client_secret'] = $($BoundParams['Credential'].GetNetworkCredential().Password)
     }
 
-    $Arguments = @{
-        Method      = "Post"
-        Uri         = $OAuthUri
-        Body        = $RequestBody
-        ContentType = 'application/x-www-form-urlencoded'
-        ErrorAction = "SilentlyContinue"
-    }
-
-    # UseBasicParsing is deprecated since PowerShell Core 6, there it is only set when using PowerShell 5 (https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest?view=powershell-7.4#-usebasicparsing)
-    if ($PSVersionTable.PSVersion.Major -lt 6) {
-        $Arguments.Add("UseBasicParsing", $true)
-    }
-
     "{0} - Invoke REST method to get bearer token from OAuth2 endpoint: {1}" -f $MyInvocation.MyCommand, $OAuthUri | Write-Verbose
-    $BearerToken = Invoke-RestMethod @Arguments
 
-    # The token request runs with -ErrorAction SilentlyContinue, so a failed call or a response that is
-    # not a token document arrives here as $null, or as an object with no access_token on it, instead
-    # of as a thrown error. That case is passed through as an empty bearer value, which is what this
-    # function has always done - it is deliberately not turned into a terminating error here, because
-    # callers today rely on the request continuing. It is only made explicit so the read cannot fault.
+    # The token call itself lives in Invoke-OAuthTokenRequest rather than being made directly here, so
+    # a test can replace exactly that call without shadowing the Invoke-RestMethod cmdlet - something
+    # Invoke-OmadaRestMethod's own dynamicparam block introspects through Set-DynamicParameter, and a
+    # mock of the cmdlet itself breaks that introspection wherever it is active.
+    #
+    # A failed token request used to run with -ErrorAction SilentlyContinue and fall through to an
+    # empty bearer value, so the caller's actual request went to Omada with 'Authorization: Bearer '
+    # and came back as an unexplained 401 instead of whatever the identity provider actually said.
+    # Invoke-OAuthTokenRequest stops on error, and the failure is re-thrown here carrying the identity
+    # provider's own error - Omada is never contacted with an empty token.
+    try {
+        $BearerToken = Invoke-OAuthTokenRequest -Uri $OAuthUri -Body $RequestBody
+    }
+    catch {
+        throw (New-OAuthTokenRequestError -OAuthUri $OAuthUri -ErrorRecord $PSItem)
+    }
+
     $AccessToken = $null
     if ($null -ne $BearerToken -and $BearerToken.PSObject.Properties['access_token']) {
         $AccessToken = $BearerToken.access_token
     }
     else {
-        "{0} - The OAuth2 endpoint '{1}' returned no access_token. Continuing with an empty bearer value." -f $MyInvocation.MyCommand, $OAuthUri | Write-Verbose
+        # A response can arrive as HTTP 200 without an access_token - an identity provider answering
+        # with a document this function does not recognise - which is just as unusable as a thrown
+        # error, so it ends the call the same way rather than continuing with an empty bearer value.
+        throw (New-OAuthTokenRequestError -OAuthUri $OAuthUri -Message 'no access_token was returned')
     }
 
     # Indexer assignment, not .Add: a caller-supplied Authorization header may already be present,
