@@ -110,6 +110,25 @@ Describe 'Get-OmadaCookieCacheFilePath' -Tag 'Unit' {
                 Test-Path $OtherFilePath -PathType Leaf | Should -BeTrue
             }
         }
+
+        It 'Should delete the legacy file and still return the new path when the move itself fails' {
+            # A best-effort cleanup (issue #105): if Move-Item fails partway through, the stale copy
+            # must not be left behind in %TEMP% - the caller falls back to a clean cache and simply
+            # re-authenticates, rather than keep reading from the old location.
+            InModuleScope 'OmadaWeb.PS' {
+                $SessionKey = 'movefails.omada.cloud::webview2::'
+                $LegacyFilePath = Join-Path $Script:LegacyCookieCachePath -ChildPath (Get-OmadaShortHash -Value $SessionKey)
+                ConvertTo-SecureString -String 'cached-cookie' -AsPlainText -Force | Export-Clixml -Path $LegacyFilePath -Force
+
+                Mock Move-Item { throw 'simulated move failure' }
+
+                $Path = Get-OmadaCookieCacheFilePath -SessionKey $SessionKey
+
+                $Path | Should -Be (Join-Path $Script:CookieCachePath -ChildPath (Get-OmadaShortHash -Value $SessionKey))
+                Test-Path $LegacyFilePath -PathType Leaf | Should -BeFalse -Because 'a failed migration must not leave the stale copy behind in %TEMP%'
+                Test-Path $Path -PathType Leaf | Should -BeFalse -Because 'nothing was actually migrated, so the new location stays empty'
+            }
+        }
     }
 }
 

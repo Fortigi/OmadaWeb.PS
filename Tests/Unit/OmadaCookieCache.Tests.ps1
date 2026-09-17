@@ -273,4 +273,20 @@ Describe 'Omada cookie cache - Test-OmadaCookieCacheFile' -Tag 'Unit' {
         }
         finally { Remove-Item -Path $Path -Force -ErrorAction SilentlyContinue }
     }
+
+    It 'should recognise a file under a folder whose name contains brackets (issue #105)' {
+        # "[" and "]" are wildcard metacharacters to -Path but not to -LiteralPath, and a
+        # -CookiePath folder can legitimately contain them. [System.IO.Directory]::CreateDirectory
+        # is used rather than New-Item -Path so the setup itself does not hit the same wildcard trap.
+        $Folder = Join-Path ([System.IO.Path]::GetTempPath()) ("omadaCookieBracketTest_[{0}]" -f ([guid]::NewGuid().ToString("N")))
+        [System.IO.Directory]::CreateDirectory($Folder) | Out-Null
+        $Path = Join-Path $Folder "cookie.xml"
+        try {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ PathA = $Path; CookieA = $Script:SampleCookie } {
+                Export-OmadaCookieFile -Path $PathA -AuthCookie $CookieA | Out-Null
+                Test-OmadaCookieCacheFile -Path $PathA
+            } | Should -Be $true
+        }
+        finally { Remove-Item -Path $Folder -Recurse -Force -ErrorAction SilentlyContinue }
+    }
 }

@@ -38,14 +38,14 @@ function New-OmadaWebCacheItem {
         $Exists = $Files.Count -gt 0
         $ItemCount = $Files.Count
     }
-    elseif ($ItemType -eq "File" -and (Test-Path $Path -PathType Leaf)) {
+    elseif ($ItemType -eq "File" -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
         $Exists = $true
         $ItemCount = 1
-        $Files = @(Get-Item -Path $Path -Force)
+        $Files = @(Get-Item -LiteralPath $Path -Force)
     }
-    elseif ($ItemType -eq "Directory" -and (Test-Path $Path -PathType Container)) {
+    elseif ($ItemType -eq "Directory" -and (Test-Path -LiteralPath $Path -PathType Container)) {
         $Exists = $true
-        $Files = @(Get-ChildItem -Path $Path -Recurse -File -Force -ErrorAction SilentlyContinue)
+        $Files = @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue)
         $ItemCount = $Files.Count
     }
     else {

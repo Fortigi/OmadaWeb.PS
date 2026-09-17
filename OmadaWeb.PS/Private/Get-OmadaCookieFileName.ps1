@@ -19,8 +19,11 @@ function Get-OmadaCookieFileName {
     # other sessions on the same host, and two calls that resolve to the same session key in memory
     # (e.g. differing only by casing) always resolve to the same on-disk file name too.
     # ":" (present in Uri.Authority for any non-default port, e.g. "localhost:8443") is illegal in
-    # Windows filenames, so it's replaced rather than passed through.
-    $Authority = $Uri.Authority.ToLowerInvariant() -replace ":", "_"
+    # Windows filenames, so it's replaced rather than passed through. "[" and "]" (present in
+    # Uri.Authority for an IPv6 host, e.g. "[::1]:8443") are legal in Windows filenames but are
+    # wildcard metacharacters to every cmdlet that resolves this name through -Path rather than
+    # -LiteralPath, so they are replaced the same way.
+    $Authority = $Uri.Authority.ToLowerInvariant() -replace "[:\[\]]", "_"
     $Identity = $null
     if (-not [string]::IsNullOrWhiteSpace($UserName)) {
         $Identity = $UserName.Trim().ToLowerInvariant()

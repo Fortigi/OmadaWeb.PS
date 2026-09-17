@@ -147,7 +147,7 @@ function Clear-OmadaWebCache {
                     $Failed = $false
                     foreach ($PathToRemove in $Item.TargetPath) {
                         try {
-                            Remove-Item -Path $PathToRemove -Recurse -Force -ErrorAction Stop
+                            Remove-Item -LiteralPath $PathToRemove -Recurse -Force -ErrorAction Stop
                             "{0} - Removed '{1}'" -f $MyInvocation.MyCommand, $PathToRemove | Write-Verbose
                         }
                         catch {

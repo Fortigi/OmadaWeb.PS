@@ -81,6 +81,18 @@ Describe 'Get-OmadaCookieFileName' -Tag 'Unit' {
                 Should -Be (Get-OmadaCookieFileName -Uri $Uri -Credential $Credential)
         }
     }
+
+    It 'Should strip the brackets an IPv6 host authority carries, not just the colons (issue #105)' {
+        # Uri.Authority for an IPv6 host reads "[::1]:8443" - "[" and "]" are legal in a Windows
+        # filename but are wildcard metacharacters to every -Path (as opposed to -LiteralPath) call
+        # that later resolves this name, so they must be stripped the same way ":" already is.
+        InModuleScope 'OmadaWeb.PS' {
+            $Name = Get-OmadaCookieFileName -Uri ([System.Uri]::new('https://[::1]:8443/'))
+            $Name | Should -Not -Match '\['
+            $Name | Should -Not -Match '\]'
+            $Name | Should -Not -Match ':'
+        }
+    }
 }
 
 AfterAll {

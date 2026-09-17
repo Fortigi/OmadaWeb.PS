@@ -8,7 +8,7 @@ function Get-OmadaCookieCacheFilePath {
     $FileName = Get-OmadaShortHash -Value $SessionKey
     $CacheFilePath = Join-Path $Script:CookieCachePath -ChildPath $FileName
 
-    if (-not (Test-Path $Script:CookieCachePath -PathType Container)) {
+    if (-not (Test-Path -LiteralPath $Script:CookieCachePath -PathType Container)) {
         $null = New-Item -Path $Script:CookieCachePath -ItemType Directory -Force
     }
 
@@ -16,22 +16,22 @@ function Get-OmadaCookieCacheFilePath {
     # for long-lived authentication material and is outside the documented %LOCALAPPDATA%\OmadaWeb.PS
     # root. A cache left there by an earlier module version is moved across on first use, so upgrading
     # neither forces everyone to re-authenticate nor leaves a usable session cookie behind in %TEMP%.
-    if (-not (Test-Path $CacheFilePath -PathType Leaf) -and -not [string]::IsNullOrWhiteSpace($Script:LegacyCookieCachePath)) {
+    if (-not (Test-Path -LiteralPath $CacheFilePath -PathType Leaf) -and -not [string]::IsNullOrWhiteSpace($Script:LegacyCookieCachePath)) {
         $LegacyFilePath = Join-Path $Script:LegacyCookieCachePath -ChildPath $FileName
         # The file name alone is not proof the file is ours: it is just a hash, sitting in a folder
         # shared with every other program on the machine. The contents are checked too, matching what
         # Get-OmadaLegacyCookieCacheFile does, so a name collision cannot make this move - or, if the
         # move then fails, delete - a file written by something else.
-        if ((Test-Path $LegacyFilePath -PathType Leaf) -and $LegacyFilePath -ne $CacheFilePath -and (Test-OmadaCookieCacheFile -Path $LegacyFilePath)) {
+        if ((Test-Path -LiteralPath $LegacyFilePath -PathType Leaf) -and $LegacyFilePath -ne $CacheFilePath -and (Test-OmadaCookieCacheFile -Path $LegacyFilePath)) {
             try {
-                Move-Item -Path $LegacyFilePath -Destination $CacheFilePath -Force -ErrorAction Stop
+                Move-Item -LiteralPath $LegacyFilePath -Destination $CacheFilePath -Force -ErrorAction Stop
                 "{0} - Migrated cookie cache '{1}' to '{2}'" -f $MyInvocation.MyCommand, $LegacyFilePath, $CacheFilePath | Write-Verbose
             }
             catch {
                 # Fall back to a clean cache (the caller simply re-authenticates) rather than keep
                 # reading from %TEMP%, and make a best-effort attempt not to leave the old copy behind.
                 "{0} - Could not migrate cookie cache '{1}': {2}" -f $MyInvocation.MyCommand, $LegacyFilePath, $_.Exception.Message | Write-Verbose
-                Remove-Item -Path $LegacyFilePath -Force -ErrorAction SilentlyContinue
+                Remove-Item -LiteralPath $LegacyFilePath -Force -ErrorAction SilentlyContinue
             }
         }
     }
