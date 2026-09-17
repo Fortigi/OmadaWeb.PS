@@ -9,6 +9,12 @@ param(
 # These tests cover the two halves of the pair in one place, because most of what is worth asserting
 # is the round trip rather than either command alone: what Export-OmadaSession hands out must be
 # something Import-OmadaSession can put back, and must be nothing a reader could take a token from.
+#
+# Issue #100. The visible ExpiresOn property sits outside the DPAPI-protected payload, next to
+# BaseUrl, so anything holding the state object can edit it. Several tests below craft a state
+# directly - the way Export-OmadaSession never would, since it refuses to export an already-expired
+# cookie - to prove that decision now comes from inside the protected payload, not from that
+# editable property.
 
 BeforeAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
@@ -50,6 +56,62 @@ BeforeAll {
 
     function Clear-TestSessions {
         InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Clear() }
+    }
+
+    # Builds a state object the way Import-OmadaSession sees it, without going through
+    # Export-OmadaSession - which would refuse an already-expired cookie and so can never produce a
+    # state whose protected expiry is already in the past. Lets the payload's own ExpiresOn, the
+    # AuthCookie's own expiry, and the visible ExpiresOn property be set independently, which is
+    # exactly what a tampered or a pre-release state would look like.
+    function New-CraftedState {
+        param(
+            [AllowNull()][Nullable[datetime]]$PayloadExpires,
+            [switch]$OmitPayloadExpires,
+            [AllowNull()][object]$CookieExpires,
+            [AllowNull()][Nullable[datetime]]$VisibleExpires
+        )
+
+        InModuleScope 'OmadaWeb.PS' -Parameters @{
+            PayloadExpires     = $PayloadExpires
+            OmitPayloadExpires = $OmitPayloadExpires.IsPresent
+            CookieExpires      = $CookieExpires
+            VisibleExpires     = $VisibleExpires
+            TokenValue         = $Script:TokenValue
+            BaseUrl            = $Script:TestBaseUrl
+        } {
+            param($PayloadExpires, $OmitPayloadExpires, $CookieExpires, $VisibleExpires, $TokenValue, $BaseUrl)
+
+            $Cookie = [PSCustomObject]@{
+                name   = 'oisauthtoken'
+                value  = $TokenValue
+                domain = 'tenant.omada.cloud'
+            }
+            if ($null -ne $CookieExpires) {
+                $Cookie | Add-Member -NotePropertyName 'expires' -NotePropertyValue $CookieExpires
+            }
+
+            $Payload = @{
+                SessionKey      = 'tenant.omada.cloud::webview2::'
+                BaseUrl         = $BaseUrl
+                AuthCookie      = $Cookie
+                UserName        = $null
+                WebView2Used    = $true
+                LastSessionType = 'Normal'
+            }
+            if (-not $OmitPayloadExpires) {
+                $Payload.ExpiresOn = $PayloadExpires
+            }
+
+            [PSCustomObject]@{
+                PSTypeName     = "OmadaWeb.PS.SessionState"
+                BaseUrl        = $BaseUrl
+                SessionId      = 'crafted'
+                CreatedOn      = [datetime]::UtcNow
+                ExpiresOn      = $VisibleExpires
+                StateVersion   = 1
+                ProtectedState = (Protect-OmadaSessionPayload -Payload $Payload)
+            }
+        }
     }
 }
 
@@ -98,6 +160,21 @@ Describe 'Export-OmadaSession' -Tag 'Unit' {
             Set-TestSession
 
             (Export-OmadaSession -Uri $Script:TestBaseUrl).ExpiresOn | Should -BeNullOrEmpty
+        }
+
+        It 'Should carry the expiry inside the protected payload, not only in the visible property' {
+            # Import-OmadaSession decides expiry from the protected payload, so it has to be there
+            # to begin with - the visible ExpiresOn beside it is informational only.
+            $Expires = [datetime]::UtcNow.AddMinutes(10)
+            Set-TestSession -Expires $Expires
+            $State = Export-OmadaSession -Uri $Script:TestBaseUrl
+
+            $Payload = InModuleScope 'OmadaWeb.PS' -Parameters @{ ProtectedState = $State.ProtectedState } {
+                param($ProtectedState)
+                Unprotect-OmadaSessionPayload -ProtectedPayload $ProtectedState
+            }
+
+            [datetime]$Payload.ExpiresOn | Should -Be $Expires.ToUniversalTime()
         }
 
         It 'Should export the session belonging to the account that was named' {
@@ -186,6 +263,95 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Seeded.Seeded | Should -BeTrue
         }
 
+        It 'Should import a payload that carries only SessionKey, AuthCookie and a matching BaseUrl, defaulting the rest' {
+            # UserName, WebView2Used and LastSessionType are all read with a Contains-guarded
+            # fallback, because a payload need not carry them - this proves the fallback values
+            # themselves, not just that reading them does not fault.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl; TokenValue = $Script:TokenValue } {
+                param($BaseUrl, $TokenValue)
+
+                $Payload = @{
+                    SessionKey = 'tenant.omada.cloud::webview2::'
+                    BaseUrl    = $BaseUrl
+                    AuthCookie = [PSCustomObject]@{
+                        name    = 'oisauthtoken'
+                        value   = $TokenValue
+                        domain  = 'tenant.omada.cloud'
+                        expires = [datetime]::UtcNow.AddMinutes(10)
+                    }
+                }
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload $Payload)
+                }
+            }
+
+            Clear-TestSessions
+            { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Not -Throw
+
+            $Seeded = InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Values | Select-Object -First 1 }
+            $Seeded.AuthCookie.value | Should -Be $Script:TokenValue
+            $Seeded.UserName | Should -BeNullOrEmpty
+            $Seeded.WebView2Used | Should -BeFalse
+        }
+
+        It 'Should import a payload whose ProtectedState was built from something other than a Hashtable' {
+            # The guard only proves $Payload is an IDictionary, not that it is specifically a
+            # [hashtable] - PSSerializer round-trips an [ordered] payload back as an
+            # OrderedDictionary rather than collapsing it to a Hashtable, so this is a genuine,
+            # reachable non-Hashtable IDictionary shape for the SessionKey/AuthCookie reads below the
+            # guard to handle without faulting.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl; TokenValue = $Script:TokenValue } {
+                param($BaseUrl, $TokenValue)
+
+                $Payload = [ordered]@{
+                    SessionKey = 'tenant.omada.cloud::webview2::'
+                    BaseUrl    = $BaseUrl
+                    AuthCookie = [PSCustomObject]@{
+                        name    = 'oisauthtoken'
+                        value   = $TokenValue
+                        domain  = 'tenant.omada.cloud'
+                        expires = [datetime]::UtcNow.AddMinutes(10)
+                    }
+                }
+                $Payload | Should -BeOfType [System.Collections.Specialized.OrderedDictionary]
+
+                $Protected = Protect-OmadaSessionPayload -Payload $Payload
+                $RoundTripped = Unprotect-OmadaSessionPayload -ProtectedPayload $Protected
+                $RoundTripped | Should -BeOfType ([System.Collections.IDictionary])
+                # Windows PowerShell 5.1's PSSerializer collapses an ordered payload back to a plain
+                # Hashtable on deserialize, unlike PowerShell 7's, so only 7+ can prove this round
+                # trip stays a non-Hashtable shape; 5.1 still exercises the same code path below, just
+                # through a Hashtable like every other test here.
+                if ($PSVersionTable.PSVersion.Major -ge 6) {
+                    $RoundTripped | Should -Not -BeOfType ([hashtable])
+                }
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = $Protected
+                }
+            }
+
+            Clear-TestSessions
+            { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Not -Throw
+
+            $Seeded = InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Values | Select-Object -First 1 }
+            $Seeded.AuthCookie.value | Should -Be $Script:TokenValue
+            $Seeded.LastSessionType | Should -BeNullOrEmpty
+        }
+
         It 'Should seed it under the same key the original session used' {
             Set-TestSession -UserName 'someone@example.com' -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl -UserName 'someone@example.com'
@@ -232,7 +398,6 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl
             $Expected = [datetime]$State.ExpiresOn
-            $State.ExpiresOn = $Expected.ToString('o')
 
             Clear-TestSessions
             $Summary = Import-OmadaSession -State $State -PassThru
@@ -317,11 +482,44 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl
             # Exported while it was still alive, handed over, and dead by the time it arrives - the
-            # ordinary way this fails, given how short an Omada session cookie lives.
-            $State.ExpiresOn = [datetime]::UtcNow.AddMinutes(-1)
-
+            # ordinary way this fails, given how short an Omada session cookie lives. The cookie's
+            # own expiry, inside the protected payload, has not moved; only the wall clock has.
             Clear-TestSessions
-            $Failure = { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Throw -PassThru
+
+            # Simulated by crafting a payload whose cookie already expired, rather than by editing
+            # the visible ExpiresOn - editing that property is covered separately below, and must
+            # not be what this refusal depends on.
+            $Craft = InModuleScope 'OmadaWeb.PS' -Parameters @{ TokenValue = $Script:TokenValue; BaseUrl = $Script:TestBaseUrl } {
+                param($TokenValue, $BaseUrl)
+
+                $Cookie = [PSCustomObject]@{
+                    name    = 'oisauthtoken'
+                    value   = $TokenValue
+                    domain  = 'tenant.omada.cloud'
+                    expires = [datetime]::UtcNow.AddMinutes(-1)
+                }
+                $Payload = @{
+                    SessionKey      = 'tenant.omada.cloud::webview2::'
+                    BaseUrl         = $BaseUrl
+                    AuthCookie      = $Cookie
+                    UserName        = $null
+                    WebView2Used    = $true
+                    LastSessionType = 'Normal'
+                    ExpiresOn       = $Cookie.expires
+                }
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $Cookie.expires
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload $Payload)
+                }
+            }
+
+            $Failure = { Import-OmadaSession -State $Craft -ErrorAction Stop } | Should -Throw -PassThru
 
             $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionExpired*'
             $Failure.Exception | Should -BeOfType [System.Security.Authentication.AuthenticationException]
@@ -332,14 +530,25 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Count | Should -Be 0
         }
 
-        It 'Should treat an expiry it cannot read as one that was never declared' {
-            # A cast would raise a FormatException here and escape the OmadaSessionExpired contract
-            # the caller catches on. Reading it the way a cookie's own expiry is read answers "not
-            # declared" instead, and the session is left to the server - which raises the same error
-            # on 401 if it really is dead.
-            Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
-            $State = Export-OmadaSession -Uri $Script:TestBaseUrl
-            $State.ExpiresOn = 'not a date at all'
+        It 'Should refuse a session whose protected expiry is in the past, even when the visible ExpiresOn was edited into the future' {
+            # Issue #100: ExpiresOn sits outside the protected payload, so nothing may treat it as
+            # authoritative. A caller - or an attacker holding the state object - editing it into
+            # the future must not resurrect an already-dead session.
+            $State = New-CraftedState -PayloadExpires ([datetime]::UtcNow.AddMinutes(-5)) -VisibleExpires ([datetime]::UtcNow.AddMinutes(30))
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionExpired*'
+
+            $Count = InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Count }
+            $Count | Should -Be 0
+        }
+
+        It 'Should import a session whose visible ExpiresOn is in the past, when the protected expiry is still in the future' {
+            # The other half of the same fix: the visible property does not decide either way, so a
+            # state that merely looks stale by that property alone must still be usable.
+            $State = New-CraftedState -PayloadExpires ([datetime]::UtcNow.AddMinutes(30)) -VisibleExpires ([datetime]::UtcNow.AddMinutes(-5))
 
             Clear-TestSessions
             { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Not -Throw
@@ -348,15 +557,37 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Seeded.AuthCookie.value | Should -Be $Script:TokenValue
         }
 
-        It 'Should still refuse an expiry that arrives as a string, when that string is in the past' {
-            # The other half of the same change: reading defensively must not mean reading loosely.
-            Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
-            $State = Export-OmadaSession -Uri $Script:TestBaseUrl
-            $State.ExpiresOn = [datetime]::UtcNow.AddMinutes(-5).ToString('o')
+        It 'Should fall back to the AuthCookie expiry inside the payload when the payload carries no ExpiresOn of its own' {
+            # Stands in for a state exported by a build from before the payload carried its own
+            # expiry - the feature is unreleased, but nightly builds already produce such states.
+            $State = New-CraftedState -OmitPayloadExpires -CookieExpires ([datetime]::UtcNow.AddMinutes(-5)) -VisibleExpires ([datetime]::UtcNow.AddMinutes(30))
 
             Clear-TestSessions
             $Failure = { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Throw -PassThru
+
             $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionExpired*'
+        }
+
+        It 'Should treat a payload with neither an ExpiresOn nor a cookie expiry as declaring none' {
+            $State = New-CraftedState -OmitPayloadExpires -VisibleExpires ([datetime]::UtcNow.AddMinutes(30))
+
+            Clear-TestSessions
+            { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Not -Throw
+        }
+
+        It 'Should treat an expiry it cannot read as one that was never declared' {
+            # A cast would raise a FormatException here and escape the OmadaSessionExpired contract
+            # the caller catches on. Reading it the way a cookie's own expiry is read answers "not
+            # declared" instead, and the session is left to the server - which raises the same error
+            # on 401 if it really is dead.
+            $State = New-CraftedState -PayloadExpires $null -VisibleExpires ([datetime]::UtcNow.AddMinutes(10))
+            $State.ExpiresOn = 'not a date at all'
+
+            Clear-TestSessions
+            { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Not -Throw
+
+            $Seeded = InModuleScope 'OmadaWeb.PS' { $Script:OmadaSessions.Values | Select-Object -First 1 }
+            $Seeded.AuthCookie.value | Should -Be $Script:TokenValue
         }
 
         It 'Should refuse a state whose visible environment disagrees with its protected contents' {
@@ -396,8 +627,8 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
         It 'Should refuse a payload environment that is not a usable URL, rather than fault on it' {
             # A payload that decrypts but carries something that is not an absolute URL would raise
             # UriFormatException from the [Uri] construction and escape the mismatch contract. Only
-            # reachable for a state crafted by the same user on the same machine, but the contract
-            # should hold whatever it is handed.
+            # reachable for a state crafted by the same account, but the contract should hold
+            # whatever it is handed.
             InModuleScope 'OmadaWeb.PS' {
                 $Payload = @{
                     SessionKey      = 'tenant.omada.cloud::webview2::'
@@ -427,15 +658,106 @@ Describe 'Import-OmadaSession' -Tag 'Unit' {
             $Failure.Exception.Message | Should -BeLike '*not a valid URL*'
         }
 
-        It 'Should refuse a state whose protected half cannot be read' {
+        It 'Should refuse a payload that carries a session and cookie but no BaseUrl' {
+            # BaseUrl is read with the same Contains-guarded pattern as UserName, WebView2Used and
+            # LastSessionType below - a payload built without it must not fault on the read, and must
+            # be refused as a mismatch, the same as one whose BaseUrl is present but blank.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl; TokenValue = $Script:TokenValue } {
+                param($BaseUrl, $TokenValue)
+
+                $Payload = @{
+                    SessionKey = 'tenant.omada.cloud::webview2::'
+                    AuthCookie = [PSCustomObject]@{
+                        name    = 'oisauthtoken'
+                        value   = $TokenValue
+                        domain  = 'tenant.omada.cloud'
+                        expires = [datetime]::UtcNow.AddMinutes(10)
+                    }
+                }
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload $Payload)
+                }
+            }
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateMismatch*'
+            $Failure.Exception.Message | Should -BeLike '*names no environment at all*'
+        }
+
+        It 'Should refuse a state whose protected half cannot be read, without claiming machine binding' {
             Set-TestSession -Expires ([datetime]::UtcNow.AddMinutes(10))
             $State = Export-OmadaSession -Uri $Script:TestBaseUrl
-            # Stands in for a state exported by another user or on another machine: the protection
-            # is bound to both, so neither can be decrypted here, and nor can this.
+            # Stands in for a state exported by a different Windows user account: the protection is
+            # bound to the account, so it cannot be decrypted here, and nor can this.
             $State.ProtectedState = '01000000deadbeef'
 
             Clear-TestSessions
             $Failure = { Import-OmadaSession -State $State -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateUnreadable*'
+            $Failure.Exception | Should -BeOfType [System.Security.Cryptography.CryptographicException]
+
+            # Issue #100: DPAPI without -Key binds to the Windows user account, not to the machine -
+            # the same account's keys can roam to another computer through a roaming profile or
+            # credential roaming. The message must not claim a binding the protection does not have.
+            $Failure.Exception.Message | Should -Not -BeLike '*machine*'
+            $Failure.Exception.Message | Should -BeLike '*Windows user account*'
+        }
+
+        It 'Should refuse a state whose protected payload decrypts but is missing the keys it needs' {
+            # A payload that decrypts cleanly but was never built with SessionKey/AuthCookie -
+            # crafted, or a state from something other than Export-OmadaSession - must not throw
+            # PropertyNotFoundStrict out of the guard meant to catch exactly this.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl } {
+                param($BaseUrl)
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload @{ BaseUrl = $BaseUrl })
+                }
+            }
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Throw -PassThru
+
+            $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateUnreadable*'
+            $Failure.Exception | Should -BeOfType [System.Security.Cryptography.CryptographicException]
+        }
+
+        It 'Should refuse a state whose protected half decrypts to something other than a payload' {
+            # A protected value can decrypt cleanly to any serialized object, not only a hashtable -
+            # here, a plain string. The guard has to catch that itself rather than fault on a dot or
+            # indexer read further down that assumes a hashtable shape.
+            $Crafted = InModuleScope 'OmadaWeb.PS' -Parameters @{ BaseUrl = $Script:TestBaseUrl } {
+                param($BaseUrl)
+
+                [PSCustomObject]@{
+                    PSTypeName     = "OmadaWeb.PS.SessionState"
+                    BaseUrl        = $BaseUrl
+                    SessionId      = 'crafted'
+                    CreatedOn      = [datetime]::UtcNow
+                    ExpiresOn      = $null
+                    StateVersion   = 1
+                    ProtectedState = (Protect-OmadaSessionPayload -Payload 'not a payload')
+                }
+            }
+
+            Clear-TestSessions
+            $Failure = { Import-OmadaSession -State $Crafted -ErrorAction Stop } | Should -Throw -PassThru
 
             $Failure.FullyQualifiedErrorId | Should -BeLike 'OmadaSessionStateUnreadable*'
             $Failure.Exception | Should -BeOfType [System.Security.Cryptography.CryptographicException]

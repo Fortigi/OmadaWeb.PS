@@ -10,10 +10,11 @@ function Export-OmadaCookieFile {
     stable" parameter was also, silently, the one that left a usable bearer token in a readable file
     (issue #21). One writer means that cannot drift apart again.
 
-    Protection is DPAPI via SecureString, which binds the file to the current user on the current
-    machine. That is the point: a copied file is useless to anyone else. It also means a cookie file
-    is no longer portable between users or machines, which is the behaviour change this fix
-    deliberately makes - see the PR for issue #21.
+    Protection is DPAPI via SecureString, which binds the file to the current Windows user account:
+    only a process already running as that account can decrypt it, whether it runs on this machine
+    or on another one where the account's DPAPI keys roam. That is the point: a copied file is
+    useless to a different account. It also means a cookie file is no longer portable between users,
+    which is the behaviour change this fix deliberately makes - see the PR for issue #21.
 
     The module refuses to load on non-Windows (OmadaWeb.PS.psm1), so DPAPI is always available here.
 

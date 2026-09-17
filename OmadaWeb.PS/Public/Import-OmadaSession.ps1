@@ -21,15 +21,20 @@ function Import-OmadaSession {
         third example below shows the shape. Use -AllowInteractiveAuthentication only where a
         sign-in window would actually be welcome.
 
-        The state is protected with DPAPI, so it can only be imported by the user who exported it,
-        on the machine it was exported from. A state that cannot be read - from another user, from
-        another machine, or damaged in transit - is refused as one error rather than silently
-        ignored.
+        The state is protected with DPAPI for the Windows user account that exported it: any process
+        already running as that account can decrypt it, whether it runs on this machine or on another
+        one where the account's DPAPI keys roam through a roaming profile or credential roaming. It
+        does not stop another process running as that same account, so an exported state is a secret
+        and should be handled like one. A state that cannot be read at all - because it belongs to a
+        different user, or was damaged or altered in transit - is refused as one error rather than
+        silently ignored.
 
-        The protected contents are also the authority on which environment the session belongs to.
-        The BaseUrl property beside them is a convenience for the caller and sits outside the
-        protection, so if the two disagree the state is not the one that was exported and it is
-        refused too, rather than seeding one environment while every message about it names another.
+        The protected contents are also the authority on which environment the session belongs to,
+        and on when it expires. The BaseUrl and ExpiresOn properties beside them are a convenience for
+        the caller and sit outside the protection, so if either disagrees with what is inside - by
+        accident or by an edit - the state is not trusted on that point: BaseUrl is refused outright,
+        and expiry is decided from the protected copy rather than the visible one, so editing the
+        visible ExpiresOn cannot make an already-dead session look current.
 
     .PARAMETER State
         The object returned by Export-OmadaSession. Accepted from the pipeline.
@@ -132,12 +137,19 @@ function Import-OmadaSession {
         }
 
         $Payload = Unprotect-OmadaSessionPayload -ProtectedPayload $State.ProtectedState
-        if ($null -eq $Payload -or $null -eq $Payload.SessionKey -or $null -eq $Payload.AuthCookie) {
+        # Indexer reads with Contains checks, not dot notation: a crafted payload can decrypt to a
+        # hashtable that simply omits a key, and under this module's StrictMode dot notation throws
+        # PropertyNotFoundStrict on a missing key instead of answering $null - which would escape
+        # this guard as an unhandled error rather than the OmadaSessionStateUnreadable it means to be.
+        if ($null -eq $Payload -or $Payload -isnot [System.Collections.IDictionary] -or
+            -not $Payload.Contains('SessionKey') -or $null -eq $Payload['SessionKey'] -or
+            -not $Payload.Contains('AuthCookie') -or $null -eq $Payload['AuthCookie']) {
             # One message for every way this can fail, because a caller cannot act on the difference:
-            # the protection is bound to a user and a machine, so anything unreadable means the state
-            # did not come from here, and the answer is always to export it again where it is used.
+            # the protection is bound to the Windows user account that exported it, so anything
+            # unreadable means the state did not come from that account, and the answer is always to
+            # export it again where it is used.
             $Exception = [System.Security.Cryptography.CryptographicException]::new(
-                "The exported Omada session could not be read. It is protected for the user and machine that exported it, so it cannot be imported by another user, on another computer, or after being altered in transit."
+                "The exported Omada session could not be read. It is protected for the Windows user account that exported it, so it cannot be imported by another user, or after being altered in transit."
             )
             throw [System.Management.Automation.ErrorRecord]::new(
                 $Exception,
@@ -147,12 +159,21 @@ function Import-OmadaSession {
             )
         }
 
+        # Read once, by indexer, and used everywhere below instead of $Payload.SessionKey /
+        # $Payload.AuthCookie: the guard above only proves $Payload is an IDictionary, not that it is
+        # a [hashtable] specifically, and dot notation on some other IDictionary implementation is
+        # not guaranteed the same StrictMode-safe-when-present behaviour a hashtable gives it.
+        $PayloadSessionKey = $Payload['SessionKey']
+        $PayloadAuthCookie = $Payload['AuthCookie']
+
         # The protected payload is the authority on which environment this session belongs to, and
         # everything below reads it from there. The BaseUrl property beside it is a convenience for
         # the caller, outside the protection, so the two can disagree - by an accident on the way
         # here, or by an edit. Either way the state is not the one that was exported, and importing
         # it would seed one environment while every message about it named another.
-        $BaseUrl = [string]$Payload.BaseUrl
+        # Past the guard above, SessionKey and AuthCookie are known to be there; BaseUrl is not
+        # guaranteed the same way, so it gets the same Contains-guarded read.
+        $BaseUrl = [string]$(if ($Payload.Contains('BaseUrl')) { $Payload['BaseUrl'] } else { $null })
         $VisibleBaseUrl = [string]$State.BaseUrl
 
         # Both have to be there and agree. An empty visible BaseUrl used to skip the comparison,
@@ -199,26 +220,47 @@ function Import-OmadaSession {
         # Checked before the session is seeded, so a runspace handed a dead session is left with no
         # session at all rather than one that looks usable until the first request comes back 401.
         #
-        # Read through the same helper the cookie's own expiry goes through, rather than cast: a
-        # cast raises a FormatException on anything it cannot read, and this command's contract is
-        # to raise OmadaSessionExpired. An expiry that cannot be read is treated as one that was
-        # never declared, exactly as a session cookie's is - the session is then left to the server,
-        # which answers 401 and produces the same error by the other route.
-        $ExpiresOn = ConvertTo-OmadaExpiryMoment -Value $State.ExpiresOn
+        # Read from the protected payload, not from the visible State.ExpiresOn: that property sits
+        # outside the protection next to BaseUrl, so anything with the object could push it into the
+        # future and make an already-dead session look current. The payload is what Export-OmadaSession
+        # actually measured. A payload produced before it started carrying its own expiry - an older
+        # or pre-release build - falls back to the AuthCookie's own expiry, also read from inside the
+        # payload; only when neither is present is the session treated as not declaring an expiry at
+        # all, exactly as a session cookie without one is today. ConvertTo-OmadaExpiryMoment is used
+        # rather than a cast for the same reason it is used on the cookie's own expiry: a cast raises
+        # a FormatException on anything it cannot read, and this command's contract is to raise
+        # OmadaSessionExpired. An expiry that cannot be read is treated as one that was never
+        # declared - the session is then left to the server, which answers 401 and produces the same
+        # error by the other route.
+        # $Payload always comes back as a [hashtable]: Protect-OmadaSessionPayload serializes it with
+        # PSSerializer, and Unprotect-OmadaSessionPayload deserializes with the same serializer, so
+        # this is the only shape that ever reaches here - unlike SessionKey or AuthCookie, ExpiresOn
+        # is not present on every payload (a state exported before this change carries none), and
+        # under this module's StrictMode a hashtable's dot notation throws PropertyNotFoundStrict on
+        # a key that is not there, rather than answering $null the way it does outside StrictMode.
+        $RawPayloadExpiry = if ($Payload.Contains('ExpiresOn')) { $Payload['ExpiresOn'] } else { $null }
+        $ExpiresOn = ConvertTo-OmadaExpiryMoment -Value $RawPayloadExpiry
+        if ($null -eq $ExpiresOn) {
+            $ExpiresOn = Get-OmadaCookieExpiry -AuthCookie $PayloadAuthCookie
+        }
+
         if ($null -ne $ExpiresOn -and $ExpiresOn -le [datetime]::UtcNow) {
             $Message = "The exported Omada session for '{0}' expired at {1:u} and was not imported. Export a fresh session from the runspace that signed in." -f $BaseUrl, $ExpiresOn
             throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $BaseUrl)
         }
 
-        $SessionContext = Get-OmadaSessionContext -Key ([string]$Payload.SessionKey) -AuthorityHost $AuthorityHost
+        $SessionContext = Get-OmadaSessionContext -Key ([string]$PayloadSessionKey) -AuthorityHost $AuthorityHost
         $SessionContext.BaseUrl = $BaseUrl
-        $SessionContext.AuthCookie = $Payload.AuthCookie
-        $SessionContext.UserName = $Payload.UserName
+        $SessionContext.AuthCookie = $PayloadAuthCookie
+        # UserName, WebView2Used and LastSessionType are optional on the payload - a state exported
+        # by an older build, or a crafted one, can omit any of them - so they get the same
+        # Contains-guarded read as BaseUrl above, rather than dot notation.
+        $SessionContext.UserName = if ($Payload.Contains('UserName')) { $Payload['UserName'] } else { $null }
         # Carried across so the worker's first request behaves the way the original session did
         # rather than falling back to the defaults: which engine this session runs on, and whether
         # it was an InPrivate one - both of which reset the cookie when they change underneath it.
-        $SessionContext.WebView2Used = [bool]$Payload.WebView2Used
-        $SessionContext.LastSessionType = $Payload.LastSessionType
+        $SessionContext.WebView2Used = [bool]$(if ($Payload.Contains('WebView2Used')) { $Payload['WebView2Used'] } else { $false })
+        $SessionContext.LastSessionType = if ($Payload.Contains('LastSessionType')) { $Payload['LastSessionType'] } else { $null }
         $SessionContext.Seeded = $true
         $SessionContext.NoInteractiveAuthentication = -not $AllowInteractiveAuthentication
 
@@ -229,10 +271,10 @@ function Import-OmadaSession {
                 PSTypeName                     = "OmadaWeb.PS.SeededSession"
                 BaseUrl                        = $BaseUrl
                 SessionId                      = $State.SessionId
-                # The normalized moment, not the raw property: this is what the import actually
-                # evaluated, so a state whose expiry arrived as a string reports a DateTime here,
-                # and one whose expiry could not be read reports nothing rather than the unreadable
-                # value it was given.
+                # The normalized moment actually evaluated - from the protected payload, with the
+                # same fallback applied - not the raw State.ExpiresOn property: this is what the
+                # import judged the session by, so a state whose visible expiry disagreed, or arrived
+                # as a string, or was absent, reports the value that decided its fate.
                 ExpiresOn                      = $ExpiresOn
                 AllowInteractiveAuthentication = [bool]$AllowInteractiveAuthentication
             }

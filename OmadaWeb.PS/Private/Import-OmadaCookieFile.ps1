@@ -7,9 +7,9 @@ function Import-OmadaCookieFile {
     The single reader for every cookie file this module produces, matching Export-OmadaCookieFile.
 
     Only a protected file is read. Anything else - an unprotected file written by a version of this
-    module that predates issue #21, a file that cannot be decrypted because it was copied from
-    another machine or profile, or a corrupt one - is treated the same way: no cookie. The caller
-    authenticates, and the next successful sign-in overwrites the file protected.
+    module that predates issue #21, a file that cannot be decrypted because it belongs to a
+    different Windows user account, or a corrupt one - is treated the same way: no cookie. The
+    caller authenticates, and the next successful sign-in overwrites the file protected.
 
     There is deliberately no migration of an unprotected file. Omada session cookies are short lived,
     so one written by an older version has almost certainly expired anyway; reading it would buy at
