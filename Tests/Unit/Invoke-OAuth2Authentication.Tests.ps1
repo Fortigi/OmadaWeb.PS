@@ -19,6 +19,15 @@ class FakeOAuthErrorResponse : System.Net.WebResponse {
     }
 }
 
+# A second WebResponse stand-in whose GetResponseStream() itself throws - the response is present but
+# the stream can no longer be read (already closed, connection dropped mid-read), which is the one way
+# the try/catch around reading it is actually exercised rather than just written defensively.
+class FakeThrowingOAuthErrorResponse : System.Net.WebResponse {
+    [System.IO.Stream] GetResponseStream() {
+        throw [System.IO.IOException]::new('The response stream has already been closed.')
+    }
+}
+
 BeforeAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
     Import-Module $ModulePath -Force -ErrorAction Stop
@@ -470,6 +479,20 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 Should -Invoke Invoke-OAuthTokenRequest -Times 0
             }
         }
+
+        It 'Should refuse an OAuthUri that cannot even be parsed as an absolute URI' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ Credential = $Script:Credential } {
+                # 'not a uri' is accepted as a *relative* System.Uri rather than throwing on the cast
+                # itself - .Scheme is only valid on an absolute one, so reading it is what throws and
+                # is caught, leaving $OAuthUriScheme $null and failing the https check that follows.
+                Mock Invoke-OAuthTokenRequest { [PSCustomObject]@{ access_token = 'token' } }
+
+                $RequestContext = New-TestRequestContext -BoundParams @{ Credential = $Credential; OAuthUri = 'not a uri'; Headers = @{} }
+
+                { Invoke-OAuth2Authentication -RequestContext $RequestContext -ErrorAction Stop } | Should -Throw '*https*'
+                Should -Invoke Invoke-OAuthTokenRequest -Times 0
+            }
+        }
     }
 
     Context 'EntraIdTenantId validation' {
@@ -531,6 +554,59 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 
                 $Result.FullyQualifiedErrorId | Should -Match '^OmadaOAuthTokenRequestFailed'
                 $Result.Exception.Message | Should -Match 'Internal Server Error'
+            }
+        }
+
+        It 'Should fall back to the exception message when reading the response stream throws' {
+            InModuleScope 'OmadaWeb.PS' -Parameters @{ FakeResponse = [FakeThrowingOAuthErrorResponse]::new() } {
+                $WebException = [System.Net.WebException]::new('The underlying connection was closed.', $null, [System.Net.WebExceptionStatus]::ProtocolError, $FakeResponse)
+                $ErrorRecord = [System.Management.Automation.ErrorRecord]::new($WebException, 'WebException', [System.Management.Automation.ErrorCategory]::InvalidOperation, $null)
+
+                $Result = New-OAuthTokenRequestError -OAuthUri 'https://idp.example.com/token' -ErrorRecord $ErrorRecord
+
+                $Result.FullyQualifiedErrorId | Should -Match '^OmadaOAuthTokenRequestFailed'
+                $Result.Exception.Message | Should -Match 'The underlying connection was closed'
+            }
+        }
+    }
+
+    Context 'Response body parsing' {
+        It 'Should fall back to the raw body when it is not valid JSON' {
+            InModuleScope 'OmadaWeb.PS' {
+                $ResponseException = [System.Exception]::new('Response status code does not indicate success: 400 (Bad Request).')
+                $ErrorRecordLocal = [System.Management.Automation.ErrorRecord]::new($ResponseException, 'WebCmdletWebResponseException', [System.Management.Automation.ErrorCategory]::InvalidOperation, $null)
+                $ErrorRecordLocal.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('<html>Bad Request</html>')
+
+                $Result = New-OAuthTokenRequestError -OAuthUri 'https://idp.example.com/token' -ErrorRecord $ErrorRecordLocal
+
+                $Result.Exception.Message | Should -Match 'Bad Request'
+            }
+        }
+
+        It 'Should fall back to the raw body when the JSON has no recognisable OAuth error shape' {
+            InModuleScope 'OmadaWeb.PS' {
+                $ResponseException = [System.Exception]::new('Response status code does not indicate success: 400 (Bad Request).')
+                $ErrorRecordLocal = [System.Management.Automation.ErrorRecord]::new($ResponseException, 'WebCmdletWebResponseException', [System.Management.Automation.ErrorCategory]::InvalidOperation, $null)
+                $ErrorRecordLocal.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('{"foo":"bar"}')
+
+                $Result = New-OAuthTokenRequestError -OAuthUri 'https://idp.example.com/token' -ErrorRecord $ErrorRecordLocal
+
+                $Result.Exception.Message | Should -Match 'foo'
+                $Result.Exception.Message | Should -Match 'bar'
+            }
+        }
+
+        It 'Should say no further details were provided when neither a body nor a usable exception message exists' {
+            InModuleScope 'OmadaWeb.PS' {
+                # A whitespace-only exception message with no ErrorDetails and no WebException response:
+                # nothing anywhere for the function to report, which is the one way its last-resort
+                # string is actually reached rather than the exception's own message.
+                $ResponseException = [System.Exception]::new(' ')
+                $ErrorRecordLocal = [System.Management.Automation.ErrorRecord]::new($ResponseException, 'EmptyMessage', [System.Management.Automation.ErrorCategory]::InvalidOperation, $null)
+
+                $Result = New-OAuthTokenRequestError -OAuthUri 'https://idp.example.com/token' -ErrorRecord $ErrorRecordLocal
+
+                $Result.Exception.Message | Should -Match 'no further details were provided'
             }
         }
     }
