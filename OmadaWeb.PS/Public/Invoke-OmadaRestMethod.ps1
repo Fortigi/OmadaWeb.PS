@@ -94,7 +94,7 @@ function Invoke-OmadaRestMethod {
         Link and clipboard sharing active it can be pasted straight into the Authenticator app.
 
     .EXAMPLE
-        Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
+        Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://example.okta.com/oauth2/default/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
 
         Authenticates against an identity provider other than Entra ID - here Okta - by supplying
         the token endpoint and scope explicitly.

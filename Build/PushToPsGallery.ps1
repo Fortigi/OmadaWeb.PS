@@ -6,15 +6,6 @@
 )
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12, [Net.SecurityProtocolType]::Tls11, [Net.SecurityProtocolType]::Tls13
-
-try {
-    "Folder tree for SystemDefaultWorkingDirectory:" | Write-Host
-    Get-ChildItem "$SystemDefaultWorkingDirectory" -Recurse | ForEach-Object { Write-Host $_.FullName }
-}
-catch {
-    Write-Host "Failed to retrieve directory tree: $_"
-}
-
 try {
     "Publish-Module to PSGallery" | Write-Host
     $SourcePath = "{0}/buildoutput/{1}" -f $SystemDefaultWorkingDirectory, $BuildPath.TrimStart('/')

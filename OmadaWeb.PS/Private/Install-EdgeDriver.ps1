@@ -1,8 +1,16 @@
 function Install-EdgeDriver {
     [CmdletBinding()]
-    PARAM()
+    PARAM(
+        [parameter(Mandatory = $true)]
+        $InstalledEdgeFileInfo
+    )
 
     $EdgeDriverFileName = "msedgedriver.exe"
+    # Read by the catch below, which reports it in the failure message. Initialized here so that an
+    # error thrown before it is assigned in the try (Get-CimInstance, the architecture switch) still
+    # leaves it defined - otherwise, under StrictMode, formatting the message would itself throw a
+    # "variable is not set" error and the original error would never be seen.
+    $EdgeWebdriverDownloadUrl = $null
 
     try {
         "{0} - Check and install EdgeDriver" -f $MyInvocation.MyCommand | Write-Verbose
@@ -22,9 +30,6 @@ function Install-EdgeDriver {
 
         $null = New-Item (Split-Path $Script:EdgeDriverPath) -ItemType Directory -Force
 
-        $TempFile = [System.IO.Path]::GetTempFileName()
-        "Invoke-WebEdgeDriverFramework: {0}" -f $$ | Write-Verbose
-
         # The only artefact that carries no pinned hash: its version has to match the Edge build
         # installed on this machine, so the lock file declares it Authenticode-verified instead and
         # the signature is checked below, before the executable is moved into place.
@@ -34,8 +39,8 @@ function Install-EdgeDriver {
 
     }
     catch {
-        if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {
-            "Failed to update '{0}'. Try downloading the webdriver manually from '{1}' and place it here: '{2}'. Error:`r`n {3}" -f $EdgeDriverFileName, $EdgeWebdriverDownloadUrl, $WebDriverBasePath, $_.Exception | Write-Error -ErrorAction Stop
+        if (Test-Path (Join-Path (Split-Path $Script:EdgeDriverPath) -ChildPath $EdgeDriverFileName) -PathType Leaf) {
+            "Failed to update '{0}'. Try downloading the webdriver manually from '{1}' and place it here: '{2}'. Error:`r`n {3}" -f $EdgeDriverFileName, $(if ($null -eq $EdgeWebdriverDownloadUrl) { "(not resolved)" } else { $EdgeWebdriverDownloadUrl }), (Split-Path $Script:EdgeDriverPath), $_.Exception | Write-Error -ErrorAction Stop
         }
         else {
             $PSCmdlet.ThrowTerminatingError($PSItem)
@@ -44,16 +49,29 @@ function Install-EdgeDriver {
 
     $ExtractedEdgeDriverPath = Join-Path $TempZipPath -ChildPath $EdgeDriverFileName
     $Artifact = Get-LockedArtifact -Id "msedgedriver"
-    # Deletes the file and throws when the signature is missing, broken or from another publisher,
-    # so an unverified msedgedriver.exe never reaches the folder the module executes it from.
-    Confirm-AuthenticodeTrust -Path $ExtractedEdgeDriverPath -ExpectedSubject $Artifact.SubjectPattern -ArtifactName $EdgeDriverFileName
+    try {
+        # Deletes the file and throws when the signature is missing, broken or from another publisher,
+        # so an unverified msedgedriver.exe never reaches the folder the module executes it from.
+        Confirm-AuthenticodeTrust -Path $ExtractedEdgeDriverPath -ExpectedSubject $Artifact.SubjectPattern -ArtifactName $EdgeDriverFileName
+    }
+    catch {
+        # The extracted folder is left behind by Expand-DownloadFile until the driver is moved into
+        # place below, so an untrusted extraction must be cleaned up here before the error propagates.
+        # .FullName is used explicitly: DirectoryInfo's implicit string conversion is not reliable
+        # enough to trust for a path handed to -LiteralPath.
+        if (Test-Path -LiteralPath $TempZipPath.FullName -PathType Container) {
+            Remove-Item -LiteralPath $TempZipPath.FullName -Force -Confirm:$false -Recurse
+        }
+
+        throw
+    }
 
     try {
         Get-Item $ExtractedEdgeDriverPath | Move-Item -Destination (Split-Path $Script:EdgeDriverPath) -Force
     }
     catch {
-        if (Test-Path (Join-Path (Split-Path $Script:WebDriverPath) -ChildPath $DllFileName) -PathType Leaf) {
-            "Failed to update '{0}'. Retry restarting this PowerShell session or manually remove the contents of folder '{1}'. Error:`r`n {2}" -f $EdgeDriverFileName, $WebDriverBasePath, $_.Exception | Write-Error -ErrorAction Stop
+        if (Test-Path (Join-Path (Split-Path $Script:EdgeDriverPath) -ChildPath $EdgeDriverFileName) -PathType Leaf) {
+            "Failed to update '{0}'. Retry restarting this PowerShell session or manually remove the contents of folder '{1}'. Error:`r`n {2}" -f $EdgeDriverFileName, (Split-Path $Script:EdgeDriverPath), $_.Exception | Write-Error -ErrorAction Stop
         }
         else {
             $PSCmdlet.ThrowTerminatingError($PSItem)

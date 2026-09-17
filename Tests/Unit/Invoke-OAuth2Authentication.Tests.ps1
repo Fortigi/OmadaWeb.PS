@@ -160,7 +160,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
                 $BoundParams = @{
                     ClientId         = 'client'
                     OAuthCertificate = $Certificate
-                    OAuthUri         = 'https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token'
+                    OAuthUri         = 'https://example.okta.com/oauth2/default/v1/token'
                     OAuthScope       = 'omadaIdentityCloud'
                     Headers          = @{}
                 }
@@ -172,7 +172,7 @@ Describe 'Invoke-OAuth2Authentication' -Tag 'Unit' {
 
             $Payload = ConvertFrom-JwtPayload -Assertion $Body.client_assertion
 
-            $Payload.aud | Should -Be 'https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token'
+            $Payload.aud | Should -Be 'https://example.okta.com/oauth2/default/v1/token'
             $Payload.iss | Should -Be 'client'
             $Payload.sub | Should -Be 'client'
         }

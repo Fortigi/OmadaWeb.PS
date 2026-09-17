@@ -138,7 +138,7 @@ function Initialize-WebView2 {
                                 # Use .NET methods only - PowerShell cmdlets can throw PipelineStoppedException
                                 try {
 
-                                    if ($Script:WebView2.Source -eq "about:blank") {
+                                    if (Test-WebView2NavigationReady -SessionContext $Script:CurrentWebView2Session -Source $Script:WebView2.Source) {
                                         "{0} - Navigating to {1}" -f $MyInvocation.MyCommand, $Script:CurrentWebView2Session.BaseUrl | Write-Verbose
                                         $Script:WebView2.Source = ([System.Uri]::New($Script:CurrentWebView2Session.BaseUrl))
                                         $Script:OmadaWatchdogRunning = $false

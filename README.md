@@ -166,7 +166,7 @@ The certificate is looked up in `CurrentUser\My` first and then in `LocalMachine
 ```powershell
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" `
     -AuthenticationType "OAuth" `
-    -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" `
+    -OAuthUri "https://example.okta.com/oauth2/default/v1/token" `
     -OAuthScope "omadaIdentityCloud" `
     -ClientId "0oa1b2c3d4e5f6g7h8i9" `
     -OAuthCertificateThumbprint "9A8B7C6D5E4F30211A2B3C4D5E6F708192A3B4C5"
@@ -785,7 +785,7 @@ Signs in interactively, but hands the sign-in page the account to use and fills 
 #### Example 9
 
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://example.okta.com/oauth2/default/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
 ```
 
 Authenticates against an identity provider other than Entra ID - here Okta - by supplying the token endpoint and scope explicitly.

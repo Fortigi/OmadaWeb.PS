@@ -59,10 +59,6 @@ function Start-WebView2Login {
             $Script:WebView2.CreationProperties.IsInPrivateModeEnabled = $true
         }
 
-        #https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags
-        #$EnvironmentOptions = "--msSingleSignOnOSForPrimaryAccountIsShared"
-        #$Script:WebView2.CreationProperties.AdditionalBrowserArguments = $EnvironmentOptions
-
         $InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
 
         $Script:WinForm_Load = {
@@ -77,7 +73,7 @@ function Start-WebView2Login {
         $Script:WebView_SourceChanged = {
             try {
                 if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.Source -and $null -ne $Script:WinForm) {
-                    $Script:WinForm.Text = "OmadaWeb.PS - {0}" -f $Script:WebView2.Source.AbsoluteUri
+                    $Script:WinForm.Text = Get-WebView2WindowTitle -Uri $Script:WebView2.Source
                 }
             }
             catch [System.Management.Automation.PipelineStoppedException] {
@@ -252,18 +248,42 @@ function Start-WebView2Login {
 
             # If ForceAuthentication, clear data after initialization
             if ($Script:CurrentWebView2Session.ForceAuthentication -and -not $Script:CurrentWebView2Session.BrowserDataCleared) {
+                # Set before the continuation below is registered, so Test-WebView2NavigationReady
+                # blocks navigation from the moment a clear is committed to. Cleared on every path out
+                # of that continuation - success, and a synchronous failure of the call itself - so a
+                # clear that never runs, or that fails, cannot leave the sign-in window waiting forever.
+                $Script:CurrentWebView2Session.BrowserDataClearPending = $true
                 $InitTask.GetAwaiter().OnCompleted({
                         try {
                             "Start-WebView2Login - WebView2 initialized, clearing browsing data..." | Write-Verbose
                             $ClearTask = $Script:WebView2.CoreWebView2.Profile.ClearBrowsingDataAsync()
                             $ClearTask.GetAwaiter().OnCompleted({
-                                    "Start-WebView2Login - Browsing data cleared" | Write-Verbose
-                                    $Script:CurrentWebView2Session.BrowserDataCleared = $true
+                                    try {
+                                        # OnCompleted alone only means the task finished, not that it
+                                        # succeeded - GetResult() is what actually observes a faulted
+                                        # task and re-throws its exception, instead of the clear being
+                                        # reported as done, and BrowserDataCleared set, regardless.
+                                        $ClearTask.GetAwaiter().GetResult()
+                                        "Start-WebView2Login - Browsing data cleared" | Write-Verbose
+                                        $Script:CurrentWebView2Session.BrowserDataCleared = $true
+                                    }
+                                    catch {
+                                        # This continuation runs off the pipeline thread (it is a raw
+                                        # Task continuation, not something PowerShell scheduled), so
+                                        # Write-Warning/Write-Verbose have no stream to reach here -
+                                        # [Console]::WriteLine is what the outer catch below already
+                                        # uses for exactly that reason.
+                                        [Console]::WriteLine("Error clearing data: $_. This is non-terminating error.")
+                                    }
+                                    finally {
+                                        $Script:CurrentWebView2Session.BrowserDataClearPending = $false
+                                    }
                                 })
                         }
                         catch {
                             $Msg = "Error clearing data: $_. This is non-terminating error."
                             [Console]::WriteLine($Msg)
+                            $Script:CurrentWebView2Session.BrowserDataClearPending = $false
                         }
                     })
             }

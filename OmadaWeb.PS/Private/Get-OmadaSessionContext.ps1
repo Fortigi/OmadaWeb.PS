@@ -62,6 +62,12 @@ function Get-OmadaSessionContext {
         # their session expired and knowing the state they imported was already dead.
         Seeded              = $false
         BrowserDataCleared  = $false
+        # Set while a ClearBrowsingDataAsync call is in flight for this session, from just before the
+        # continuation that starts it is registered until either it completes or fails. Distinct from
+        # BrowserDataCleared: that only ever tells the caller a clear succeeded, which is not enough
+        # for Test-WebView2NavigationReady to know when it is safe to stop waiting - a clear that was
+        # never scheduled, or that failed, must let navigation through too, not hang it forever.
+        BrowserDataClearPending = $false
         CookieCacheFilePath = $null
         LoginRetryCount     = 0
         LoginCount          = 0
