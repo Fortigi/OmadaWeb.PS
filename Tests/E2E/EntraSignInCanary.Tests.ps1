@@ -176,7 +176,19 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:RunPasswordSce
         # page and sent the reader to the selector table. Everything needed to tell those apart had
         # already been collected: a selector break leaves a diagnostic, and a failure that never
         # reached Microsoft leaves RedirectHitCount at zero.
-        $Because = if (-not [string]::IsNullOrWhiteSpace($Diagnostic)) {
+        # Checked before the others because it is the most certain of them: Entra ID said in so many
+        # words that it refused the credential, which rules out both the selector table and the
+        # runner. The usual cause is a provisioning run without -GitHubRepository - the script resets
+        # the canary account's password on every run, so the tenant moves on and the environment
+        # keeps the old one. Naming that here saves the reader from a selector hunt that cannot
+        # possibly find anything.
+        $Because = if ($Message -match 'user name or password is wrong|AADSTS50126') {
+            "Entra ID refused the canary account's credential, so this is NOT a selector break and NOT a runner problem. " +
+            "The usual cause is that CANARY_PASSWORD in the 'entra-canary' environment no longer matches the tenant: " +
+            "Build/New-EntraCanaryConfiguration.ps1 resets the account's password on every run, so a run without " +
+            "-GitHubRepository leaves the two disagreeing. Re-run it with -GitHubRepository <owner/repo> to resync them"
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($Diagnostic)) {
             "credential autofill fell back to manual sign-in, so Microsoft changed a page this module recognizes by element id. " +
             "Update `$Script:EntraSignInElementId in OmadaWeb.PS/OmadaWeb.PS.psm1 from the diagnostic above (issue #32)"
         }

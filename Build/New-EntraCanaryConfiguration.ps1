@@ -1355,6 +1355,17 @@ try {
         "The canary account is NOT contained by a Conditional Access policy. It holds no permissions, but nothing stops it signing in to other applications. See docs/entra-canary.md." | Write-Warning
     }
 
+    # The canary account's password is reset on every run - the directory will not hand an existing
+    # one back, so there is nothing else this script could do. Without -GitHubRepository, though, the
+    # new password goes no further than the object returned to the operator, while the environment
+    # keeps the old one: the tenant and GitHub now disagree, and the next scheduled run fails with
+    # AADSTS50126 - "the user name or password is wrong" - hours later, reading like a broken account
+    # rather than a half-finished provisioning run. Said here, while the person who caused it is still
+    # looking at the screen.
+    if ([string]::IsNullOrWhiteSpace($GitHubRepository) -and $null -ne $User) {
+        "The canary account's password has just been reset, and the '{0}' GitHub environment still holds the previous one. Set CANARY_PASSWORD from the returned object, or re-run with -GitHubRepository <owner/repo>, or the sign-in canary will fail on its next run." -f $EnvironmentName | Write-Warning
+    }
+
     if (-not $SkipServicePrincipalCanary -and -not $AppRoleGranted -and $null -ne $OAuthClientApplication) {
         "The canary OAuth client was NOT granted the resource's application role. Its tokens will carry no role, and the service-principal canary asserts that they do. See docs/entra-canary.md." | Write-Warning
     }

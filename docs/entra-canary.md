@@ -122,6 +122,13 @@ Connect-MgGraph -Scopes 'User.ReadWrite.All','Application.ReadWrite.All',
 The script is idempotent — every object is looked up before it is created — so re-running it is how
 you rotate the password.
 
+> **Re-run it with `-GitHubRepository`, or set `CANARY_PASSWORD` yourself straight afterwards.** The
+> account's password is reset on *every* run — the directory will not hand an existing one back, so
+> there is nothing else the script could do. Without `-GitHubRepository` the new password goes no
+> further than the returned object while the environment keeps the old one, and the next run fails
+> with `AADSTS50126` hours later, reading like a broken account rather than a half-finished
+> provisioning run. The script now warns when it leaves the two disagreeing.
+
 ### What it creates
 
 1. **A canary user** in the tenant's initial `onmicrosoft.com` domain, with a generated password, no
@@ -253,6 +260,11 @@ through a second literal replacement of all four values, because that text is ab
    - *"Did not report a selector it no longer recognizes"* failed on its own → the sign-in completed
      but the module still reported a page it did not recognise. Worth reading: something changed that
      the automation recovered from.
+   - The error says *"the user name or password is wrong"* (`AADSTS50126`) → Entra ID refused the
+     credential, which rules out both the selector table and the runner. The usual cause is that
+     `CANARY_PASSWORD` no longer matches the tenant, because `New-EntraCanaryConfiguration.ps1` was
+     re-run without `-GitHubRepository`: it resets the account's password every time. Re-run it with
+     `-GitHubRepository <owner/repo>` to bring the two back into agreement.
    - *"Was not refused by Entra ID"* failed → tenant configuration, not Microsoft. An OAuth error code
      is reported: a disabled account, an expired password, a Conditional Access block, or consent
      that was revoked.
