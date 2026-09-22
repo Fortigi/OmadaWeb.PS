@@ -25,6 +25,14 @@
       3. A Conditional Access policy that blocks the canary account from every application except the
          canary one. This is the containment: the account is powerless elsewhere by policy, not
          merely by holding no permissions.
+      4. The two app registrations the service-principal canary needs, shaped the way Omada's OAuth
+         documentation describes a customer's tenant: a resource application carrying the Application
+         ID URI and exposing an application role - the stand-in for the OpenID Connect application
+         Omada is configured with - and a separate OAuth client application holding the credentials,
+         because the OIDC registration is explicitly not allowed to. The client is granted the
+         resource's application role, and holds both a client secret and a certificate so every
+         credential form the module documents is exercised.
+         See https://documentation.omadaidentity.com/docs/getting-started/authentication-sso/oauth/
 
     WHAT IT DOES ABOUT MFA
 
@@ -55,6 +63,22 @@
     <tenant>.onmicrosoft.com domain is appended.
 .PARAMETER ApplicationDisplayName
     Display name of the app registration the canary signs in to.
+.PARAMETER ResourceApplicationDisplayName
+    Display name of the app registration that stands in for the one Omada is configured with. It is
+    the resource a client-credentials token is issued for.
+.PARAMETER OAuthClientApplicationDisplayName
+    Display name of the confidential client the service-principal canary authenticates as.
+.PARAMETER SkipServicePrincipalCanary
+    Skips the two service-principal app registrations and their credentials, for a tenant where only
+    the sign-in canary is wanted.
+.PARAMETER RotateServicePrincipalCredential
+    Replaces the OAuth client's secret and certificate instead of keeping the existing ones.
+
+    Not the default, because a secret's value can be read only at creation: rotating without
+    -GitHubRepository would invalidate the credential GitHub is holding and hand the replacement to
+    nobody. With it, rotation and publication happen in the same run.
+.PARAMETER ServicePrincipalCredentialMonths
+    How long a newly created client secret and certificate are valid for.
 .PARAMETER Port
     Loopback port the canary listens on, which determines the registered redirect URI. Entra ignores
     the port when matching a localhost redirect URI on a public client, so this mainly has to agree
@@ -82,7 +106,7 @@
 .PARAMETER EnvironmentName
     GitHub environment the secrets are written to when -GitHubRepository is used.
 .EXAMPLE
-    Connect-MgGraph -Scopes 'User.ReadWrite.All','Application.ReadWrite.All','DelegatedPermissionGrant.ReadWrite.All','Directory.Read.All','Policy.Read.All','Policy.ReadWrite.ConditionalAccess','User-PasswordProfile.ReadWrite.All'
+    Connect-MgGraph -Scopes 'User.ReadWrite.All','Application.ReadWrite.All','DelegatedPermissionGrant.ReadWrite.All','AppRoleAssignment.ReadWrite.All','Directory.Read.All','Policy.Read.All','Policy.ReadWrite.ConditionalAccess','User-PasswordProfile.ReadWrite.All'
     ./Build/New-EntraCanaryConfiguration.ps1 -WhatIf
 
     Shows every object that would be created or changed, without touching the tenant. The script
@@ -111,6 +135,19 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$ApplicationDisplayName = "OmadaWeb.PS Sign-in Canary",
 
+    [ValidateNotNullOrEmpty()]
+    [string]$ResourceApplicationDisplayName = "OmadaWeb.PS Canary OData Resource",
+
+    [ValidateNotNullOrEmpty()]
+    [string]$OAuthClientApplicationDisplayName = "OmadaWeb.PS Canary OAuth Client",
+
+    [switch]$SkipServicePrincipalCanary,
+
+    [switch]$RotateServicePrincipalCredential,
+
+    [ValidateRange(1, 24)]
+    [int]$ServicePrincipalCredentialMonths = 12,
+
     [ValidateRange(1024, 65535)]
     [int]$Port = 8400,
 
@@ -138,6 +175,22 @@ $GraphDelegatedPermission = [ordered]@{
     "profile"   = "14dad69e-099b-42c9-810b-d002981feec1"
     "User.Read" = "e1fe6dd8-ba31-4d61-89e7-88639da4683d"
 }
+
+# The application role the resource exposes and the client is granted. The id is written out rather
+# than generated per run for the same reason the Graph permission ids above are: re-running has to
+# find the role it created last time rather than add a second one beside it.
+$CanaryAppRole = @{
+    Id                 = "3f9c1d4e-6b2a-4c58-9d13-7a5e8f0b2c64"
+    AllowedMemberTypes = @("Application")
+    DisplayName        = "OmadaWeb.PS canary OData reader"
+    Description        = "Granted to the canary OAuth client so a client-credentials token carries a role, the way an Omada OData client's token does."
+    Value              = "OmadaWeb.Canary.Read"
+    IsEnabled          = $true
+}
+
+# Both credentials the OAuth client holds are labelled, so a run can find the ones it created without
+# touching a credential somebody added by hand.
+$CanaryCredentialName = "OmadaWeb.PS canary"
 
 $ContainmentPolicyName = "OmadaWeb.PS canary - block every application except the canary"
 $LocationPolicyName = "OmadaWeb.PS canary - block sign-in from outside the allowed ranges"
@@ -414,6 +467,419 @@ function Grant-CanaryAdminConsent {
     }
 }
 
+function Set-CanaryResourceApplication {
+    <#
+    .SYNOPSIS
+        Creates or updates the app registration that stands in for the one Omada is configured with.
+    .DESCRIPTION
+        Omada's OAuth documentation describes two registrations, and this is the first of them: the
+        OpenID Connect application. It is the resource - it carries the Application ID URI a client
+        asks for a token for, and it exposes the application role that ends up in that token. Omada
+        is explicit that this registration cannot be used with client secret grants, so it holds no
+        credentials here either.
+
+        requestedAccessTokenVersion is set to 2 because that is what Omada's setup instructions say
+        to set it to, and it decides which claims the token carries: the canary asserts on 'azp' and
+        a 'ver' of 2.0, neither of which a v1 token has.
+
+        The Application ID URI uses the api://<application id> form, which is what an on-premises
+        installation uses. Identity Cloud uses the Omada host name instead - the module reaches both
+        the same way, through -EntraApplicationIdUri.
+    .PARAMETER DisplayName
+        Display name of the resource app registration.
+    .PARAMETER AppRole
+        The application role to expose, as a Graph appRole object.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory)]
+        [hashtable]$AppRole
+    )
+
+    $Existing = @(Get-MgApplication -Filter ("displayName eq '{0}'" -f (ConvertTo-ODataLiteral -Value $DisplayName)) -ErrorAction SilentlyContinue)
+
+    if ($Existing.Count -gt 0) {
+        $Application = $Existing[0]
+
+        # The role is matched by id rather than by value, so a run that follows a renamed role updates
+        # it instead of adding a second one that Entra would refuse for a duplicate value.
+        $RegisteredRole = @($Application.AppRoles | Where-Object { $_.Id -eq $AppRole.Id })
+        if ($RegisteredRole.Count -eq 0) {
+            if ($PSCmdlet.ShouldProcess($DisplayName, ("Expose the application role {0}" -f $AppRole.Value))) {
+                Update-MgApplication -ApplicationId $Application.Id -AppRoles @($Application.AppRoles + $AppRole)
+                "Added the application role to the existing resource application." | Write-Host -ForegroundColor Green
+            }
+        }
+        else {
+            "Resource application already exposes the application role." | Write-Host
+        }
+    }
+    else {
+        if (-not $PSCmdlet.ShouldProcess($DisplayName, "Create the canary resource application registration")) {
+            return $null
+        }
+
+        $Application = New-MgApplication -DisplayName $DisplayName `
+            -SignInAudience "AzureADMyOrg" `
+            -AppRoles @($AppRole) `
+            -Api @{ RequestedAccessTokenVersion = 2 }
+
+        # The identifier URI needs the application id, which only exists once the application does.
+        Update-MgApplication -ApplicationId $Application.Id -IdentifierUris @(("api://{0}" -f $Application.AppId))
+        $Application = Get-MgApplication -ApplicationId $Application.Id
+
+        "Created the canary resource application registration." | Write-Host -ForegroundColor Green
+    }
+
+    if ($null -eq $Application) {
+        return $null
+    }
+
+    $ServicePrincipal = @(Get-MgServicePrincipal -Filter ("appId eq '{0}'" -f $Application.AppId) -ErrorAction SilentlyContinue)
+    if ($ServicePrincipal.Count -eq 0) {
+        if ($PSCmdlet.ShouldProcess($DisplayName, "Create the resource service principal")) {
+            $null = New-MgServicePrincipal -AppId $Application.AppId
+            "Created the resource service principal." | Write-Host -ForegroundColor Green
+        }
+    }
+
+    return $Application
+}
+
+function Set-CanaryOAuthClientApplication {
+    <#
+    .SYNOPSIS
+        Creates or updates the confidential client that authenticates with the client-credentials grant.
+    .DESCRIPTION
+        The second of Omada's two registrations: one OAuth client application per client that connects,
+        holding the credentials the main OIDC registration is not allowed to hold.
+
+        It is a confidential client - no redirect URI, no public-client flag - and it asks for exactly
+        one thing: the application role the resource exposes. Type 'Role' rather than 'Scope', because
+        a client-credentials token carries application permissions and never delegated ones.
+    .PARAMETER DisplayName
+        Display name of the client app registration.
+    .PARAMETER ResourceAppId
+        The resource application's application (client) id.
+    .PARAMETER AppRoleId
+        The id of the application role to request from that resource.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory)]
+        [string]$ResourceAppId,
+
+        [Parameter(Mandatory)]
+        [string]$AppRoleId
+    )
+
+    $RequiredResourceAccess = @{
+        ResourceAppId  = $ResourceAppId
+        ResourceAccess = @(
+            @{
+                Id   = $AppRoleId
+                Type = "Role"
+            }
+        )
+    }
+
+    $Existing = @(Get-MgApplication -Filter ("displayName eq '{0}'" -f (ConvertTo-ODataLiteral -Value $DisplayName)) -ErrorAction SilentlyContinue)
+
+    if ($Existing.Count -gt 0) {
+        $Application = $Existing[0]
+
+        $RequestsRole = @($Application.RequiredResourceAccess | Where-Object { $_.ResourceAppId -eq $ResourceAppId })
+        if ($RequestsRole.Count -eq 0) {
+            if ($PSCmdlet.ShouldProcess($DisplayName, "Request the application role from the resource")) {
+                Update-MgApplication -ApplicationId $Application.Id -RequiredResourceAccess @($RequiredResourceAccess)
+                "Added the application permission to the existing OAuth client." | Write-Host -ForegroundColor Green
+            }
+        }
+        else {
+            "OAuth client already requests the application role." | Write-Host
+        }
+    }
+    else {
+        if (-not $PSCmdlet.ShouldProcess($DisplayName, "Create the canary OAuth client application registration")) {
+            return $null
+        }
+
+        $Application = New-MgApplication -DisplayName $DisplayName `
+            -SignInAudience "AzureADMyOrg" `
+            -RequiredResourceAccess @($RequiredResourceAccess)
+
+        "Created the canary OAuth client application registration." | Write-Host -ForegroundColor Green
+    }
+
+    if ($null -eq $Application) {
+        return $null
+    }
+
+    $ServicePrincipal = @(Get-MgServicePrincipal -Filter ("appId eq '{0}'" -f $Application.AppId) -ErrorAction SilentlyContinue)
+    if ($ServicePrincipal.Count -eq 0) {
+        if ($PSCmdlet.ShouldProcess($DisplayName, "Create the OAuth client service principal")) {
+            $null = New-MgServicePrincipal -AppId $Application.AppId
+            "Created the OAuth client service principal." | Write-Host -ForegroundColor Green
+        }
+    }
+
+    return $Application
+}
+
+function Grant-CanaryAppRole {
+    <#
+    .SYNOPSIS
+        Grants the OAuth client the resource's application role - the admin consent for it.
+    .DESCRIPTION
+        Requesting a role in a registration is not holding it. Without this assignment Entra either
+        refuses the token or, where the resource does not require assignment, issues one carrying no
+        roles at all - which authenticates nothing at Omada and would let the canary pass while
+        proving less than it claims. The canary asserts the role is in the token for that reason.
+    .PARAMETER ClientAppId
+        Application (client) id of the OAuth client.
+    .PARAMETER ResourceAppId
+        Application (client) id of the resource.
+    .PARAMETER AppRoleId
+        The application role being granted.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ClientAppId,
+
+        [Parameter(Mandatory)]
+        [string]$ResourceAppId,
+
+        [Parameter(Mandatory)]
+        [string]$AppRoleId
+    )
+
+    $ClientServicePrincipal = @(Get-MgServicePrincipal -Filter ("appId eq '{0}'" -f $ClientAppId) -ErrorAction SilentlyContinue)
+    $ResourceServicePrincipal = @(Get-MgServicePrincipal -Filter ("appId eq '{0}'" -f $ResourceAppId) -ErrorAction SilentlyContinue)
+
+    if ($ClientServicePrincipal.Count -eq 0 -or $ResourceServicePrincipal.Count -eq 0) {
+        "Skipping the app role grant: the service principals do not exist yet (expected with -WhatIf)." | Write-Warning
+        return $false
+    }
+
+    $Existing = @(Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $ClientServicePrincipal[0].Id -ErrorAction SilentlyContinue |
+            Where-Object { $_.AppRoleId -eq $AppRoleId -and $_.ResourceId -eq $ResourceServicePrincipal[0].Id })
+
+    if ($Existing.Count -gt 0) {
+        "Application role already granted." | Write-Host
+        return $true
+    }
+
+    if (-not $PSCmdlet.ShouldProcess($AppRoleId, "Grant the application role to the canary OAuth client")) {
+        return $false
+    }
+
+    $null = New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $ClientServicePrincipal[0].Id `
+        -PrincipalId $ClientServicePrincipal[0].Id `
+        -ResourceId $ResourceServicePrincipal[0].Id `
+        -AppRoleId $AppRoleId
+
+    "Granted the application role, so a client-credentials token carries it." | Write-Host -ForegroundColor Green
+    return $true
+}
+
+function Set-CanaryClientSecret {
+    <#
+    .SYNOPSIS
+        Adds a client secret to the OAuth client, or reports the one already there.
+    .DESCRIPTION
+        Entra shows a secret's value once, at creation, and never again - so a run that leaves an
+        existing secret alone has nothing to publish, and a run that creates one must publish it or
+        the value is lost. That is why this returns the value only when it actually created one, and
+        why rotation is a deliberate switch rather than something every run does: rotating without
+        -GitHubRepository would invalidate the secret GitHub is holding and hand the replacement to
+        nobody.
+    .PARAMETER ApplicationObjectId
+        The application's object id (not its application id).
+    .PARAMETER DisplayName
+        Label for the credential, so a later run finds the one it created.
+    .PARAMETER Months
+        How long a newly created secret is valid for.
+    .PARAMETER Rotate
+        Replace an existing secret instead of keeping it.
+    .OUTPUTS
+        A hashtable with Value (empty when nothing was created), EndDateTime and Created.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ApplicationObjectId,
+
+        [Parameter(Mandatory)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory)]
+        [int]$Months,
+
+        [switch]$Rotate
+    )
+
+    $Result = @{
+        Value       = ""
+        EndDateTime = $null
+        Created     = $false
+    }
+
+    $Application = Get-MgApplication -ApplicationId $ApplicationObjectId
+    $Ours = @($Application.PasswordCredentials | Where-Object { $_.DisplayName -eq $DisplayName })
+
+    if ($Ours.Count -gt 0 -and -not $Rotate) {
+        $Result.EndDateTime = @($Ours | Sort-Object -Property EndDateTime -Descending)[0].EndDateTime
+        "Client secret already exists and expires {0:yyyy-MM-dd}. Pass -RotateServicePrincipalCredential to replace it." -f $Result.EndDateTime | Write-Host
+        return $Result
+    }
+
+    if (-not $PSCmdlet.ShouldProcess($DisplayName, "Add a client secret to the canary OAuth client")) {
+        return $Result
+    }
+
+    foreach ($Credential in $Ours) {
+        Remove-MgApplicationPassword -ApplicationId $ApplicationObjectId -KeyId $Credential.KeyId
+        "Removed the previous client secret." | Write-Host
+    }
+
+    $Added = Add-MgApplicationPassword -ApplicationId $ApplicationObjectId -PasswordCredential @{
+        DisplayName = $DisplayName
+        EndDateTime = [datetime]::UtcNow.AddMonths($Months)
+    }
+
+    $Result.Value = $Added.SecretText
+    $Result.EndDateTime = $Added.EndDateTime
+    $Result.Created = $true
+
+    "Created a client secret valid until {0:yyyy-MM-dd}." -f $Added.EndDateTime | Write-Host -ForegroundColor Green
+    return $Result
+}
+
+function Set-CanaryClientCertificate {
+    <#
+    .SYNOPSIS
+        Generates a self-signed certificate, registers its public half, and returns the PFX.
+    .DESCRIPTION
+        The certificate is created in this process with .NET's CertificateRequest rather than with
+        New-SelfSignedCertificate, so it never enters a certificate store on the machine that
+        provisions the tenant: the only copies are the public half, which goes to Entra, and the PFX,
+        which goes straight into a GitHub secret.
+
+        Only the public half is ever uploaded. The private key is what the module uses to sign the
+        client assertion that the canary exists to prove Microsoft still accepts, and it stays in the
+        PFX.
+    .PARAMETER ApplicationObjectId
+        The application's object id (not its application id).
+    .PARAMETER DisplayName
+        Label for the credential, so a later run finds the one it created.
+    .PARAMETER Months
+        How long a newly created certificate is valid for.
+    .PARAMETER Password
+        Password protecting the returned PFX.
+    .PARAMETER Rotate
+        Replace an existing certificate instead of keeping it.
+    .OUTPUTS
+        A hashtable with Pfx (base64, empty when nothing was created), NotAfter, Thumbprint and Created.
+    #>
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'Password', Justification = 'X509Certificate2.Export takes the PFX password as a plain string, and the same value is handed to "gh secret set". A SecureString here would be converted straight back on both sides, so it would add ceremony without shortening the plaintext lifetime. The value is generated in this process, never written to disk, and never rendered unless the operator asks for it.')]
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ApplicationObjectId,
+
+        [Parameter(Mandatory)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory)]
+        [int]$Months,
+
+        [Parameter(Mandatory)]
+        [string]$Password,
+
+        [switch]$Rotate
+    )
+
+    $Result = @{
+        Pfx        = ""
+        NotAfter   = $null
+        Thumbprint = ""
+        Created    = $false
+    }
+
+    $Application = Get-MgApplication -ApplicationId $ApplicationObjectId
+    $Ours = @($Application.KeyCredentials | Where-Object { $_.DisplayName -eq $DisplayName })
+
+    if ($Ours.Count -gt 0 -and -not $Rotate) {
+        $Newest = @($Ours | Sort-Object -Property EndDateTime -Descending)[0]
+        $Result.NotAfter = $Newest.EndDateTime
+        "Client certificate already registered and expires {0:yyyy-MM-dd}. Pass -RotateServicePrincipalCredential to replace it." -f $Result.NotAfter | Write-Host
+        return $Result
+    }
+
+    if (-not $PSCmdlet.ShouldProcess($DisplayName, "Register a client certificate on the canary OAuth client")) {
+        return $Result
+    }
+
+    $Key = [System.Security.Cryptography.RSA]::Create(2048)
+    try {
+        $Request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
+            ("CN={0}" -f $DisplayName),
+            $Key,
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+            [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+
+        # Backdated by a few minutes so a clock difference between this machine and Entra cannot make
+        # a certificate that is not valid yet.
+        $Certificate = $Request.CreateSelfSigned([System.DateTimeOffset]::UtcNow.AddMinutes(-5), [System.DateTimeOffset]::UtcNow.AddMonths($Months))
+        try {
+            # Replaces the collection rather than appending to it: our own previous certificate is
+            # what is being rotated away, and leaving it registered would keep a credential alive that
+            # nothing holds the key for any more.
+            $Others = @($Application.KeyCredentials | Where-Object { $_.DisplayName -ne $DisplayName } | ForEach-Object {
+                    @{
+                        Type        = $_.Type
+                        Usage       = $_.Usage
+                        Key         = $_.Key
+                        DisplayName = $_.DisplayName
+                    }
+                })
+
+            $NewCredential = @{
+                Type        = "AsymmetricX509Cert"
+                Usage       = "Verify"
+                Key         = $Certificate.RawData
+                DisplayName = $DisplayName
+            }
+
+            Update-MgApplication -ApplicationId $ApplicationObjectId -KeyCredentials @($Others + $NewCredential)
+
+            $Result.Pfx = [Convert]::ToBase64String($Certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $Password))
+            $Result.NotAfter = $Certificate.NotAfter
+            $Result.Thumbprint = $Certificate.Thumbprint
+            $Result.Created = $true
+
+            "Registered a client certificate ({0}) valid until {1:yyyy-MM-dd}." -f $Certificate.Thumbprint, $Certificate.NotAfter | Write-Host -ForegroundColor Green
+        }
+        finally {
+            $Certificate.Dispose()
+        }
+    }
+    finally {
+        $Key.Dispose()
+    }
+
+    return $Result
+}
+
 function Get-CanarySecurityDefaultsState {
     <#
     .SYNOPSIS
@@ -677,6 +1143,12 @@ try {
         $RequiredScope += "Policy.ReadWrite.ConditionalAccess"
     }
 
+    # Granting an application role to a service principal is its own scope: Application.ReadWrite.All
+    # registers the request, and only this assigns it.
+    if (-not $SkipServicePrincipalCanary) {
+        $RequiredScope += "AppRoleAssignment.ReadWrite.All"
+    }
+
     # Reading the security-defaults policy is covered by Policy.Read.All; turning it off is a
     # separate scope, and it is only asked for when the script is actually going to do that.
     if ($DisableSecurityDefaults) {
@@ -718,6 +1190,45 @@ try {
 
     if ($null -ne $Application) {
         Grant-CanaryAdminConsent -ApplicationId $Application.AppId -GraphApplicationId $GraphApplicationId -Scope ($GraphDelegatedPermission.Keys -join " ")
+    }
+
+    # The service-principal canary's half of the tenant: the two registrations Omada's OAuth
+    # documentation describes, and the role grant between them. Entirely separate from the sign-in
+    # canary above - no user, no browser, no Conditional Access - so it is skippable on its own.
+    $ResourceApplication = $null
+    $OAuthClientApplication = $null
+    $AppRoleGranted = $false
+    $ClientSecretResult = @{ Value = ""; EndDateTime = $null; Created = $false }
+    $ClientCertificateResult = @{ Pfx = ""; NotAfter = $null; Thumbprint = ""; Created = $false }
+    $CertificatePassword = ""
+
+    if ($SkipServicePrincipalCanary) {
+        "Skipping the service-principal canary objects (-SkipServicePrincipalCanary)." | Write-Host -ForegroundColor Yellow
+    }
+    else {
+        $ResourceApplication = Set-CanaryResourceApplication -DisplayName $ResourceApplicationDisplayName -AppRole $CanaryAppRole
+
+        if ($null -ne $ResourceApplication) {
+            $OAuthClientApplication = Set-CanaryOAuthClientApplication -DisplayName $OAuthClientApplicationDisplayName -ResourceAppId $ResourceApplication.AppId -AppRoleId $CanaryAppRole.Id
+        }
+
+        if ($null -ne $OAuthClientApplication) {
+            $AppRoleGranted = Grant-CanaryAppRole -ClientAppId $OAuthClientApplication.AppId -ResourceAppId $ResourceApplication.AppId -AppRoleId $CanaryAppRole.Id
+
+            $ClientSecretResult = Set-CanaryClientSecret -ApplicationObjectId $OAuthClientApplication.Id `
+                -DisplayName $CanaryCredentialName `
+                -Months $ServicePrincipalCredentialMonths `
+                -Rotate:$RotateServicePrincipalCredential
+
+            # The PFX password is generated per certificate and shares its lifetime: it protects a file
+            # that only ever exists inside a GitHub secret and the runner that decodes it.
+            $CertificatePassword = New-CanaryPassword
+            $ClientCertificateResult = Set-CanaryClientCertificate -ApplicationObjectId $OAuthClientApplication.Id `
+                -DisplayName $CanaryCredentialName `
+                -Months $ServicePrincipalCredentialMonths `
+                -Password $CertificatePassword `
+                -Rotate:$RotateServicePrincipalCredential
+        }
     }
 
     $SecurityDefaults = "Not checked"
@@ -783,6 +1294,27 @@ try {
         CANARY_PASSWORD  = $Password
     }
 
+    if ($null -ne $OAuthClientApplication) {
+        $Secret['CANARY_SP_CLIENT_ID'] = $OAuthClientApplication.AppId
+        $Secret['CANARY_SP_RESOURCE_URI'] = @($ResourceApplication.IdentifierUris)[0]
+        $Secret['CANARY_SP_RESOURCE_CLIENT_ID'] = $ResourceApplication.AppId
+        $Secret['CANARY_SP_APP_ROLE'] = $CanaryAppRole.Value
+
+        # Only published when this run actually created them. A secret's value cannot be read back
+        # after creation and a certificate's private key is never uploaded, so publishing an empty
+        # string for a credential that was deliberately left in place would overwrite a working
+        # GitHub secret with nothing.
+        if ($ClientSecretResult.Created) {
+            $Secret['CANARY_SP_CLIENT_SECRET'] = $ClientSecretResult.Value
+            $Secret['CANARY_SP_SECRET_EXPIRY'] = "{0:yyyy-MM-ddTHH:mm:ssZ}" -f $ClientSecretResult.EndDateTime
+        }
+
+        if ($ClientCertificateResult.Created) {
+            $Secret['CANARY_SP_CERT_PFX_BASE64'] = $ClientCertificateResult.Pfx
+            $Secret['CANARY_SP_CERT_PASSWORD'] = $CertificatePassword
+        }
+    }
+
     if (-not [string]::IsNullOrWhiteSpace($GitHubRepository)) {
         Publish-CanarySecret -Repository $GitHubRepository -EnvironmentName $EnvironmentName -Secret $Secret
     }
@@ -795,10 +1327,22 @@ try {
     "  MFA exemption applied to: {0}" -f $(if ($MfaExemption.Count -eq 0) { "no policy required MFA" } else { $MfaExemption -join ", " }) | Write-Host
     "  Contained by policy     : {0}" -f $Contained | Write-Host
     "  Restricted by IP        : {0}" -f $LocationRestricted | Write-Host
+
+    if ($SkipServicePrincipalCanary) {
+        "  Service-principal canary: skipped" | Write-Host
+    }
+    else {
+        "  Resource application    : {0}" -f $ResourceApplicationDisplayName | Write-Host
+        "  OAuth client application: {0}" -f $OAuthClientApplicationDisplayName | Write-Host
+        "  Application role granted: {0}" -f $AppRoleGranted | Write-Host
+        "  Client secret expires   : {0}" -f $(if ($null -eq $ClientSecretResult.EndDateTime) { "not created" } else { "{0:yyyy-MM-dd}" -f $ClientSecretResult.EndDateTime }) | Write-Host
+        "  Certificate expires     : {0}" -f $(if ($null -eq $ClientCertificateResult.NotAfter) { "not created" } else { "{0:yyyy-MM-dd}" -f $ClientCertificateResult.NotAfter }) | Write-Host
+    }
+
     "" | Write-Host
 
     if ([string]::IsNullOrWhiteSpace($GitHubRepository)) {
-        "The four values below belong in the '{0}' GitHub environment and nowhere else. They are returned rather than printed - assign the result and read what you need, or re-run with -GitHubRepository to have them set for you without ever being displayed:" -f $EnvironmentName | Write-Host -ForegroundColor Yellow
+        "The values below belong in the '{0}' GitHub environment and nowhere else. They are returned rather than printed - assign the result and read what you need, or re-run with -GitHubRepository to have them set for you without ever being displayed:" -f $EnvironmentName | Write-Host -ForegroundColor Yellow
         $Secret.Keys | Sort-Object | ForEach-Object { "  {0}" -f $_ | Write-Host }
         "" | Write-Host
     }
@@ -809,6 +1353,21 @@ try {
 
     if (-not $Contained -and -not $SkipConditionalAccess) {
         "The canary account is NOT contained by a Conditional Access policy. It holds no permissions, but nothing stops it signing in to other applications. See docs/entra-canary.md." | Write-Warning
+    }
+
+    if (-not $SkipServicePrincipalCanary -and -not $AppRoleGranted -and $null -ne $OAuthClientApplication) {
+        "The canary OAuth client was NOT granted the resource's application role. Its tokens will carry no role, and the service-principal canary asserts that they do. See docs/entra-canary.md." | Write-Warning
+    }
+
+    # An expiry that is already close is worth saying now rather than leaving for the workflow to
+    # annotate on the morning it matters.
+    foreach ($Expiry in @(
+            @{ Name = "client secret"; Moment = $ClientSecretResult.EndDateTime },
+            @{ Name = "client certificate"; Moment = $ClientCertificateResult.NotAfter }
+        )) {
+        if ($null -ne $Expiry.Moment -and [datetime]$Expiry.Moment -lt [datetime]::UtcNow.AddDays(30)) {
+            "The canary {0} expires {1:yyyy-MM-dd}. Re-run with -RotateServicePrincipalCredential -GitHubRepository <owner/repo> to replace it before the canary goes red." -f $Expiry.Name, $Expiry.Moment | Write-Warning
+        }
     }
 
     return [pscustomobject]$Secret
