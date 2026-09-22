@@ -323,10 +323,9 @@ Describe 'Start-CanaryRelyingParty' -Tag 'Unit' {
     }
 
     It 'Records the bearer token the service-principal canary presents' {
-        # What the service-principal canary asserts against. Invoke-OAuth2Authentication continues
-        # with an empty bearer when the token request fails, so a canary that only checked the status
-        # code would pass against a tenant issuing no tokens at all - this listener authorizes
-        # nothing and answers 200 either way.
+        # What the service-principal canary asserts against. This listener authorizes nothing and
+        # answers 200 either way, so a canary that only checked the status code would pass on a
+        # request that presented no token at all - which is also the shape issue #102 fixed.
         $Before = $Script:RelyingParty.ResourceHitCount
 
         $null = Invoke-CanaryRequest -Uri $Script:RelyingParty.ResourceUrl -Authorization "Bearer canary-access-token"

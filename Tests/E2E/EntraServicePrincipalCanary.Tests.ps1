@@ -31,11 +31,18 @@ param(
 #
 # WHAT IT ASSERTS AGAINST, AND WHY IT IS NOT "THE CALL DID NOT THROW"
 #
-# Invoke-OAuth2Authentication requests its token with -ErrorAction SilentlyContinue and, when no
-# access_token comes back, continues with an EMPTY bearer value - a verbose line is the only trace.
-# A test that asserted the request completed would therefore pass against a tenant issuing no tokens
-# at all. So every assertion below is made against the token that arrived at the resource, which
-# Start-CanaryRelyingParty records for this purpose.
+# Every assertion below is made against the token that actually arrived at the resource, which
+# Start-CanaryRelyingParty records for this purpose. Two reasons, and neither is redundant:
+#
+#   1. The stand-in authorizes nothing. It answers 200 to any request for /api/*, with or without a
+#      credential, because it is a loopback listener and not Omada. "The request succeeded" therefore
+#      says nothing about what was presented - only reading the header does.
+#   2. It is the regression guard for issue #102. Until that was fixed, a failed token request fell
+#      through to 'Authorization: Bearer ' and the caller saw an unexplained 401 from Omada instead of
+#      the identity provider's error. Invoke-OAuthTokenRequest now stops on error and
+#      New-OAuthTokenRequestError re-throws it carrying the AADSTS code, so the empty-bearer case
+#      should no longer be reachable - and asserting on the token that arrived is what keeps that a
+#      fact rather than an assumption.
 #
 # HOW IT IS SHAPED LIKE A CUSTOMER'S TENANT
 #
@@ -265,7 +272,8 @@ Describe 'Entra ID service-principal canary' -Tag 'E2E' -Skip:(-not $Script:RunS
         # An AADSTS code is the difference between "the tenant is misconfigured or a credential
         # expired" and "the module builds an assertion Microsoft will not take". It is pulled out of
         # the error rather than out of the token, because a request that got no token is exactly the
-        # case that has one.
+        # case that has one - and since issue #102 the module puts the identity provider's own
+        # error_description into that message, so the code is there to find.
         $ErrorText = if ($null -eq $Script:CanaryError) { "" } else { $Script:CanaryError.Exception.Message }
         $Script:EntraErrorCode = @([regex]::Matches($ErrorText, 'AADSTS\d+') | ForEach-Object { $_.Value } | Select-Object -Unique)
 
@@ -312,14 +320,14 @@ Describe 'Entra ID service-principal canary' -Tag 'E2E' -Skip:(-not $Script:RunS
     }
 
     It 'Presented a bearer token at the resource' {
-        # The assertion the whole file rests on. Without it every other check here could pass while
-        # the module sent 'Authorization: Bearer ' and the stand-in - which authorizes nothing -
-        # answered 200 anyway.
+        # The assertion the whole file rests on, and the regression guard for issue #102: the stand-in
+        # authorizes nothing and answers 200 to anything, so without this every other check could pass
+        # while 'Authorization: Bearer ' went to Omada.
         $Because = if ($Script:EntraErrorCode.Count -gt 0) {
             "Entra ID refused to issue a token ({0}). That is the tenant or an expired credential, not the module - see docs/entra-canary.md" -f ($Script:EntraErrorCode -join ", ")
         }
         else {
-            "no access token reached the resource. Invoke-OAuth2Authentication continues with an empty bearer when the token request fails, so read the diagnostic above rather than the status code"
+            "no access token reached the resource, and the identity provider named no error code. Read the diagnostic above rather than the status code - the stand-in answers 200 whether or not a token was presented"
         }
 
         $Script:RelyingParty.ResourceHitCount | Should -BeGreaterThan 0 -Because "the module never reached the resource at all"

@@ -843,7 +843,7 @@ jobs:
               : [
                   `**Entra ID did not refuse the request, so read the failed assertions below.** A token that never arrived, a token missing the application role, or claims that do not match the resource all point somewhere different.`,
                   ``,
-                  `**What to do.** If no bearer token reached the resource, remember that \`Invoke-OAuth2Authentication\` continues with an empty bearer when the token request fails - the status code proves nothing on its own. See \`docs/entra-canary.md\`.`,
+                  `**What to do.** If no bearer token reached the resource, note that the loopback stand-in answers \`200\` whether or not one was presented - the status code proves nothing on its own, and a request arriving with no token is the regression issue #102 fixed. See \`docs/entra-canary.md\`.`,
                 ];
 
             const body = [

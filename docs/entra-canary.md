@@ -292,11 +292,18 @@ Entra will not take, a scope that resolves to nothing, a client holding no appli
 
 ### The assertion everything rests on
 
-`Invoke-OAuth2Authentication` requests its token with `-ErrorAction SilentlyContinue` and, when no
-`access_token` comes back, **continues with an empty bearer value**; a verbose line is the only
-trace. A test asserting "the request completed" would therefore pass against a tenant issuing no
-tokens at all. So the canary asserts against the token that actually arrived at the resource, which
-`Tests/E2E/Start-CanaryRelyingParty.ps1` records as `ResourceBearer` for exactly this purpose.
+The canary asserts against the token that actually arrived at the resource, which
+`Tests/E2E/Start-CanaryRelyingParty.ps1` records as `ResourceBearer`. Two reasons:
+
+- **The stand-in authorizes nothing.** It answers `200` to any `/api/*` request, credential or not,
+  because it is a loopback listener and not Omada. "The request succeeded" therefore says nothing
+  about what was presented.
+- **It is the regression guard for [#102](https://github.com/Fortigi/OmadaWeb.PS/issues/102).** Until
+  that was fixed, a failed token request fell through to `Authorization: Bearer ` and the user saw an
+  unexplained 401 from Omada instead of the identity provider's error. `Invoke-OAuthTokenRequest` now
+  stops on error and `New-OAuthTokenRequestError` re-throws carrying the `AADSTS` code, so the
+  empty-bearer case should no longer be reachable — and this is what keeps that a fact rather than an
+  assumption.
 
 ### The tenant is shaped like a customer's
 
@@ -379,8 +386,9 @@ needs the `AppRoleAssignment.ReadWrite.All` Graph scope on top of the ones the s
   module. `AADSTS7000222` is an expired client secret, `AADSTS700027` an expired or unregistered
   certificate; both are fixed by rotating. Others: a revoked grant, a disabled service principal.
 - **"Presented a bearer token at the resource" failed with no `AADSTS` code** → the token request
-  failed some other way. Remember that an empty bearer still produces a `200` from the stand-in, so
-  the status code proves nothing on its own; read the diagnostic.
+  failed some other way, or a request reached the resource carrying no token — the regression #102
+  fixed. The stand-in answers `200` either way, so the status code proves nothing on its own; read
+  the diagnostic.
 - **"Carried the application role granted to the client" failed on its own** → a token was issued but
   the app-role grant is missing or was never consented. Re-run the provisioning script.
 - **"Was issued a token the way Omada expects one" failed on `ver`** → `requestedAccessTokenVersion`

@@ -400,10 +400,11 @@ function Start-CanaryRelyingParty {
                 elseif ($Path -like "/api/*") {
                     $RelyingParty.ResourceHitCount = $RelyingParty.ResourceHitCount + 1
 
-                    # What the service-principal canary actually asserts against. Invoke-OAuth2Authentication
-                    # requests its token with -ErrorAction SilentlyContinue and, when none comes back, carries
-                    # on with an empty bearer value - so "the request did not throw" proves nothing about a
-                    # token having been issued. Only what arrived here does.
+                    # What the service-principal canary actually asserts against. This listener authorizes
+                    # nothing - it answers 200 to any /api/* request, credential or not - so "the request
+                    # succeeded" proves nothing about what was presented. Only reading the header does, and
+                    # that is also the regression guard for issue #102, where a failed token request used to
+                    # fall through to 'Authorization: Bearer '.
                     #
                     # This is a bearer token. It is held in memory for the length of one attempt and is never
                     # written to the report: a failing canary's diagnostic becomes a public GitHub issue.
