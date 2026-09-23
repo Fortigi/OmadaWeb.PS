@@ -2,10 +2,15 @@
 
 <#
 .SYNOPSIS
-    Runs one attempt of the Entra sign-in canary and writes its result as JSON.
+    Runs one attempt of an Entra canary and writes its result as JSON.
 .DESCRIPTION
     The canary workflow runs this in a child process with a deadline rather than calling Invoke-Pester
     directly, and that is the whole reason it exists as a separate script.
+
+    The deadline is what the sign-in canary needs; the service-principal canary, which opens no
+    browser and cannot hang waiting for a user, uses this for the reporting rather than the deadline:
+    the JSON summary, the JUnit result and the diagnostic file are what the workflow reads to build
+    its report either way.
 
     A browser sign-in has no natural end when nobody is driving it. If the automation hands over to
     manual - which is exactly what a selector break makes it do - it then waits for a user who does
@@ -32,11 +37,21 @@
 .PARAMETER DiagnosticPath
     Passed to the test as OMADAWEBPS_CANARY_DIAGNOSTIC_PATH, where Switch-ToManualLogin's diagnostic
     is written when there is one.
+.PARAMETER TestFile
+    Which canary to run, as a file name in this directory. Defaults to the sign-in canary. The
+    service-principal canary is a separate file because it shares nothing with the sign-in one except
+    this runner and the loopback stand-in, but it wants the same deadline, the same JSON summary and
+    the same diagnostic file - so it is the same attempt mechanism, pointed at another test.
 .PARAMETER Scenario
-    Which sign-in to drive. 'PasswordAutofill' is the sign-in that completes - the original canary.
+    Which case to drive.
+
+    For the sign-in canary: 'PasswordAutofill' is the sign-in that completes - the original canary.
     'UserNameOnly' and 'NoUserName' are the two that are not meant to complete: they watch what the
     module does when it is given an account but no password, and when it is given neither. Each needs
     its own browser window, so each is its own attempt.
+
+    For the service-principal canary: which credential form authenticates the client. Each is its own
+    attempt because supplying two credentials at once means only one of them is under test.
 .EXAMPLE
     ./Tests/E2E/Invoke-CanaryAttempt.ps1 -ModulePath ./buildoutput/OmadaWeb.PS/OmadaWeb.PS.psm1 `
         -ResultPath ./buildoutput/CanaryResults-1.xml -SummaryPath $env:RUNNER_TEMP/summary-1.json `
@@ -56,7 +71,10 @@ param(
     [Parameter(Mandatory)]
     [string]$DiagnosticPath,
 
-    [ValidateSet('PasswordAutofill', 'UserNameOnly', 'NoUserName')]
+    [ValidateSet('EntraSignInCanary.Tests.ps1', 'EntraServicePrincipalCanary.Tests.ps1')]
+    [string]$TestFile = 'EntraSignInCanary.Tests.ps1',
+
+    [ValidateSet('PasswordAutofill', 'UserNameOnly', 'NoUserName', 'OAuthClientSecret', 'OAuthCertificateStore', 'OAuthCertificateFile', 'OAuthCertificateObject')]
     [string]$Scenario = 'PasswordAutofill'
 )
 
@@ -65,7 +83,7 @@ $VerbosePreference = "Continue"
 
 $Env:OMADAWEBPS_CANARY_DIAGNOSTIC_PATH = $DiagnosticPath
 
-$Container = New-PesterContainer -Path (Join-Path $PSScriptRoot "EntraSignInCanary.Tests.ps1") -Data @{ ModulePath = $ModulePath; Scenario = $Scenario }
+$Container = New-PesterContainer -Path (Join-Path $PSScriptRoot $TestFile) -Data @{ ModulePath = $ModulePath; Scenario = $Scenario }
 
 $Configuration = New-PesterConfiguration
 $Configuration.Run.Container = $Container

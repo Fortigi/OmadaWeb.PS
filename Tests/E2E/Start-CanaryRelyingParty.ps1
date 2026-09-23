@@ -251,8 +251,14 @@ function Start-CanaryRelyingParty {
         Serves three routes:
 
           /canary   - the registered redirect URI. Records the hit, sets oisauthtoken, returns 200.
-          /api/*    - the resource the module requests once it holds the cookie. Returns JSON.
+          /api/*    - the resource the module requests once it holds the cookie. Records the hit and
+                      the Authorization header it carried, and returns JSON.
           anything  - 302 to the authorization request.
+
+        The service-principal canary uses only the /api/* route: the OAuth branch goes straight to the
+        token endpoint and then to the resource, so nothing in it ever visits the redirect. It shares
+        this listener rather than having one of its own because what stands in for Omada is the same
+        thing in both cases.
 
         The catch-all redirect is deliberate. Test-EnvironmentSuspended probes the BaseUrl with its
         own HttpClient before the browser ever opens, and that client follows redirects, so it will
@@ -261,8 +267,9 @@ function Start-CanaryRelyingParty {
         spent its redirect by the time the browser asked.
 
         The returned object is a synchronized hashtable so the listener thread and the test thread
-        can both touch it. The test reads RedirectHitCount and CallbackError after the sign-in;
-        ListenerError carries anything the loop itself threw.
+        can both touch it. The test reads RedirectHitCount and CallbackError after the sign-in, or
+        ResourceHitCount and ResourceBearer after a service-principal request; ListenerError carries
+        anything the loop itself threw.
 
     .PARAMETER TenantId
         The directory (tenant) ID hosting the canary account and app registration.
@@ -340,6 +347,8 @@ function Start-CanaryRelyingParty {
             RedirectHitCount = 0
             CallbackError    = $null
             ListenerError    = $null
+            ResourceHitCount = 0
+            ResourceBearer   = $null
         })
 
     # Only .NET types and the state hashtable cross into the runspace - the helper functions above
@@ -389,6 +398,18 @@ function Start-CanaryRelyingParty {
                     $Body = "<html><head><title>OmadaWeb.PS canary</title></head><body><p>Canary sign-in complete.</p></body></html>"
                 }
                 elseif ($Path -like "/api/*") {
+                    $RelyingParty.ResourceHitCount = $RelyingParty.ResourceHitCount + 1
+
+                    # What the service-principal canary actually asserts against. This listener authorizes
+                    # nothing - it answers 200 to any /api/* request, credential or not - so "the request
+                    # succeeded" proves nothing about what was presented. Only reading the header does, and
+                    # that is also the regression guard for issue #102, where a failed token request used to
+                    # fall through to 'Authorization: Bearer '.
+                    #
+                    # This is a bearer token. It is held in memory for the length of one attempt and is never
+                    # written to the report: a failing canary's diagnostic becomes a public GitHub issue.
+                    $RelyingParty.ResourceBearer = $Context.Request.Headers["Authorization"]
+
                     $Context.Response.StatusCode = 200
                     $ContentType = "application/json; charset=utf-8"
                     $Body = '{"canary":"ok"}'

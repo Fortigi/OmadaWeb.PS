@@ -1,8 +1,16 @@
-# The Entra sign-in canary
+# The Entra canaries
 
-A scheduled GitHub Actions run that signs in to Microsoft Entra ID once a day, in a real browser,
-with a real account, and fails when credential autofill stops recognizing Microsoft's sign-in
-screens.
+Two scheduled GitHub Actions jobs against one tenant, watching the two things the module needs
+Microsoft to keep doing:
+
+| Job | Watches | Red means |
+|---|---|---|
+| **Entra ID sign-in** | Credential autofill against Microsoft's sign-in screens, in a real browser | a selector needs updating |
+| **Entra ID service principal** | The client-credentials grant, once per credential form the module documents | the tenant, a credential, or the client assertion |
+
+They live in one workflow file because they share a tenant, an environment and the alerting
+machinery, and they are separate jobs because they share nothing else: one opens a browser and one
+never does, so a failure in either must never be described in the other's vocabulary.
 
 Delivers roadmap item E5 ([#33](https://github.com/Fortigi/OmadaWeb.PS/issues/33)).
 
@@ -114,6 +122,13 @@ Connect-MgGraph -Scopes 'User.ReadWrite.All','Application.ReadWrite.All',
 The script is idempotent — every object is looked up before it is created — so re-running it is how
 you rotate the password.
 
+> **Re-run it with `-GitHubRepository`, or set `CANARY_PASSWORD` yourself straight afterwards.** The
+> account's password is reset on *every* run — the directory will not hand an existing one back, so
+> there is nothing else the script could do. Without `-GitHubRepository` the new password goes no
+> further than the returned object while the environment keeps the old one, and the next run fails
+> with `AADSTS50126` hours later, reading like a broken account rather than a half-finished
+> provisioning run. The script now warns when it leaves the two disagreeing.
+
 ### What it creates
 
 1. **A canary user** in the tenant's initial `onmicrosoft.com` domain, with a generated password, no
@@ -175,8 +190,9 @@ secrets, so no pull-request workflow can reach them.
 | `CANARY_USERNAME` | The canary account's user principal name |
 | `CANARY_PASSWORD` | The canary account's password |
 
-`New-EntraCanaryConfiguration.ps1 -GitHubRepository <owner/repo>` writes all four through
-`gh secret set` on standard input, so they never appear on a command line or on screen.
+`New-EntraCanaryConfiguration.ps1 -GitHubRepository <owner/repo>` writes these, and the
+service-principal canary's own secrets listed further down, through `gh secret set` on standard
+input, so they never appear on a command line or on screen.
 
 If the environment is empty the workflow **skips** with a notice rather than passing quietly, so a
 canary that has silently stopped running is visible.
@@ -244,6 +260,11 @@ through a second literal replacement of all four values, because that text is ab
    - *"Did not report a selector it no longer recognizes"* failed on its own → the sign-in completed
      but the module still reported a page it did not recognise. Worth reading: something changed that
      the automation recovered from.
+   - The error says *"the user name or password is wrong"* (`AADSTS50126`) → Entra ID refused the
+     credential, which rules out both the selector table and the runner. The usual cause is that
+     `CANARY_PASSWORD` no longer matches the tenant, because `New-EntraCanaryConfiguration.ps1` was
+     re-run without `-GitHubRepository`: it resets the account's password every time. Re-run it with
+     `-GitHubRepository <owner/repo>` to bring the two back into agreement.
    - *"Was not refused by Entra ID"* failed → tenant configuration, not Microsoft. An OAuth error code
      is reported: a disabled account, an expired password, a Conditional Access block, or consent
      that was revoked.
@@ -266,6 +287,128 @@ through a second literal replacement of all four values, because that text is ab
    [#32](https://github.com/Fortigi/OmadaWeb.PS/issues/32) and
    [#30](https://github.com/Fortigi/OmadaWeb.PS/issues/30).
 4. **Re-run the workflow** from the Actions tab. A green run closes the issue by itself.
+
+## The service-principal canary
+
+Unattended authentication — `-AuthenticationType OAuth`, the client-credentials grant that scheduled
+tasks, containers and CI pipelines use. It is the one part of the module with nobody in front of it,
+so a break is discovered by a job that quietly stopped running.
+
+### Why a unit test is not enough
+
+`New-OAuthClientAssertion` signs an RS256 JWT carrying `x5t`, `aud`, `iss`, `sub`, `jti` and `exp`.
+`Tests/Unit/Invoke-OAuth2Authentication.Tests.ps1` and `Tests/Unit/Get-OAuthClientCertificate.Tests.ps1`
+cover how it is built, but they mock `Invoke-RestMethod` — and **a mock accepts any JWT**. Only
+Microsoft can reject a bad one. The same goes for everything around it: a certificate credential
+Entra will not take, a scope that resolves to nothing, a client holding no application role.
+
+### The assertion everything rests on
+
+The canary asserts against the token that actually arrived at the resource, which
+`Tests/E2E/Start-CanaryRelyingParty.ps1` records as `ResourceBearer`. Two reasons:
+
+- **The stand-in authorizes nothing.** It answers `200` to any `/api/*` request, credential or not,
+  because it is a loopback listener and not Omada. "The request succeeded" therefore says nothing
+  about what was presented.
+- **It is the regression guard for [#102](https://github.com/Fortigi/OmadaWeb.PS/issues/102).** Until
+  that was fixed, a failed token request fell through to `Authorization: Bearer ` and the user saw an
+  unexplained 401 from Omada instead of the identity provider's error. `Invoke-OAuthTokenRequest` now
+  stops on error and `New-OAuthTokenRequestError` re-throws carrying the `AADSTS` code, so the
+  empty-bearer case should no longer be reachable — and this is what keeps that a fact rather than an
+  assumption.
+
+### The tenant is shaped like a customer's
+
+Omada's [OAuth documentation](https://documentation.omadaidentity.com/docs/getting-started/authentication-sso/oauth/)
+describes **two** app registrations, and `New-EntraCanaryConfiguration.ps1` creates the same two:
+
+1. **The resource** — the stand-in for the OpenID Connect application Omada is configured with. It
+   carries the Application ID URI (`api://<application id>`, the on-premises form; Identity Cloud
+   uses the Omada host name instead), exposes the application role, and sets
+   `requestedAccessTokenVersion` to 2.
+2. **The OAuth client** — a separate confidential registration holding the credentials, because
+   Omada is explicit that the OIDC registration "cannot be used with client secret grants, i.e., one
+   new application registration must be created per client application that connects to ES".
+
+The client is granted the resource's application role. That grant is not decoration: without it Entra
+either refuses the token or, where the resource does not require assignment, issues one carrying no
+roles at all — which authenticates nothing at Omada. The canary asserts the role is in the token so
+those two cases cannot be confused.
+
+The claims checked are the ones Omada's own documentation tells an administrator to verify:
+**`aud` is the OIDC application** and **`azp` is the OAuth client**.
+
+**Not covered:** Omada maps the service principal to an Omada user whose *Username* is the client id,
+in the *Impersonation service users* group. That is Omada-side configuration and the canary has no
+Omada environment — the same loopback stand-in used by the sign-in canary serves the resource here.
+
+### The four scenarios
+
+One per credential form the module documents. They are separate runs because supplying two
+credentials at once means only one is under test: given both, the module uses the certificate and
+warns that it ignored the secret.
+
+| Scenario | Credential |
+|---|---|
+| `OAuthClientSecret` | `-Credential` holding the client id and secret |
+| `OAuthCertificateStore` | `-OAuthCertificateThumbprint`, from `CurrentUser\My` |
+| `OAuthCertificateFile` | `-OAuthCertificatePath` — what a container or a store-less account uses |
+| `OAuthCertificateObject` | `-OAuthCertificate`, a certificate the caller already holds |
+
+A scenario whose credential is not stored is simply not run, so a tenant provisioned with only one of
+the two still exercises what it has.
+
+### Its secrets
+
+Alongside `CANARY_TENANT_ID` in the same `entra-canary` environment:
+
+| Secret | Contains |
+|---|---|
+| `CANARY_SP_CLIENT_ID` | Application (client) id of the OAuth client |
+| `CANARY_SP_CLIENT_SECRET` | Its client secret |
+| `CANARY_SP_CERT_PFX_BASE64` | The client certificate as a base64 PKCS#12 file |
+| `CANARY_SP_CERT_PASSWORD` | That file's password |
+| `CANARY_SP_RESOURCE_URI` | The resource's Application ID URI — passed as `-EntraApplicationIdUri` |
+| `CANARY_SP_RESOURCE_CLIENT_ID` | The resource's client id — the expected `aud` |
+| `CANARY_SP_APP_ROLE` | The application role value expected in `roles` |
+| `CANARY_SP_SECRET_EXPIRY` | When the client secret expires, for the warning below |
+
+### Rotation, and hearing about it first
+
+Both credentials expire. The job reads the certificate's `notAfter` from the PFX it already holds and
+the secret's expiry from `CANARY_SP_SECRET_EXPIRY`, and emits a **warning annotation below 30 days** —
+so rotation happens before a red run rather than because of one.
+
+Rotating is a deliberate switch rather than something every run does, because a secret's value can be
+read only at creation: rotating without `-GitHubRepository` would invalidate the credential GitHub is
+holding and hand the replacement to nobody.
+
+```powershell
+./Build/New-EntraCanaryConfiguration.ps1 -RotateServicePrincipalCredential -GitHubRepository 'Fortigi/OmadaWeb.PS'
+```
+
+`-SkipServicePrincipalCanary` provisions the sign-in canary alone. Granting the application role
+needs the `AppRoleAssignment.ReadWrite.All` Graph scope on top of the ones the sign-in canary uses.
+
+### When it goes red
+
+**Never a sign-in page change** — no browser is involved anywhere in this job.
+
+- **An `AADSTS` code is reported** → Entra answered and refused, so this is the tenant and not the
+  module. `AADSTS7000222` is an expired client secret, `AADSTS700027` an expired or unregistered
+  certificate; both are fixed by rotating. Others: a revoked grant, a disabled service principal.
+- **"Presented a bearer token at the resource" failed with no `AADSTS` code** → the token request
+  failed some other way, or a request reached the resource carrying no token — the regression #102
+  fixed. The stand-in answers `200` either way, so the status code proves nothing on its own; read
+  the diagnostic.
+- **"Carried the application role granted to the client" failed on its own** → a token was issued but
+  the app-role grant is missing or was never consented. Re-run the provisioning script.
+- **"Was issued a token the way Omada expects one" failed on `ver`** → `requestedAccessTokenVersion`
+  on the resource registration is no longer 2, so the claims are v1 and differ from the ones Omada
+  documents.
+- **"Authenticated the client with the certificate rather than a secret" failed** → the module did not
+  report signing an assertion with the expected certificate. This is the one that points at the
+  module's own signing path.
 
 ## Running it locally
 
@@ -293,10 +436,35 @@ A local run of `UserNameOnly` or `NoUserName` is worth watching rather than only
 window opens, stops where a person would take over, and stays there until the observation window ends
 — which is the behaviour being asserted.
 
+The service-principal canary reads its own variables and opens no window, so a run of it finishes in
+seconds:
+
+```powershell
+$env:OMADAWEBPS_CANARY_TENANT_ID           = '<tenant id>'
+$env:OMADAWEBPS_CANARY_SP_CLIENT_ID        = '<oauth client id>'
+$env:OMADAWEBPS_CANARY_SP_CLIENT_SECRET    = '<client secret>'
+$env:OMADAWEBPS_CANARY_SP_CERT_PFX_BASE64  = '<base64 pfx>'
+$env:OMADAWEBPS_CANARY_SP_CERT_PASSWORD    = '<pfx password>'
+$env:OMADAWEBPS_CANARY_SP_RESOURCE_URI     = 'api://<resource application id>'
+$env:OMADAWEBPS_CANARY_SP_RESOURCE_CLIENT_ID = '<resource application id>'
+$env:OMADAWEBPS_CANARY_SP_APP_ROLE         = 'OmadaWeb.Canary.Read'
+
+$Container = New-PesterContainer -Path ./Tests/E2E/EntraServicePrincipalCanary.Tests.ps1 -Data @{
+    ModulePath = './buildoutput/OmadaWeb.PS/OmadaWeb.PS.psm1'
+    Scenario   = 'OAuthCertificateStore'
+}
+Invoke-Pester -Container $Container -TagFilter E2E -Output Detailed
+```
+
 Without those variables the tests report **skipped**, which is also what keeps them out of a normal
 build. The build additionally excludes the `E2E` tag outright, so `./Build/build.ps1` never opens a
-browser.
+browser and never touches a tenant.
 
-To prove the canary can actually detect a break, change one id in `$Script:EntraSignInElementId` to
-something that does not exist and run it again: it should fail on the first assertion and name that
-id in the diagnostic.
+To prove the sign-in canary can actually detect a break, change one id in
+`$Script:EntraSignInElementId` to something that does not exist and run it again: it should fail on
+the first assertion and name that id in the diagnostic.
+
+To prove the same of the service-principal canary, point `OMADAWEBPS_CANARY_SP_CERT_PFX_BASE64` at a
+certificate Entra does not know — any self-signed one will do. It should fail naming an `AADSTS` code
+rather than passing, which is also the check that the empty-bearer path cannot slip through: a failed
+token request still reaches the stand-in, and the stand-in still answers `200`.
