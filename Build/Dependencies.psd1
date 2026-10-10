@@ -96,7 +96,7 @@
             Acquisition     = "bundled"
             Publisher       = "Microsoft"
             Purl            = "pkg:nuget/Microsoft.Web.WebView2"
-            Version         = "1.0.4129.50"
+            Version         = "1.0.4191.47"
             VersionStrategy = "Pinned in OmadaWeb.PS/DependencyLock.psd1. Build/Get-BundledDependency.ps1 fetches that exact package during the build, verifies it against the pinned SHA-256 and lays the assemblies out under lib\<edition>\<architecture> inside the module, so a newer WebView2 arrives with a module update. A module without that bundle falls back to downloading and verifying the same package on first use, where Test-WebView2RuntimeVersion compares the installed assemblies against the pin."
             LockId          = "Microsoft.Web.WebView2"
             Source          = "https://www.nuget.org/packages/Microsoft.Web.WebView2"
