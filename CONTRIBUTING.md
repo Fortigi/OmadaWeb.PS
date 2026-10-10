@@ -94,8 +94,8 @@ Three files are part of the gates and are reviewed like code:
 - **`psmutant.config.json`** maps each source file to the test files that cover it. The map is
   generated - a source file is covered by every test file that names one of its functions - and a
   pull request fails while it is stale. After adding a function, a source file or a test file, run
-  `./Build/Update-MutationConfig.ps1 -Update` and commit the result. Source files no test names
-  are listed under `_untested` and are not mutated at all.
+  `./Build/Update-MutationConfig.ps1 -Update` and commit the result. Source files that no test
+  names are listed under `_untested` and are not mutated at all.
 - **`complexity-baseline.json`** only ratchets down. When you simplify a recorded function the gate
   fails until its entry is lowered: run
   `Test-PSComplexity -Path ./OmadaWeb.PS -Recurse -BaselineFile ./complexity-baseline.json -UpdateBaseline`

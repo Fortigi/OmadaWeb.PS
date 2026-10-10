@@ -467,7 +467,7 @@ function Write-QualityVerdict {
         detail  = @($Detail)
     } | ConvertTo-Json -Depth 5 | Set-Content -Path $Path -Encoding UTF8
     if ($Env:GITHUB_STEP_SUMMARY) {
-        $Lines = @("### {0}: {1}" -f $Gate, $(if ($Passed) { "passed" } else { "FAILED" }), "", $Summary, "")
+        $Lines = @(("### {0}: {1}" -f $Gate, $(if ($Passed) { "passed" } else { "FAILED" })), "", $Summary, "")
         $Lines += @($Detail | ForEach-Object { "- {0}" -f $_ })
         $Lines -join "`n" | Add-Content -Path $Env:GITHUB_STEP_SUMMARY -Encoding UTF8
     }
