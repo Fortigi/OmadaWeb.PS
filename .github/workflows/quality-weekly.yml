@@ -1,0 +1,223 @@
+name: Weekly Quality
+
+# Whole-tree complexity (PSComplexity) and mutation testing (PSMutant), see issue #91.
+#
+# Pull request validation runs the same two gates on the files a pull request changed only. This run
+# answers the other question - is the codebase as a whole still at the bar - and turns a "no" into a
+# bug: one issue per gate, commented on while it keeps failing and closed when the gate passes again.
+#
+# The bar itself is not in this file. Complexity is gated on 15 cyclomatic / 15 cognitive against the
+# committed complexity-baseline.json; mutation on thresholds.break in psmutant.config.json.
+on:
+  schedule:
+    - cron: '23 2 * * 1'
+  workflow_dispatch: {}
+
+# Measuring only reads the repository. The alert job is the only place 'issues: write' is granted.
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-weekly
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    name: Measure (${{ matrix.gate }})
+    runs-on: windows-latest
+    # Mutation runs the covering tests once per mutant, serially (see "workers" in
+    # psmutant.config.json), so it is the long pole. 360 is the hosted-runner ceiling.
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [Complexity, Mutate]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install modules
+        run: ./Build/InstallModules.ps1
+
+      # The tests import the module, and several of them need the runtime binaries it downloads on
+      # first use - the same warm-up PR validation does before its test run.
+      - name: Warm up Selenium/Edge WebDriver
+        if: matrix.gate == 'Mutate'
+        run: |
+          $module = Import-Module ./OmadaWeb.PS/OmadaWeb.PS.psm1 -Force -PassThru
+          & $module { Invoke-WebEdgeDriverFramework | Out-Null }
+
+      # A failing gate is an expected outcome here, not a broken run: the verdict file it writes is
+      # what the alert job acts on. Only a gate that never reached a verdict fails this job.
+      - name: Run ${{ matrix.gate }} gate
+        continue-on-error: true
+        run: ./Build/build.ps1 -Task ${{ matrix.gate }}
+
+      - name: Upload quality reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Quality-${{ matrix.gate }}
+          path: |
+            buildoutput/quality/
+            buildoutput/mutation/
+          if-no-files-found: ignore
+
+      - name: Require a verdict
+        run: |
+          $Name = if ('${{ matrix.gate }}' -eq 'Mutate') { 'mutation.verdict.json' } else { 'complexity.verdict.json' }
+          if (!(Test-Path -LiteralPath "buildoutput/quality/$Name")) {
+            Write-Error "The ${{ matrix.gate }} gate did not reach a verdict; see the step above. No bug is filed for a run that measured nothing."
+            exit 1
+          }
+
+  alert:
+    name: File or close quality bugs
+    needs: measure
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Download quality reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: Quality-*
+          path: quality/
+          merge-multiple: true
+
+      - name: Open, update or close the quality bugs
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            function findFile(dir, name) {
+              if (!fs.existsSync(dir)) {
+                return null;
+              }
+              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                  const found = findFile(full, name);
+                  if (found) {
+                    return found;
+                  }
+                }
+                else if (entry.name === name) {
+                  return full;
+                }
+              }
+              return null;
+            }
+
+            const gates = [
+              {
+                file: 'complexity.verdict.json',
+                title: 'Weekly quality: complexity gate is failing',
+                fix: 'Simplify the units listed below until they are within the ceilings, or - for a unit recorded in `complexity-baseline.json` - back under its recorded score. When a unit has improved, lower its baseline entry with `Test-PSComplexity -Path ./OmadaWeb.PS -Recurse -BaselineFile ./complexity-baseline.json -UpdateBaseline` and commit it.',
+              },
+              {
+                file: 'mutation.verdict.json',
+                title: 'Weekly quality: mutation score is below the floor',
+                fix: 'Each surviving mutant is a fault no test noticed. Download the `Quality-Mutate` artifact from the run, read the `survivors` in `buildoutput/mutation/ps-mutation.json`, and add the assertions that kill them - or declare a provably equivalent mutant under `equivalents` in `psmutant.config.json`, with its reason.',
+              },
+            ];
+
+            // Created on demand: a fresh clone of this repository may not carry these labels, and a
+            // missing one would fail the create call rather than the gate.
+            for (const label of [
+              { name: 'bug', color: 'd73a4a', description: "Something isn't working" },
+              { name: 'quality-gate', color: '5319e7', description: 'Raised automatically by the weekly complexity and mutation run' },
+            ]) {
+              try {
+                await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, ...label });
+              } catch (error) {
+                if (error.status !== 422) {
+                  throw error;
+                }
+              }
+            }
+
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'quality-gate',
+              per_page: 100,
+            });
+
+            let failed = false;
+            for (const gate of gates) {
+              const file = findFile('quality', gate.file);
+              if (!file) {
+                // The measure job already failed for this one; a gate that measured nothing is not a
+                // statement about the code, so it neither files nor closes a bug.
+                core.warning(`No verdict for '${gate.title}'; leaving its issue as it is.`);
+                failed = true;
+                continue;
+              }
+              const verdict = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
+              const alert = existing.find(issue => issue.title === gate.title);
+
+              if (verdict.passed) {
+                if (alert) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: alert.number,
+                    body: `The gate passed again in [run ${context.runId}](${runUrl}). Closing.\n\n${verdict.summary}`,
+                  });
+                  await github.rest.issues.update({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: alert.number,
+                    state: 'closed',
+                    state_reason: 'completed',
+                  });
+                }
+                continue;
+              }
+
+              failed = true;
+              const detail = Array.isArray(verdict.detail) ? verdict.detail : (verdict.detail ? [verdict.detail] : []);
+              const body = [
+                `The weekly whole-tree run found this gate below the bar. [Run ${context.runId}](${runUrl})`,
+                '',
+                verdict.summary,
+                '',
+                ...detail.slice(0, 60).map(line => `- ${line}`),
+                detail.length > 60 ? `- _… and ${detail.length - 60} more in the run's artifact._` : '',
+                '',
+                `**What to do.** ${gate.fix}`,
+              ].join('\n').slice(0, 65000);
+
+              if (alert) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: alert.number,
+                  body,
+                });
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: gate.title,
+                  body,
+                  labels: ['bug', 'quality-gate'],
+                });
+              }
+            }
+
+            if (failed) {
+              core.setFailed('At least one quality gate failed or reached no verdict; see the issues labelled quality-gate.');
+            }

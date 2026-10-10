@@ -65,6 +65,45 @@ If you change comment-based help or a `-HelpMessage` in `Set-DynamicParameter.ps
 `Build/Update-ReadmeHelp.ps1` before committing — the README's command sections are generated, and
 `Build/Test-CommentBasedHelp.ps1` fails the build when an exported command is missing help.
 
+## Complexity and mutation gates
+
+Two more gates judge the code rather than the tests' pass/fail result. Both need PowerShell 7.
+
+| Gate | Tool | Bar |
+|---|---|---|
+| Complexity | [PSComplexity](https://github.com/Fortigi/PSComplexity) | Every function at or under 15 cyclomatic and 15 cognitive. Functions already over that are recorded in `complexity-baseline.json` and may not get worse. |
+| Mutation | [PSMutant](https://github.com/Fortigi/PSMutant) | Small faults injected into the source (`-eq` → `-ne`, `$true` → `$false`, a dropped `-not`) must make a test fail. The score must stay at or above `thresholds.break` in `psmutant.config.json`. |
+
+On a pull request both run on **the files the pull request changed only**, after the tests, on the
+pwsh leg of `/validate`. Touching a file means it has to meet the bar as a whole - so improving the
+tests of an older file you touch may be part of the change. Every week both run on the whole tree
+(`.github/workflows/quality-weekly.yml`) and file a `bug` labelled `quality-gate` when either is
+below the bar; the issue closes itself once the gate passes again.
+
+```powershell
+# What the pull request runs (PR_CHANGED_FILES unset: diffs against the merge base with origin/main)
+./Build/build.ps1 -Task QualityChanged
+
+# What the weekly run does
+./Build/build.ps1 -Task Complexity
+./Build/build.ps1 -Task Mutate
+```
+
+Three files are part of the gates and are reviewed like code:
+
+- **`psmutant.config.json`** maps each source file to the test files that cover it. The map is
+  generated - a source file is covered by every test file that names one of its functions - and a
+  pull request fails while it is stale. After adding a function, a source file or a test file, run
+  `./Build/Update-MutationConfig.ps1 -Update` and commit the result. Source files that no test
+  names are listed under `_untested` and are not mutated at all.
+- **`complexity-baseline.json`** only ratchets down. When you simplify a recorded function the gate
+  fails until its entry is lowered: run
+  `Test-PSComplexity -Path ./OmadaWeb.PS -Recurse -BaselineFile ./complexity-baseline.json -UpdateBaseline`
+  and commit the result. It refuses to record a function that got worse.
+- **`equivalents`** in `psmutant.config.json` is for a surviving mutant that provably cannot change
+  behaviour. Declare it with its reason; the run fails if a declared mutant is ever killed or no
+  longer exists.
+
 ## Branches
 
 | Kind | Format |

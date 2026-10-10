@@ -141,6 +141,24 @@ jobs:
       - name: Analyze, test and build
         run: ./Build/build.ps1 -Task TestBuildOnly -BuildVersion '0.0.0'
 
+      # Complexity and mutation testing, judged on the files this pull request changed only (issue
+      # #91); the weekly run covers the whole tree. Both tools need PowerShell 7, so this runs on the
+      # pwsh leg. It reads PR_CHANGED_FILES from "Determine changed files" above, and each gate skips
+      # itself, saying so, when the change touches nothing it measures.
+      - name: Quality gates on changed files
+        if: matrix.shell == 'pwsh'
+        run: ./Build/build.ps1 -Task QualityChanged
+
+      - name: Upload quality reports
+        if: always() && matrix.shell == 'pwsh'
+        uses: actions/upload-artifact@v7
+        with:
+          name: QualityReports
+          path: |
+            buildoutput/quality/
+            buildoutput/mutation/
+          if-no-files-found: ignore
+
       - name: Check for test results
         id: test-results
         if: always()

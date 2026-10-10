@@ -516,11 +516,18 @@ Describe 'Invoke-OmadaRetryableRequest' -Tag 'Unit' {
 
         It 'Should back off exponentially, waiting longer before the second retry than before the first' {
             InModuleScope 'OmadaWeb.PS' {
-                $Script:RetryTestTimestamps = [System.Collections.Generic.List[datetime]]::new()
+                # The delays the function asks for are asserted, not the wall clock between attempts:
+                # a measured gap also holds whatever else ran in between, and on a slow runner that
+                # overhead alone - about 0.3s on the first retry under Windows PowerShell - pushed
+                # the first gap past the second although the requested delays were in order.
+                $Script:RetryTestSleeps = [System.Collections.Generic.List[int]]::new()
+                Mock Start-Sleep { $Script:RetryTestSleeps.Add($Milliseconds) }
+
+                $Script:RetryTestCalls = 0
                 $Command = {
                     param($Uri)
-                    $Script:RetryTestTimestamps.Add([datetime]::UtcNow)
-                    if ($Script:RetryTestTimestamps.Count -lt 3) {
+                    $Script:RetryTestCalls++
+                    if ($Script:RetryTestCalls -lt 3) {
                         $Exception = [OmadaWebPSTests.FakeHttpException]::new('throttled')
                         $Exception.Response = [OmadaWebPSTests.FakeResponse]::new()
                         $Exception.Response.StatusCode = 503
@@ -534,11 +541,12 @@ Describe 'Invoke-OmadaRetryableRequest' -Tag 'Unit' {
 
                 # Equal jitter bounds the first delay to [0.5s, 1.0s] and the second to [1.0s, 2.0s],
                 # so the two ranges cannot overlap however the jitter falls.
-                $FirstDelay = ($Script:RetryTestTimestamps[1] - $Script:RetryTestTimestamps[0]).TotalSeconds
-                $SecondDelay = ($Script:RetryTestTimestamps[2] - $Script:RetryTestTimestamps[1]).TotalSeconds
-
-                $FirstDelay | Should -BeGreaterThan 0.4
-                $SecondDelay | Should -BeGreaterThan $FirstDelay
+                $Script:RetryTestSleeps.Count | Should -Be 2
+                $Script:RetryTestSleeps[0] | Should -BeGreaterOrEqual 500
+                $Script:RetryTestSleeps[0] | Should -BeLessOrEqual 1000
+                $Script:RetryTestSleeps[1] | Should -BeGreaterOrEqual 1000
+                $Script:RetryTestSleeps[1] | Should -BeLessOrEqual 2000
+                $Script:RetryTestSleeps[1] | Should -BeGreaterOrEqual $Script:RetryTestSleeps[0]
             }
         }
     }
