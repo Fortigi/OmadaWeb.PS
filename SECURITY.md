@@ -79,6 +79,7 @@ Out of scope:
 | Private vulnerability reporting | Repository settings — *Settings > Advanced Security > Private vulnerability reporting* |
 | Secret scanning and push protection | Repository settings — *Settings > Advanced Security* |
 | Dependabot version and security updates | [.github/dependabot.yml](.github/dependabot.yml) |
+| Automatic validation of Dependabot pull requests gated on update type, release age and the OpenSSF Scorecard of the source repository — merging stays manual | [.github/workflows/dependabot-validation.yml](.github/workflows/dependabot-validation.yml), policy in [Build/DependabotValidation.psd1](Build/DependabotValidation.psd1), see below |
 | Integrity verification of runtime-downloaded binaries | [OmadaWeb.PS/DependencyLock.psd1](OmadaWeb.PS/DependencyLock.psd1), see below |
 | Software Bill of Materials (CycloneDX) | Generated per release, see below |
 
@@ -123,16 +124,17 @@ that is actually loaded. The flow after a bump — whether Dependabot proposes i
 1. the version changes in `Build/Dependencies`;
 2. [`.github/workflows/dependency-lock-sync.yml`](.github/workflows/dependency-lock-sync.yml)
    refreshes the pinned hash and the SBOM version on that branch. It sweeps every open Dependabot pull
-   request weekly, and can be run from the Actions tab against a single branch — after a rebase, say.
-   The sweep checks out two trees and runs the script from the default branch against the pull request
-   branch as data, so nothing from the branch under review executes with a write-scoped token;
+   request weekly, is started by Dependabot validation (below) for an eligible bump, and can be run from
+   the Actions tab against a single branch — after a rebase, say. It checks out two trees and runs the
+   script from the default branch against the pull request branch as data, so nothing from the branch
+   under review executes with a write-scoped token. It commits through the REST contents API, so its
+   commits are authored by `github-actions[bot]` and signed by GitHub;
 3. PR Validation runs `Build/Update-DependencyLock.ps1 -Check`, which fails while the lock file, the
    manifests and the SBOM disagree, or while a pinned hash no longer matches what the URL serves.
 
-Syncing a branch does not revalidate it — PR Validation is triggered by a `/validate` comment — so a
-maintainer still validates and merges deliberately. Only the mechanical part is automated. Note that
-pushing to a Dependabot branch also stops Dependabot rebasing it; `@dependabot recreate` gets a fresh
-one.
+For a bump that passes the policy below, Dependabot validation starts PR Validation itself; any other
+bump waits for a maintainer's `/validate` as before. A maintainer merges either way. Note that pushing
+to a Dependabot branch also stops Dependabot rebasing it; `@dependabot recreate` gets a fresh one.
 
 To do it by hand:
 
@@ -196,6 +198,37 @@ Everything else stays on the download path, deliberately:
 
 The cost is package size: roughly 30 KB before, about 3.4 MB after, for every user including those
 who only use `-AuthenticationType Browser`. The build prints the measured size so this stays visible.
+
+### Dependabot validation
+
+[`.github/workflows/dependabot-validation.yml`](.github/workflows/dependabot-validation.yml) starts PR
+Validation for a Dependabot pull request — instead of waiting for `/validate` — only when **all** of
+these hold. Anything else gets a comment explaining which condition failed and waits for a maintainer.
+
+- **Update type.** Every dependency in it is a semver patch or minor update. Dependabot bundles a
+  dependency with the transitive updates it needs; one major among them makes the pull request wait as a
+  whole.
+- **Release age.** The new version was published at least 3 days ago — the registry's publication date
+  via deps.dev for a NuGet package, the GitHub release's `published_at` for an action. This keeps a
+  security update, which Dependabot raises the moment an advisory is published, from being validated
+  automatically inside the window in which a compromised release is typically caught and yanked.
+- **Reputation.** The source repository's [OpenSSF Scorecard](https://scorecard.dev), as published by
+  [deps.dev](https://deps.dev), scores at least 7.0 overall, is at most 45 days old, and scores 10 on
+  `Dangerous-Workflow`. No Scorecard, or no source repository deps.dev can link a package to, means no
+  reputation and a maintainer's decision.
+- **Provenance.** Every commit is authored by `dependabot[bot]` — or, on a NuGet bump, by the lock
+  refresh as `github-actions[bot]` — *with a signature GitHub verified*, and the pull request modifies
+  only the files its ecosystem may change. A commit pushed by anyone else makes it a normal pull request.
+
+It never merges. A maintainer reviews the green result and merges, and that merge is what starts
+`release.yml` — so no dependency version reaches the PowerShell Gallery without a person deciding it
+should. The workflow runs on `main`'s definition via `pull_request_target` and never checks out the
+pull request: on an Actions bump, the pull request's own copy of the workflows already references the
+new versions, which must not run with write permissions before they have been vetted.
+
+What the Scorecard does and does not buy: it measures the project's security practices, not the
+release, and it can be gamed by a project optimising for the checks. Together with the age window, SHA
+pinning and the hash-verified lock file it raises the bar; it is not a guarantee.
 
 ## Software Bill of Materials
 
