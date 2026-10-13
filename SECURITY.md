@@ -79,6 +79,7 @@ Out of scope:
 | Private vulnerability reporting | Repository settings — *Settings > Advanced Security > Private vulnerability reporting* |
 | Secret scanning and push protection | Repository settings — *Settings > Advanced Security* |
 | Dependabot version and security updates | [.github/dependabot.yml](.github/dependabot.yml) |
+| Every GitHub Actions `uses:` pinned to a full commit SHA, with a `# vX.Y.Z` comment Dependabot keeps current | every workflow in [.github/workflows](.github/workflows), enforced by [Tests/Unit/WorkflowActionPins.Tests.ps1](Tests/Unit/WorkflowActionPins.Tests.ps1) |
 | Integrity verification of runtime-downloaded binaries | [OmadaWeb.PS/DependencyLock.psd1](OmadaWeb.PS/DependencyLock.psd1), see below |
 | Software Bill of Materials (CycloneDX) | Generated per release, see below |
 
