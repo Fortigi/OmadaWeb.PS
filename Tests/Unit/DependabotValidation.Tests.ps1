@@ -1,4 +1,6 @@
 param(
+    # Accepted for consistency with the other test files (psakeBuild.ps1 passes it to every
+    # container); these tests exercise a build script, not the built module.
     [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
 
