@@ -104,6 +104,21 @@ Three files are part of the gates and are reviewed like code:
   behaviour. Declare it with its reason; the run fails if a declared mutant is ever killed or no
   longer exists.
 
+## Pinning GitHub Actions
+
+Every `uses:` in `.github/workflows` references a full 40-character commit SHA with the release it
+belongs to as a trailing comment:
+
+```yaml
+uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+```
+
+Not a tag: a tag can be moved after review, and a moved tag on a workflow holding a write-scoped
+token runs whatever it now points at. Dependabot reads the comment and updates the SHA and the
+comment together. `Tests/Unit/WorkflowActionPins.Tests.ps1` fails PR validation on any reference that
+is not pinned this way. Resolve a tag to its commit with the GitHub API rather than a browser, and
+dereference an annotated tag if the response is one.
+
 ## Branches
 
 | Kind | Format |

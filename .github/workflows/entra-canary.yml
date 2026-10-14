@@ -65,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install modules
         shell: pwsh
@@ -346,7 +346,7 @@ jobs:
 
       - name: Upload the canary test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: CanaryResults
           path: buildoutput/CanaryResults-*.xml
@@ -360,7 +360,7 @@ jobs:
       # issue saying Microsoft changed its sign-in page when nothing had even tried to sign in.
       - name: Open or close the canary alert
         if: always() && (steps.canary.outputs.outcome == 'success' || steps.canary.outputs.outcome == 'failure')
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           CANARY_OUTCOME: ${{ steps.canary.outputs.outcome }}
           CANARY_REPORT: ${{ steps.canary.outputs.report }}
@@ -490,7 +490,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install modules
         shell: pwsh
@@ -780,7 +780,7 @@ jobs:
 
       - name: Upload the service-principal canary test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ServicePrincipalCanaryResults
           path: buildoutput/CanaryResults-OAuth*.xml
@@ -791,7 +791,7 @@ jobs:
       # "Microsoft changed a sign-in page", and the body must never say so.
       - name: Open or close the service-principal canary alert
         if: always() && (steps.canary.outputs.outcome == 'success' || steps.canary.outputs.outcome == 'failure')
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           CANARY_OUTCOME: ${{ steps.canary.outputs.outcome }}
           CANARY_REPORT: ${{ steps.canary.outputs.report }}

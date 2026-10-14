@@ -80,6 +80,7 @@ Out of scope:
 | Secret scanning and push protection | Repository settings — *Settings > Advanced Security* |
 | Dependabot version and security updates | [.github/dependabot.yml](.github/dependabot.yml) |
 | Automatic validation of Dependabot pull requests gated on update type, release age and the OpenSSF Scorecard of the source repository — merging stays manual | [.github/workflows/dependabot-validation.yml](.github/workflows/dependabot-validation.yml), policy in [Build/DependabotValidation.psd1](Build/DependabotValidation.psd1), see below |
+| Every GitHub Actions `uses:` pinned to a full commit SHA, with a `# vX.Y.Z` comment Dependabot keeps current | every workflow in [.github/workflows](.github/workflows), enforced by [Tests/Unit/WorkflowActionPins.Tests.ps1](Tests/Unit/WorkflowActionPins.Tests.ps1) |
 | Integrity verification of runtime-downloaded binaries | [OmadaWeb.PS/DependencyLock.psd1](OmadaWeb.PS/DependencyLock.psd1), see below |
 | Software Bill of Materials (CycloneDX) | Generated per release, see below |
 
