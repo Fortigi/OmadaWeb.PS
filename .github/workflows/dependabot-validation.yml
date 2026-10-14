@@ -1,0 +1,121 @@
+name: Dependabot Validation
+
+# Starts PR Validation for a Dependabot pull request when - and only when - it passes the policy in
+# Build/DependabotValidation.psd1: every update is patch or minor, at least 3 days old, from a source
+# repository whose OpenSSF Scorecard (via deps.dev) meets the bar, and every commit on it is a verified
+# commit by Dependabot or by this repository's own lock refresh, touching nothing but the files its
+# ecosystem may change. The logic is Build/DependabotValidation.ps1, unit tested by
+# Tests/Unit/DependabotValidation.Tests.ps1 on both Windows PowerShell 5.1 and PowerShell 7.
+#
+# It does not merge. A maintainer reviews the green result and merges, and that merge is what starts
+# release.yml - so no dependency version reaches the PowerShell Gallery without a person deciding it
+# should. What this saves is the /validate comment, and the lock refresh for a NuGet bump. Anything that
+# falls short gets a comment explaining why and is handled exactly as before.
+#
+# The flow for a NuGet bump:
+#   1. Dependabot opens the pull request; pull_request_target runs this workflow.
+#   2. Eligible, but the lock file is not refreshed yet: it dispatches dependency-lock-sync.yml for the
+#      branch.
+#   3. The lock sync commits the refreshed pins through the API - signed by GitHub, as
+#      github-actions[bot] - and dispatches this workflow again with lock_synced, because a push made
+#      with the GITHUB_TOKEN starts no workflow run of its own.
+#   4. Eligible and synced: it dispatches PR Validation for the pull request (its pr_number input).
+# An Actions bump goes straight from 1 to 4.
+#
+# Why pull_request_target: it runs this definition from the default branch, never the pull request's
+# own copy - on an Actions bump that copy already references the NEW action versions, which must not
+# run with write permissions before they are vetted. The trigger is only dangerous when the workflow
+# executes pull request code; this one checks out the BASE commit and reads the pull request through
+# the API only. Do not change the checkout below to the pull request head.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Head branch of the Dependabot pull request to evaluate'
+        required: true
+        type: string
+      lock_synced:
+        description: 'Set by dependency-lock-sync.yml: the pins were just refreshed, do not request another refresh'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-validation-${{ github.event.pull_request.number || github.event.inputs.branch }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    name: Evaluate against the policy
+    # On pull_request_target, both who OPENED the pull request and who triggered THIS run must be
+    # Dependabot: once anyone else pushes to the branch it is a normal pull request again. A dispatch
+    # needs write access to the repository - the same bar as /validate - and the evaluation itself
+    # still rejects anything Dependabot did not open.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Write the one validation comment.
+      pull-requests: write
+      # Dispatch dependency-lock-sync.yml and pr-validation.yml.
+      actions: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      # The base commit - this repository's reviewed code - never the pull request.
+      - name: Checkout the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Evaluate
+        id: policy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BRANCH: ${{ github.event.inputs.branch }}
+          LOCK_SYNCED: ${{ github.event.inputs.lock_synced }}
+        run: |
+          if ($env:PR_NUMBER) {
+            ./Build/Invoke-DependabotValidation.ps1 -PullRequestNumber $env:PR_NUMBER
+          }
+          else {
+            ./Build/Invoke-DependabotValidation.ps1 -Branch $env:BRANCH -LockSynced:($env:LOCK_SYNCED -eq 'true')
+          }
+
+      - name: Refresh the pinned hashes first
+        if: steps.policy.outputs.next_step == 'sync-lock'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ steps.policy.outputs.branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          gh workflow run dependency-lock-sync.yml --ref $env:DEFAULT_BRANCH -f "branch=$env:BRANCH"
+          exit $LASTEXITCODE
+
+      - name: Start PR Validation
+        if: steps.policy.outputs.next_step == 'validate'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.policy.outputs.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # Dispatched on the default branch, so the validation definition that runs is the reviewed
+          # one; it checks out the pull request head itself.
+          gh workflow run pr-validation.yml --ref $env:DEFAULT_BRANCH -f "pr_number=$env:PR_NUMBER"
+          exit $LASTEXITCODE

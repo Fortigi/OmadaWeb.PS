@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "metricVersion": 1,
+  "generatedAt": "2026-10-10T10:13:21Z",
+  "units": [
+    {
+      "file": "OmadaWeb.PS/OmadaWeb.PS.psm1",
+      "unit": "<script-body>",
+      "cyclomatic": 52,
+      "cognitive": 83
+    },
+    {
+      "file": "OmadaWeb.PS/Private/ConvertTo-RedactedLogString.ps1",
+      "unit": "ConvertTo-RedactedLogValue",
+      "cyclomatic": 38,
+      "cognitive": 52
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Get-DataFromWebDriver.ps1",
+      "unit": "Get-DataFromWebDriver",
+      "cyclomatic": 73,
+      "cognitive": 124
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Get-DataFromWebView2.ps1",
+      "unit": "Get-DataFromWebView2",
+      "cyclomatic": 26,
+      "cognitive": 48
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Get-EntraTenantMismatchDetail.ps1",
+      "unit": "Get-EntraTenantMismatchDetail",
+      "cyclomatic": 19,
+      "cognitive": 23
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Get-InstalledModuleInfo.ps1",
+      "unit": "Get-InstalledModuleInfo",
+      "cyclomatic": 10,
+      "cognitive": 16
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Get-OAuthClientCertificate.ps1",
+      "unit": "Get-OAuthClientCertificate",
+      "cyclomatic": 30,
+      "cognitive": 50
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Get-RetryAfterDelay.ps1",
+      "unit": "Get-RetryAfterDelay",
+      "cyclomatic": 16,
+      "cognitive": 22
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Get-WebView2Cookie.ps1",
+      "unit": "Get-WebView2Cookie",
+      "cyclomatic": 28,
+      "cognitive": 67
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Get-WebView2LogonPageError.ps1",
+      "unit": "Get-WebView2LogonPageError",
+      "cyclomatic": 19,
+      "cognitive": 21
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Initialize-Webview2.ps1",
+      "unit": "Initialize-WebView2",
+      "cyclomatic": 40,
+      "cognitive": 115
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Install-EdgeDriver.ps1",
+      "unit": "Install-EdgeDriver",
+      "cyclomatic": 11,
+      "cognitive": 17
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Install-WebView2.ps1",
+      "unit": "Install-WebView2",
+      "cyclomatic": 26,
+      "cognitive": 52
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Invoke-BrowserAuthentication.ps1",
+      "unit": "Invoke-BrowserAuthentication",
+      "cyclomatic": 36,
+      "cognitive": 50
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Invoke-OAuthAuthentication.ps1",
+      "unit": "Invoke-OAuth2Authentication",
+      "cyclomatic": 25,
+      "cognitive": 31
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Invoke-OmadaRequest.ps1",
+      "unit": "Invoke-OmadaRequest",
+      "cyclomatic": 108,
+      "cognitive": 164
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Invoke-OmadaRetryableRequest.ps1",
+      "unit": "Invoke-OmadaRetryableRequest",
+      "cyclomatic": 14,
+      "cognitive": 27
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Invoke-WebEdgeDriverFramework.ps1",
+      "unit": "Invoke-WebEdgeDriverFramework",
+      "cyclomatic": 23,
+      "cognitive": 35
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Invoke-WebView2MicrosoftLogin.ps1",
+      "unit": "Invoke-WebView2MicrosoftLogin",
+      "cyclomatic": 59,
+      "cognitive": 105
+    },
+    {
+      "file": "OmadaWeb.PS/Private/New-DynamicParam.ps1",
+      "unit": "New-DynamicParam",
+      "cyclomatic": 21,
+      "cognitive": 39
+    },
+    {
+      "file": "OmadaWeb.PS/Private/New-EntraSignInUri.ps1",
+      "unit": "New-EntraSignInUri",
+      "cyclomatic": 25,
+      "cognitive": 36
+    },
+    {
+      "file": "OmadaWeb.PS/Private/New-OAuthTokenRequestError.ps1",
+      "unit": "New-OAuthTokenRequestError",
+      "cyclomatic": 20,
+      "cognitive": 37
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Resolve-EntraSignInScreen.ps1",
+      "unit": "Resolve-EntraSignInScreen",
+      "cyclomatic": 50,
+      "cognitive": 65
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Select-EntraMfaMethod.ps1",
+      "unit": "Select-EntraMfaMethod",
+      "cyclomatic": 14,
+      "cognitive": 21
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Set-DynamicParameter.ps1",
+      "unit": "Set-DynamicParameter",
+      "cyclomatic": 12,
+      "cognitive": 24
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Start-EdgeDriver.ps1",
+      "unit": "Start-EdgeDriver",
+      "cyclomatic": 22,
+      "cognitive": 38
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Start-WebView2Login.ps1",
+      "unit": "Start-WebView2Login",
+      "cyclomatic": 36,
+      "cognitive": 67
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Stop-OmadaLogin.ps1",
+      "unit": "Stop-OmadaLogin",
+      "cyclomatic": 18,
+      "cognitive": 29
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Switch-ToManualLogin.ps1",
+      "unit": "Switch-ToManualLogin",
+      "cyclomatic": 17,
+      "cognitive": 16
+    },
+    {
+      "file": "OmadaWeb.PS/Private/Test-OmadaTransientFailure.ps1",
+      "unit": "Test-OmadaTransientFailure",
+      "cyclomatic": 9,
+      "cognitive": 16
+    },
+    {
+      "file": "OmadaWeb.PS/Public/Clear-OmadaWebCache.ps1",
+      "unit": "Clear-OmadaWebCache",
+      "cyclomatic": 14,
+      "cognitive": 24
+    },
+    {
+      "file": "OmadaWeb.PS/Public/Import-OmadaSession.ps1",
+      "unit": "Import-OmadaSession",
+      "cyclomatic": 31,
+      "cognitive": 37
+    }
+  ]
+}

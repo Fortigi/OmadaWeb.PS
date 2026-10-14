@@ -1,7 +1,13 @@
 [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'ModulePath', Justification = 'Used by Import-Module inside the Describe BeforeAll, which the analyzer does not follow into.')]
 [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'The canary password arrives from a GitHub environment secret as an environment variable, which is a plain string by the time this process can see it. Building the PSCredential the module takes is the only thing done with it.')]
 param(
-    [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
+    [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1'),
+
+    # Which of the three sign-ins to drive. They are separate runs rather than separate assertions in
+    # one, because each needs its own browser window and two of them never finish - see the second
+    # Describe below.
+    [ValidateSet('PasswordAutofill', 'UserNameOnly', 'NoUserName')]
+    [string]$Scenario = 'PasswordAutofill'
 )
 
 # The scheduled login-flow canary (roadmap E5, issue #33).
@@ -48,9 +54,14 @@ BeforeDiscovery {
         [string]::IsNullOrWhiteSpace($Script:CanaryUserName) -or
         [string]::IsNullOrWhiteSpace($Script:CanaryPassword)
     )
+
+    # Read at discovery for the same reason as the configuration above: which Describe runs is a
+    # property of the run, not something to decide inside one.
+    $Script:RunPasswordScenario = $Script:CanaryConfigured -and $Scenario -eq 'PasswordAutofill'
+    $Script:RunWaitingScenario = $Script:CanaryConfigured -and $Scenario -in @('UserNameOnly', 'NoUserName')
 }
 
-Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigured) {
+Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:RunPasswordScenario) {
 
     BeforeAll {
         . (Join-Path $PSScriptRoot 'Start-CanaryRelyingParty.ps1')
@@ -124,7 +135,7 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
 
         # The diagnostic that names a broken selector: the state, the selectors expected but absent,
         # the ones present, and the page path. Reported verbatim rather than summarized.
-        $Script:FallbackWarning = @($Script:CanaryWarning | Where-Object { $_ -match 'Automated Microsoft sign-in could not continue' })
+        $Script:FallbackWarning = @($Script:CanaryWarning | Where-Object { $_ -match 'Automated Microsoft sign-in' })
 
         if ($Script:FallbackWarning.Count -gt 0) {
             "::group::Entra sign-in canary diagnostic" | Write-Host
@@ -165,7 +176,19 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
         # page and sent the reader to the selector table. Everything needed to tell those apart had
         # already been collected: a selector break leaves a diagnostic, and a failure that never
         # reached Microsoft leaves RedirectHitCount at zero.
-        $Because = if (-not [string]::IsNullOrWhiteSpace($Diagnostic)) {
+        # Checked before the others because it is the most certain of them: Entra ID said in so many
+        # words that it refused the credential, which rules out both the selector table and the
+        # runner. The usual cause is a provisioning run without -GitHubRepository - the script resets
+        # the canary account's password on every run, so the tenant moves on and the environment
+        # keeps the old one. Naming that here saves the reader from a selector hunt that cannot
+        # possibly find anything.
+        $Because = if ($Message -match 'user name or password is wrong|AADSTS50126') {
+            "Entra ID refused the canary account's credential, so this is NOT a selector break and NOT a runner problem. " +
+            "The usual cause is that CANARY_PASSWORD in the 'entra-canary' environment no longer matches the tenant: " +
+            "Build/New-EntraCanaryConfiguration.ps1 resets the account's password on every run, so a run without " +
+            "-GitHubRepository leaves the two disagreeing. Re-run it with -GitHubRepository <owner/repo> to resync them"
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($Diagnostic)) {
             "credential autofill fell back to manual sign-in, so Microsoft changed a page this module recognizes by element id. " +
             "Update `$Script:EntraSignInElementId in OmadaWeb.PS/OmadaWeb.PS.psm1 from the diagnostic above (issue #32)"
         }
@@ -209,6 +232,186 @@ Describe 'Entra ID sign-in canary' -Tag 'E2E' -Skip:(-not $Script:CanaryConfigur
         # Reads the runspace's error stream as well as the loop's own record, so a listener that died
         # before it ever served a request cannot be reported as healthy while the sign-in failure is
         # blamed on Microsoft.
+        (Get-CanaryRelyingPartyError -RelyingParty $Script:RelyingParty) -join [System.Environment]::NewLine | Should -BeNullOrEmpty
+    }
+}
+
+# The two sign-ins that are not meant to finish.
+#
+# A password that was never supplied and an account that was never named both end the same way: the
+# module fills in what it was given, refuses to invent the rest, and leaves the window open for the
+# person it is waiting for. On a runner that person does not exist, so there is nothing to wait for
+# and nothing to assert afterwards - which is exactly why these are worth watching against the real
+# Entra ID. It is the one arrangement where "the sign-in did not complete" is the correct outcome,
+# and where a module that quietly submitted an empty password instead would look like a success.
+#
+# So the sign-in runs in a child process started -STA and is watched rather than awaited. Out of
+# process is what makes it stoppable: the WinForms dialog blocks the thread it is shown on, so nothing
+# inside that process can be interrupted once the window is up. -STA is what makes it work at all: a
+# background job is out of process too, but its runspace thread is MTA, and WebView2 cannot be created
+# there - see the comment on the launch below and Tests/E2E/Start-WatchedSignIn.ps1. The observation
+# window is
+# fixed rather than cut short at the first marker, because the last thing these check - the handover
+# that says the sign-in is waiting for you - only happens after the module has seen no progress for
+# $Script:LoginAutomationFallbackTimeout seconds.
+Describe 'Entra ID sign-in canary - a sign-in that waits for the user' -Tag 'E2E' -Skip:(-not $Script:RunWaitingScenario) {
+
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Start-CanaryRelyingParty.ps1')
+
+        $Port = if ([string]::IsNullOrWhiteSpace($Env:OMADAWEBPS_CANARY_PORT)) { 8400 } else { [int]$Env:OMADAWEBPS_CANARY_PORT }
+
+        # Both scenarios get an authorization request that carries no prompt and no login hint. For
+        # UserNameOnly that is the point - what reaches Entra has to have been put there by the
+        # module - and for NoUserName it is what makes "the module added nothing" mean something.
+        $Script:RelyingParty = Start-CanaryRelyingParty -TenantId $Env:OMADAWEBPS_CANARY_TENANT_ID -ClientId $Env:OMADAWEBPS_CANARY_CLIENT_ID -LoginHint '' -Prompt '' -Port $Port
+
+        # Long enough for the redirect chain, the sign-in page, and the 60 seconds of no progress
+        # that ends in the handover ($Script:LoginAutomationFallbackTimeout), with room for a slow
+        # runner. The workflow allows more than this per attempt, so a window that overruns is
+        # reported by these assertions rather than by a killed step.
+        $ObservationSeconds = 135
+
+        $UserNameForScenario = if ($Scenario -eq 'UserNameOnly') { $Env:OMADAWEBPS_CANARY_USERNAME } else { '' }
+
+        # A separate process, started -STA, rather than a background job.
+        #
+        # Out of process is what makes this stoppable at all: the WinForms dialog blocks the thread it
+        # is shown on, so nothing inside the process showing it can be interrupted once the window is
+        # up. A background job is out of process too - but its runspace thread is MTA, and WebView2 is
+        # COM that needs a single-threaded apartment. CoreWebView2Environment::CreateAsync came back
+        # with "Cannot change thread mode after it is set (RPC_E_CHANGED_MODE)", no browser was ever
+        # created, and every assertion below failed because the sign-in had not happened - which the
+        # canary duly reported as a changed Microsoft sign-in page (issue #90). PasswordAutofill was
+        # green throughout, because it runs in the Pester host, which is STA.
+        #
+        # The same host this runs in, so a 5.1 leg would drive 5.1 rather than silently swapping hosts.
+        $WatchedSignInLogFolder = if ([string]::IsNullOrWhiteSpace($Env:RUNNER_TEMP)) { [System.IO.Path]::GetTempPath() } else { $Env:RUNNER_TEMP }
+        $Script:WatchedSignInOutputPath = Join-Path $WatchedSignInLogFolder ("canary-watched-{0}-{1}.log" -f $Scenario, [guid]::NewGuid().ToString("N"))
+        $Script:WatchedSignInErrorPath = [System.IO.Path]::ChangeExtension($Script:WatchedSignInOutputPath, ".err.log")
+
+        $WatchedSignInArgument = [System.Collections.Generic.List[string]]::new()
+        $WatchedSignInArgument.AddRange([string[]]@(
+                "-STA", "-NoLogo", "-NoProfile",
+                "-File", ('"{0}"' -f (Join-Path $PSScriptRoot 'Start-WatchedSignIn.ps1')),
+                "-ModulePath", ('"{0}"' -f $ModulePath),
+                "-ResourceUrl", ('"{0}"' -f $Script:RelyingParty.ResourceUrl)
+            ))
+
+        # Left off entirely rather than passed as an empty string: an empty argument through a command
+        # line is the one value that does not survive the trip intact, and "no account was named" is
+        # precisely what the NoUserName scenario asserts about.
+        if (-not [string]::IsNullOrWhiteSpace($UserNameForScenario)) {
+            $WatchedSignInArgument.AddRange([string[]]@("-UserName", ('"{0}"' -f $UserNameForScenario)))
+        }
+
+        # Captured to a file rather than read from a pipe. The process is killed at the deadline, and
+        # a trace that only existed in a pipe nobody drained would go with it - which is the same
+        # reason the workflow redirects each attempt to a file.
+        $SignIn = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList $WatchedSignInArgument.ToArray() `
+            -RedirectStandardOutput $Script:WatchedSignInOutputPath -RedirectStandardError $Script:WatchedSignInErrorPath `
+            -NoNewWindow -PassThru
+
+        if (-not $SignIn.WaitForExit($ObservationSeconds * 1000)) {
+            # Expected, not a failure: these two sign-ins are meant to still be waiting. The window is
+            # open for a person who is not there, and the observation window has simply run out.
+            try { $SignIn.Kill($true) } catch { "Could not stop the watched sign-in cleanly: {0}" -f $_.Exception.Message | Write-Host }
+        }
+
+        # The browser belongs to a process that has just been killed, and the next attempt must not
+        # inherit one that is still holding the profile.
+        Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+        # Read after the kill, so a trace written up to the last moment is still read in full. Both
+        # streams, because a failure that reached the error stream is as much a part of what happened
+        # as the verbose trace is.
+        $Captured = [System.Collections.Generic.List[string]]::new()
+        foreach ($Path in @($Script:WatchedSignInOutputPath, $Script:WatchedSignInErrorPath)) {
+            foreach ($Line in @(Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+                $Captured.Add([string]$Line)
+            }
+        }
+
+        $Script:Trace = $Captured -join [System.Environment]::NewLine
+
+        "::group::Entra sign-in canary trace ($Scenario)" | Write-Host
+        $Captured | ForEach-Object { $_ | Write-Host }
+        "::endgroup::" | Write-Host
+
+        if (-not [string]::IsNullOrWhiteSpace($Env:OMADAWEBPS_CANARY_DIAGNOSTIC_PATH)) {
+            @($Captured | Where-Object { $_ -match 'Automated Microsoft sign-in' }) -join [System.Environment]::NewLine |
+                Set-Content -LiteralPath $Env:OMADAWEBPS_CANARY_DIAGNOSTIC_PATH -Encoding UTF8
+        }
+    }
+
+    AfterAll {
+        Stop-CanaryRelyingParty -RelyingParty $Script:RelyingParty
+
+        # The trace has been read and echoed into the job log by now, so what is left on disk is a
+        # copy of it. Removed because it is a sign-in trace, and a runner's temp folder is not where
+        # one should be left lying about.
+        #
+        # Each path is tested before it is passed. A BeforeAll that died before assigning them would
+        # otherwise turn this into a parameter-binding failure on a null LiteralPath - which
+        # -ErrorAction cannot suppress, and which would be reported in place of whatever actually
+        # went wrong.
+        foreach ($Path in @($Script:WatchedSignInOutputPath, $Script:WatchedSignInErrorPath)) {
+            if (-not [string]::IsNullOrWhiteSpace($Path)) {
+                Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    It 'Put the account into the sign-in request' -Skip:($Scenario -ne 'UserNameOnly') {
+        # An account named on the command line has to reach Entra as part of the request, because by
+        # the time a page is drawn the account has already been chosen.
+        #
+        # This is also the scenario's proof that the browser got to Microsoft at all: the rewrite only
+        # ever happens on an authorization request on a Microsoft sign-in host, so the line cannot be
+        # in the trace unless the browser was there. Everything below depends on that, which is why
+        # this assertion comes first.
+        $Script:Trace | Should -Match 'Asking Entra ID for the account this call named' -Because "either the browser never reached the sign-in page, or -UserName did not reach the authorization request and Entra chose the account itself"
+    }
+
+    It 'Left the request alone when no account was named' -Skip:($Scenario -ne 'NoUserName') {
+        # The default has to stay indistinguishable from the module not being involved in the choice.
+        # The second assertion doubles as this scenario's proof that Microsoft was reached: the line
+        # is written from the autofill driver, which runs only while the browser is on the sign-in
+        # host.
+        $Script:Trace | Should -Not -Match 'Asking Entra ID for the account this call named'
+        $Script:Trace | Should -Match 'No account was named for this sign-in' -Because "either the browser never reached the sign-in page, or the module drove it when nobody had named an account"
+    }
+
+    It 'Reached the page that asks for a password' -Skip:($Scenario -ne 'UserNameOnly') {
+        # Proves the account name was filled in and accepted: Entra only asks for a password once it
+        # knows whose password it is asking for.
+        $Script:Trace | Should -Match "Screen 'PasswordRequired'" -Because "the sign-in never got as far as being asked for a password, so what happens when it is asked was not tested"
+    }
+
+    It 'Did not submit a password it was never given' -Skip:($Scenario -ne 'UserNameOnly') {
+        # An empty password is one of the attempts an account has before Entra ID locks it out, which
+        # is why the resolver refuses to send one. This is the assertion that would catch it doing so.
+        $Script:Trace | Should -Not -Match "Screen 'PasswordEntry', action 'SetValueAndClick'"
+        $Script:Trace | Should -Match "action 'Wait'"
+    }
+
+    It 'Handed the window back saying it is waiting, not that the page is broken' -Skip:($Scenario -ne 'UserNameOnly') {
+        # The failure this scenario exists for. Before, a password prompt ran into the stall detector
+        # and was reported as "the sign-in page no longer matches what this module knows about it,
+        # Microsoft probably changed it, please report this" - three false statements and a request
+        # to file a bug for having to type your own password.
+        $Script:Trace | Should -Match 'Automated Microsoft sign-in is waiting for you' -Because "a page the module read perfectly well was reported as a page it could not read"
+        $Script:Trace | Should -Not -Match 'no longer matches what this module knows about it'
+    }
+
+    It 'Drove nothing, and so reported nothing to fix' -Skip:($Scenario -ne 'NoUserName') {
+        # With no account named there is nothing to fill in, so the automation never engages - and a
+        # handover diagnostic here would mean it had engaged and then given up, which is a different
+        # thing entirely and would be reported as a broken sign-in page.
+        $Script:Trace | Should -Not -Match 'Automated Microsoft sign-in'
+    }
+
+    It 'Kept the loopback stand-in healthy throughout' {
         (Get-CanaryRelyingPartyError -RelyingParty $Script:RelyingParty) -join [System.Environment]::NewLine | Should -BeNullOrEmpty
     }
 }

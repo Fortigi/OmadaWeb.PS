@@ -22,7 +22,9 @@ BeforeAll {
             [Parameter(Mandatory)]
             [string]$Uri,
 
-            [switch]$FollowRedirect
+            [switch]$FollowRedirect,
+
+            [string]$Authorization
         )
 
         $Handler = [System.Net.Http.HttpClientHandler]::new()
@@ -31,6 +33,10 @@ BeforeAll {
         $Client = [System.Net.Http.HttpClient]::new($Handler)
         try {
             $Client.Timeout = [System.TimeSpan]::FromSeconds(15)
+            if (-not [string]::IsNullOrWhiteSpace($Authorization)) {
+                $Client.DefaultRequestHeaders.Add("Authorization", $Authorization)
+            }
+
             $Response = $Client.GetAsync($Uri).GetAwaiter().GetResult()
             try {
                 $Location = $null
@@ -187,6 +193,19 @@ Describe 'New-CanaryAuthorizeUri' -Tag 'Unit' {
         (Get-CanaryQueryParameter -Uri $Uri)["login_hint"] | Should -Be "canary+test@example.onmicrosoft.com"
     }
 
+    It 'Omits the prompt when the scenario asks for a bare authorization request' {
+        # A scenario that tests whether the module puts prompt and login_hint on the request has to
+        # be given one that carries neither, or it would be watching the stand-in do the work.
+        $Parameter = $Script:AuthorizeParameter.Clone()
+        $Parameter.Prompt = ""
+
+        $Query = Get-CanaryQueryParameter -Uri (New-CanaryAuthorizeUri @Parameter)
+
+        # Asked of the parsed query rather than of the raw string: 'prompt=' would also be satisfied
+        # by a parameter that merely ends in it, and absence is the thing being asserted.
+        $Query.ContainsKey("prompt") | Should -BeFalse
+    }
+
     It 'Omits the login hint when none was supplied' {
         $Parameter = $Script:AuthorizeParameter.Clone()
         $Parameter.LoginHint = ""
@@ -301,6 +320,28 @@ Describe 'Start-CanaryRelyingParty' -Tag 'Unit' {
 
         $Response.StatusCode | Should -Be 200
         ($Response.Content | ConvertFrom-Json).canary | Should -Be "ok"
+    }
+
+    It 'Records the bearer token the service-principal canary presents' {
+        # What the service-principal canary asserts against. This listener authorizes nothing and
+        # answers 200 either way, so a canary that only checked the status code would pass on a
+        # request that presented no token at all - which is also the shape issue #102 fixed.
+        $Before = $Script:RelyingParty.ResourceHitCount
+
+        $null = Invoke-CanaryRequest -Uri $Script:RelyingParty.ResourceUrl -Authorization "Bearer canary-access-token"
+
+        $Script:RelyingParty.ResourceHitCount | Should -Be ($Before + 1)
+        $Script:RelyingParty.ResourceBearer | Should -Be "Bearer canary-access-token"
+    }
+
+    It 'Leaves the bearer unset when the request carried no Authorization header' {
+        # The empty-bearer case has to be distinguishable from "a token arrived", because it is the
+        # one the canary exists to catch.
+        $Script:RelyingParty.ResourceBearer = $null
+
+        $null = Invoke-CanaryRequest -Uri $Script:RelyingParty.ResourceUrl
+
+        $Script:RelyingParty.ResourceBearer | Should -BeNullOrEmpty
     }
 
     It 'Reports the listener health without blocking on the still-open error stream' {

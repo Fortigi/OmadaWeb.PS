@@ -7,10 +7,22 @@ name: PR Validation
 run-name: >-
   ${{ github.event_name == 'issue_comment'
   && format('PR Validation #{0} — {1}', github.event.issue.number, github.event.issue.title)
-  || format('PR Validation — {0}', github.ref_name) }}
+  || (inputs.pr_number
+  && format('PR Validation #{0} — dispatched', inputs.pr_number)
+  || format('PR Validation — {0}', github.ref_name)) }}
 
 on:
+  # With pr_number, validates that pull request's head exactly as /validate does. This is how
+  # .github/workflows/dependabot-validation.yml starts validation for an eligible Dependabot pull
+  # request: a comment posted with the GITHUB_TOKEN would start no run at all, and workflow_dispatch is
+  # the one event the GITHUB_TOKEN may trigger. Dispatch it on main, so the definition that runs is the
+  # reviewed one there. Dispatching needs write access to the repository - the same bar as /validate.
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request to validate. Empty validates the commit the workflow is run on.'
+        required: false
+        type: string
   issue_comment:
     types: [created]
 
@@ -18,7 +30,7 @@ on:
 # second /validate on the same PR supersedes the first instead of racing it to write
 # the commit status.
 concurrency:
-  group: pr-validation-${{ github.event.issue.number || github.ref }}
+  group: pr-validation-${{ github.event.issue.number || inputs.pr_number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -39,12 +51,33 @@ jobs:
     steps:
       - name: Resolve trigger context
         id: resolve
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             if (context.eventName === 'workflow_dispatch') {
+              const prNumber = (context.payload.inputs?.pr_number ?? '').trim();
+              if (prNumber === '') {
+                core.setOutput('should_run', 'true');
+                core.setOutput('head_sha', context.sha);
+                return;
+              }
+              if (!/^[1-9][0-9]*$/.test(prNumber)) {
+                core.setFailed(`pr_number '${prNumber}' is not a pull request number.`);
+                core.setOutput('should_run', 'false');
+                return;
+              }
+              const dispatched = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(prNumber)
+              });
+              if (dispatched.data.state !== 'open') {
+                core.setFailed(`Pull request #${prNumber} is ${dispatched.data.state}.`);
+                core.setOutput('should_run', 'false');
+                return;
+              }
               core.setOutput('should_run', 'true');
-              core.setOutput('head_sha', context.sha);
+              core.setOutput('head_sha', dispatched.data.head.sha);
               return;
             }
 
@@ -66,7 +99,7 @@ jobs:
 
       - name: Set pending status
         if: steps.resolve.outputs.should_run == 'true'
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.repos.createCommitStatus({
@@ -81,7 +114,7 @@ jobs:
 
       - name: Acknowledge comment
         if: github.event_name == 'issue_comment' && steps.resolve.outputs.should_run == 'true'
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.reactions.createForIssueComment({
@@ -106,7 +139,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.dispatch.outputs.head_sha }}
           fetch-depth: 0
@@ -140,6 +173,24 @@ jobs:
           & $module { Invoke-WebEdgeDriverFramework | Out-Null }
       - name: Analyze, test and build
         run: ./Build/build.ps1 -Task TestBuildOnly -BuildVersion '0.0.0'
+
+      # Complexity and mutation testing, judged on the files this pull request changed only (issue
+      # #91); the weekly run covers the whole tree. Both tools need PowerShell 7, so this runs on the
+      # pwsh leg. It reads PR_CHANGED_FILES from "Determine changed files" above, and each gate skips
+      # itself, saying so, when the change touches nothing it measures.
+      - name: Quality gates on changed files
+        if: matrix.shell == 'pwsh'
+        run: ./Build/build.ps1 -Task QualityChanged
+
+      - name: Upload quality reports
+        if: always() && matrix.shell == 'pwsh'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: QualityReports
+          path: |
+            buildoutput/quality/
+            buildoutput/mutation/
+          if-no-files-found: ignore
 
       - name: Check for test results
         id: test-results
@@ -197,7 +248,7 @@ jobs:
         # failed there is no TestSummary.json, and the reader's ENOENT would bury the
         # real error.
         if: always() && steps.summarize.outcome == 'success'
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('fs');
@@ -248,7 +299,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Set final commit status
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const success = '${{ needs.validate.result }}' === 'success';

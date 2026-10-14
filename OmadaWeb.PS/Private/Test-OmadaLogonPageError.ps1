@@ -30,6 +30,15 @@ function Test-OmadaLogonPageError {
             deliberately limited to a sign-in page: an error on an ordinary Omada page says nothing
             about a sign-in that may still be in progress, so there only the first rule applies.
 
+        A terminal error is also classified, because "this will never work" and "this will never work
+        with this account" are not the same message and do not deserve the same answer. Category is
+        one of WrongAccount, Authorization, AppRegistration, IdentityProvider, Unknown or None, and
+        Recoverable is true for exactly one of them: WrongAccount, where the account signing in is
+        simply not an account of the application's tenant and signing in as somebody else is the
+        whole fix. Nothing in this function acts on that - it is the caller that decides whether to
+        offer the user another go - but the classification is written here because this is where the
+        evidence is.
+
     .PARAMETER Message
         The error text read off the page. An empty value means no error was shown.
 
@@ -44,8 +53,8 @@ function Test-OmadaLogonPageError {
         about the sign-in rather than about the application.
 
     .OUTPUTS
-        PSCustomObject with the members IsError, IsFatal, Message, Code, Reason and Source. IsError
-        is false when the page shows no error at all.
+        PSCustomObject with the members IsError, IsFatal, Message, Code, Reason, Source, Category and
+        Recoverable. IsError is false when the page shows no error at all.
     #>
     [CmdletBinding()]
     [OutputType([System.Management.Automation.PSCustomObject])]
@@ -65,12 +74,14 @@ function Test-OmadaLogonPageError {
     )
 
     $Verdict = [pscustomobject]@{
-        IsError = $false
-        IsFatal = $false
-        Message = $null
-        Code    = $null
-        Reason  = $null
-        Source  = $Source
+        IsError     = $false
+        IsFatal     = $false
+        Message     = $null
+        Code        = $null
+        Reason      = $null
+        Source      = $Source
+        Category    = "None"
+        Recoverable = $false
     }
 
     if ([string]::IsNullOrWhiteSpace($Message)) {
@@ -100,27 +111,39 @@ function Test-OmadaLogonPageError {
     # to do next than the AADSTS number it is quoted with.
     # PowerShell's -match is case-insensitive, which is what these are matched with below.
     $FatalSignature = [ordered]@{
-        'does not exist in tenant'                                           = "The account that signed in is not known in the tenant the Omada application is registered in."
-        'needs to be added as an external user'                              = "The account that signed in has to be invited into the application's tenant as a guest first."
-        'cannot access the application'                                      = "The account that signed in is not permitted to use the Omada application."
-        '\bconsent_required\b|\bAADSTS65001\b|\bAADSTS90094\b'               = "The application needs consent that this account cannot grant."
-        '\baccess_denied\b'                                                  = "The identity provider denied the sign-in."
-        '\b(invalid_client|unauthorized_client|unsupported_response_type)\b' = "The identity provider rejected the application registration behind this sign-in."
-        '\binvalid_request\b'                                                = "The identity provider rejected the sign-in request."
-        'OpenIdConnectMessage\.Error'                                        = "The identity provider returned an error instead of a token."
-        '\bAADSTS\d{3,}\b'                                                   = "Microsoft Entra ID refused the sign-in."
+        'does not exist in tenant'                                           = @{ Category = "WrongAccount"; Reason = "The account that signed in is not known in the tenant the Omada application is registered in." }
+        'needs to be added as an external user'                              = @{ Category = "WrongAccount"; Reason = "The account that signed in has to be invited into the application's tenant as a guest first." }
+        # The codes for the same condition, matched after the English sentences and before anything
+        # more general: a sign-in page served in another language carries the number and not the
+        # words, and reporting that as a refusal nobody can act on would lose the one remedy that
+        # works. AADSTS50020 and AADSTS50178 are both emitted for an account of another tenant, and
+        # AADSTS51004 is the same fact stated from the directory's side.
+        '\bAADSTS(50020|50178|51004)\b'                                      = @{ Category = "WrongAccount"; Reason = "The account that signed in is not known in the tenant the Omada application is registered in." }
+        'cannot access the application'                                      = @{ Category = "Authorization"; Reason = "The account that signed in is not permitted to use the Omada application." }
+        '\bconsent_required\b|\bAADSTS65001\b|\bAADSTS90094\b'               = @{ Category = "AppRegistration"; Reason = "The application needs consent that this account cannot grant." }
+        '\baccess_denied\b'                                                  = @{ Category = "IdentityProvider"; Reason = "The identity provider denied the sign-in." }
+        '\b(invalid_client|unauthorized_client|unsupported_response_type)\b' = @{ Category = "AppRegistration"; Reason = "The identity provider rejected the application registration behind this sign-in." }
+        '\binvalid_request\b'                                                = @{ Category = "IdentityProvider"; Reason = "The identity provider rejected the sign-in request." }
+        'OpenIdConnectMessage\.Error'                                        = @{ Category = "IdentityProvider"; Reason = "The identity provider returned an error instead of a token." }
+        '\bAADSTS\d{3,}\b'                                                   = @{ Category = "IdentityProvider"; Reason = "Microsoft Entra ID refused the sign-in." }
     }
 
     foreach ($Signature in $FatalSignature.Keys) {
         if ($Text -match $Signature) {
             $Verdict.IsFatal = $true
-            $Verdict.Reason = $FatalSignature[$Signature]
+            $Verdict.Reason = $FatalSignature[$Signature].Reason
+            $Verdict.Category = $FatalSignature[$Signature].Category
+
+            # The one category a second sign-in can get past. Everything else answers every account
+            # the same way, so re-opening a window for it would only spend the user's time.
+            $Verdict.Recoverable = $Verdict.Category -eq "WrongAccount"
             return $Verdict
         }
     }
 
     if ($OnLogonPage -and -not $HasLogonForm) {
         $Verdict.IsFatal = $true
+        $Verdict.Category = "Unknown"
         $Verdict.Reason = "The logon page reports an error and offers no way to sign in again, so a new browser window would land on the same page."
         return $Verdict
     }

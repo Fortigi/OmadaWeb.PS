@@ -105,6 +105,11 @@ function New-CanaryAuthorizeUri {
         only thing under test - would never be rendered. The canary would then pass by not testing
         anything, which is worse than failing.
 
+        It is a parameter rather than a constant because one thing under test is the module's own
+        ability to put that parameter there. A scenario that checks whether -UserName reaches Entra
+        as login_hint and prompt=login has to be given an authorization request that carries neither,
+        or it would be watching this stand-in do the work and calling it a pass.
+
         The login hint is sent so that Entra can serve the account's own sign-in experience. It does
         not skip the username screen: the automation still fills it in, which is what the canary is
         there to watch.
@@ -125,7 +130,12 @@ function New-CanaryAuthorizeUri {
         The opaque state value echoed back on the redirect, which the listener checks.
 
     .PARAMETER LoginHint
-        The canary account's user principal name.
+        The canary account's user principal name. Left out when the scenario is about the module
+        supplying it.
+
+    .PARAMETER Prompt
+        The OpenID Connect prompt to send. Defaults to 'login'; an empty value sends none, which is
+        what a scenario testing the module's own prompt needs.
 
     .OUTPUTS
         System.String. The absolute authorization request URI.
@@ -155,7 +165,11 @@ function New-CanaryAuthorizeUri {
 
         [AllowNull()]
         [AllowEmptyString()]
-        [string]$LoginHint
+        [string]$LoginHint,
+
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Prompt = "login"
     )
 
     $QueryParameter = [ordered]@{
@@ -167,7 +181,10 @@ function New-CanaryAuthorizeUri {
         state                 = $State
         code_challenge        = $CodeChallenge
         code_challenge_method = "S256"
-        prompt                = "login"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Prompt)) {
+        $QueryParameter["prompt"] = $Prompt
     }
 
     if (-not [string]::IsNullOrWhiteSpace($LoginHint)) {
@@ -234,8 +251,14 @@ function Start-CanaryRelyingParty {
         Serves three routes:
 
           /canary   - the registered redirect URI. Records the hit, sets oisauthtoken, returns 200.
-          /api/*    - the resource the module requests once it holds the cookie. Returns JSON.
+          /api/*    - the resource the module requests once it holds the cookie. Records the hit and
+                      the Authorization header it carried, and returns JSON.
           anything  - 302 to the authorization request.
+
+        The service-principal canary uses only the /api/* route: the OAuth branch goes straight to the
+        token endpoint and then to the resource, so nothing in it ever visits the redirect. It shares
+        this listener rather than having one of its own because what stands in for Omada is the same
+        thing in both cases.
 
         The catch-all redirect is deliberate. Test-EnvironmentSuspended probes the BaseUrl with its
         own HttpClient before the browser ever opens, and that client follows redirects, so it will
@@ -244,8 +267,9 @@ function Start-CanaryRelyingParty {
         spent its redirect by the time the browser asked.
 
         The returned object is a synchronized hashtable so the listener thread and the test thread
-        can both touch it. The test reads RedirectHitCount and CallbackError after the sign-in;
-        ListenerError carries anything the loop itself threw.
+        can both touch it. The test reads RedirectHitCount and CallbackError after the sign-in, or
+        ResourceHitCount and ResourceBearer after a service-principal request; ListenerError carries
+        anything the loop itself threw.
 
     .PARAMETER TenantId
         The directory (tenant) ID hosting the canary account and app registration.
@@ -254,7 +278,12 @@ function Start-CanaryRelyingParty {
         The application (client) ID of the canary app registration.
 
     .PARAMETER LoginHint
-        The canary account's user principal name.
+        The canary account's user principal name. Left out when the scenario is about the module
+        supplying it.
+
+    .PARAMETER Prompt
+        The OpenID Connect prompt the authorization request carries. Defaults to 'login'; an empty
+        value sends none.
 
     .PARAMETER Port
         The loopback port to listen on. Must be covered by a registered redirect URI; Entra ignores
@@ -279,6 +308,10 @@ function Start-CanaryRelyingParty {
         [AllowEmptyString()]
         [string]$LoginHint,
 
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Prompt = "login",
+
         [ValidateRange(1024, 65535)]
         [int]$Port = 8400
     )
@@ -288,7 +321,7 @@ function Start-CanaryRelyingParty {
     $Pkce = New-CanaryPkcePair
     $StateValue = [guid]::NewGuid().ToString("N")
 
-    $AuthorizeUri = New-CanaryAuthorizeUri -TenantId $TenantId -ClientId $ClientId -RedirectUri $RedirectUri -CodeChallenge $Pkce.Challenge -State $StateValue -LoginHint $LoginHint
+    $AuthorizeUri = New-CanaryAuthorizeUri -TenantId $TenantId -ClientId $ClientId -RedirectUri $RedirectUri -CodeChallenge $Pkce.Challenge -State $StateValue -LoginHint $LoginHint -Prompt $Prompt
 
     $CookieName = "oisauthtoken"
     $CookieValue = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("canary-cookie-value"))
@@ -314,6 +347,8 @@ function Start-CanaryRelyingParty {
             RedirectHitCount = 0
             CallbackError    = $null
             ListenerError    = $null
+            ResourceHitCount = 0
+            ResourceBearer   = $null
         })
 
     # Only .NET types and the state hashtable cross into the runspace - the helper functions above
@@ -363,6 +398,18 @@ function Start-CanaryRelyingParty {
                     $Body = "<html><head><title>OmadaWeb.PS canary</title></head><body><p>Canary sign-in complete.</p></body></html>"
                 }
                 elseif ($Path -like "/api/*") {
+                    $RelyingParty.ResourceHitCount = $RelyingParty.ResourceHitCount + 1
+
+                    # What the service-principal canary actually asserts against. This listener authorizes
+                    # nothing - it answers 200 to any /api/* request, credential or not - so "the request
+                    # succeeded" proves nothing about what was presented. Only reading the header does, and
+                    # that is also the regression guard for issue #102, where a failed token request used to
+                    # fall through to 'Authorization: Bearer '.
+                    #
+                    # This is a bearer token. It is held in memory for the length of one attempt and is never
+                    # written to the report: a failing canary's diagnostic becomes a public GitHub issue.
+                    $RelyingParty.ResourceBearer = $Context.Request.Headers["Authorization"]
+
                     $Context.Response.StatusCode = 200
                     $ContentType = "application/json; charset=utf-8"
                     $Body = '{"canary":"ok"}'

@@ -163,4 +163,24 @@ Describe 'Export-OmadaCookieFile / Import-OmadaCookieFile' -Tag 'Unit' {
             }
         }
     }
+
+    Context 'A folder name containing brackets (issue #105)' {
+        # "[" and "]" are wildcard metacharacters to every -Path (as opposed to -LiteralPath) call.
+        # A -CookiePath folder, or a session identity, can legitimately contain them, and this must
+        # not silently fail to write or read the cookie. [System.IO.Directory]::CreateDirectory is
+        # used to create the folder rather than New-Item -Path, so the test setup does not fall into
+        # the very wildcard trap it is proving the module no longer has.
+        It 'Should round-trip a cookie through a bracketed folder' {
+            InModuleScope 'OmadaWeb.PS' {
+                $BracketedFolder = Join-Path $Script:TestRoot -ChildPath 'cookies[1]'
+                [System.IO.Directory]::CreateDirectory($BracketedFolder) | Out-Null
+                $BracketedPath = Join-Path $BracketedFolder -ChildPath 'cookie.xml'
+
+                Export-OmadaCookieFile -Path $BracketedPath -AuthCookie $Script:TestCookie | Should -BeTrue
+
+                $Loaded = Import-OmadaCookieFile -Path $BracketedPath
+                $Loaded.Value | Should -Be 'SUPER-SECRET-TOKEN-VALUE'
+            }
+        }
+    }
 }

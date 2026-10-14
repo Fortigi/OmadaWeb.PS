@@ -28,6 +28,21 @@ function Start-WebView2Login {
             $OriginalTreatControlCAsInput = [Console]::TreatControlCAsInput
         }
 
+        # Asked before anything is built, and answered plainly. WebView2 is COM that needs a
+        # single-threaded apartment: on an MTA thread the WinForms objects below are all created
+        # happily and then CoreWebView2Environment::CreateAsync comes back with "Cannot change thread
+        # mode after it is set", which reads as a COM fault rather than as "this host cannot show a
+        # window". Both fallbacks fail the same way, so the trace showed two attempts and no reason,
+        # and the sign-in canary reported the missing browser as a changed Microsoft sign-in page
+        # (issue #90). Stopping here says which host is the problem and what to do instead.
+        #
+        # $Script:StopError, because retrying is pointless: a thread's apartment cannot be changed
+        # once it is set, so the next of the three login attempts would fail identically.
+        if (-not (Test-OmadaStaThread)) {
+            $Script:StopError = $true
+            "{0} - WebView2 needs a single-threaded apartment (STA), and this host is multi-threaded (MTA), so no browser window can be created here. A PowerShell background job and any runspace created without ApartmentState.STA are MTA. Start the host with -STA, run the sign-in in its own STA process, or use -AuthenticationType Selenium." -f $MyInvocation.MyCommand | Write-Error -ErrorAction Stop
+        }
+
         [System.Windows.Forms.Application]::EnableVisualStyles()
         $Script:WinForm = New-Object System.Windows.Forms.Form
         [Microsoft.Web.WebView2.WinForms.WebView2] $Script:WebView2 = New-Object Microsoft.Web.WebView2.WinForms.WebView2
@@ -44,10 +59,6 @@ function Start-WebView2Login {
             $Script:WebView2.CreationProperties.IsInPrivateModeEnabled = $true
         }
 
-        #https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags
-        #$EnvironmentOptions = "--msSingleSignOnOSForPrimaryAccountIsShared"
-        #$Script:WebView2.CreationProperties.AdditionalBrowserArguments = $EnvironmentOptions
-
         $InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
 
         $Script:WinForm_Load = {
@@ -62,7 +73,7 @@ function Start-WebView2Login {
         $Script:WebView_SourceChanged = {
             try {
                 if ($null -ne $Script:WebView2 -and $null -ne $Script:WebView2.Source -and $null -ne $Script:WinForm) {
-                    $Script:WinForm.Text = "OmadaWeb.PS - {0}" -f $Script:WebView2.Source.AbsoluteUri
+                    $Script:WinForm.Text = Get-WebView2WindowTitle -Uri $Script:WebView2.Source
                 }
             }
             catch [System.Management.Automation.PipelineStoppedException] {
@@ -164,27 +175,66 @@ function Start-WebView2Login {
         $Script:WebView2.ZoomFactor = 1
         $Script:WebView2.add_SourceChanged($Script:WebView_SourceChanged)
 
+        # Single sign-on with the Windows account is what makes the ordinary sign-in instant: WebView2
+        # presents the account the machine is logged on with and Entra waves it through. It is also
+        # precisely what takes the choice away when that account is the wrong one - which is what an
+        # 'AADSTS50178 ... does not exist in tenant' refusal is. So it stays on by default, and is
+        # turned off for exactly the sign-ins where the caller has said which account to use, or has
+        # asked to be shown the picker.
+        $SignInAccount = Get-OmadaSignInAccount -SessionContext $Script:CurrentWebView2Session
+        $UseOsPrimaryAccount = [string]::IsNullOrWhiteSpace($SignInAccount.UserName) -and -not $SignInAccount.SelectAccount
+
         # Create the env once per session and reuse it for all WebView2 instances of that session -
         # a CoreWebView2Environment is bound 1:1 to the UserDataFolder it was created against, so it
         # must be scoped to the same session as the profile folder above.
+        #
+        # It is also bound to the options it was created with, and those cannot be changed afterwards.
+        # A session that signed in once without naming an account and is now asked for a different one
+        # would otherwise silently reuse an environment that still signs in with the Windows account,
+        # and the parameter the caller passed would do nothing at all.
+        $PreviousWebViewEnv = $null
+        if ($null -ne $Script:CurrentWebView2Session.WebViewEnv -and $Script:CurrentWebView2Session.WebViewEnvSingleSignOn -ne $UseOsPrimaryAccount) {
+            "{0} - Single sign-on with the Windows account is now {1} for this session, which the existing WebView2 environment cannot be told, so a new one is created." -f $MyInvocation.MyCommand, $(if ($UseOsPrimaryAccount) { "wanted" } else { "not wanted" }) | Write-Verbose
+
+            # Kept, not dropped. WebView2 refuses to create a second environment over a user data
+            # folder that is still in use with different options, and a browser process from the
+            # window that just closed can still be on its way out. Failing the sign-in over that
+            # would be the wrong trade: the option only decides whether the Windows account is
+            # offered without being asked for, while what actually settles the account is the prompt
+            # parameter on the request itself, which is sent either way.
+            $PreviousWebViewEnv = $Script:CurrentWebView2Session.WebViewEnv
+            $Script:CurrentWebView2Session.WebViewEnv = $null
+        }
+
         if ($null -eq $Script:CurrentWebView2Session.WebViewEnv) {
-            "{0} - Creating CoreWebView2Environment..." -f $MyInvocation.MyCommand | Write-Verbose
+            "{0} - Creating CoreWebView2Environment (single sign-on with the Windows account: {1})..." -f $MyInvocation.MyCommand, $UseOsPrimaryAccount | Write-Verbose
             $EnvOptions = [Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions]::new()
-            $EnvOptions.AllowSingleSignOnUsingOSPrimaryAccount = $true
+            $EnvOptions.AllowSingleSignOnUsingOSPrimaryAccount = $UseOsPrimaryAccount
             try {
                 "{0} - Try to start CoreWebView2Environment using implicit configuration..." -f $MyInvocation.MyCommand | Write-Verbose
                 $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($null, $WebView2ProfilePath, $EnvOptions)
                 $Script:CurrentWebView2Session.WebViewEnv = $Task.GetAwaiter().GetResult()
+                $Script:CurrentWebView2Session.WebViewEnvSingleSignOn = $UseOsPrimaryAccount
             }
             catch {
                 try {
                     "{0} - Failed to start CoreWebView2Environment using implicit configuration, now try explicit Edge WebView path: '{1}'..." -f $MyInvocation.MyCommand, $Script:InstalledEdgeWebView2Path | Write-Verbose
                     $Task = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync($Script:InstalledEdgeWebView2Path, $WebView2ProfilePath, $EnvOptions)
                     $Script:CurrentWebView2Session.WebViewEnv = $Task.GetAwaiter().GetResult()
+                    $Script:CurrentWebView2Session.WebViewEnvSingleSignOn = $UseOsPrimaryAccount
                 }
                 catch {
-                    $Script:StopError = $true
-                    "{0} - Error creating CoreWebView2Environment. You can consider to install the Evergreen Standalone Installer from 'https://developer.microsoft.com/en-us/Microsoft-edge/webview2/' and try again: {1}" -f $MyInvocation.MyCommand, $_.Exception | Write-Error -ErrorAction Stop
+                    if ($null -ne $PreviousWebViewEnv) {
+                        # Only the reconfiguration failed. The sign-in itself has an environment to
+                        # run in, and the request still carries the parameter that decides the
+                        # account, so it goes ahead in the one this session already had.
+                        "{0} - Could not create a WebView2 environment with single sign-on {1}, so this sign-in reuses the environment this session already has: {2}" -f $MyInvocation.MyCommand, $(if ($UseOsPrimaryAccount) { "enabled" } else { "disabled" }), $_.Exception.Message | Write-Verbose
+                        $Script:CurrentWebView2Session.WebViewEnv = $PreviousWebViewEnv
+                    }
+                    else {
+                        $Script:StopError = $true
+                        "{0} - Error creating CoreWebView2Environment. You can consider to install the Evergreen Standalone Installer from 'https://developer.microsoft.com/en-us/Microsoft-edge/webview2/' and try again: {1}" -f $MyInvocation.MyCommand, $_.Exception | Write-Error -ErrorAction Stop
+                    }
                 }
             }
         }
@@ -198,18 +248,42 @@ function Start-WebView2Login {
 
             # If ForceAuthentication, clear data after initialization
             if ($Script:CurrentWebView2Session.ForceAuthentication -and -not $Script:CurrentWebView2Session.BrowserDataCleared) {
+                # Set before the continuation below is registered, so Test-WebView2NavigationReady
+                # blocks navigation from the moment a clear is committed to. Cleared on every path out
+                # of that continuation - success, and a synchronous failure of the call itself - so a
+                # clear that never runs, or that fails, cannot leave the sign-in window waiting forever.
+                $Script:CurrentWebView2Session.BrowserDataClearPending = $true
                 $InitTask.GetAwaiter().OnCompleted({
                         try {
                             "Start-WebView2Login - WebView2 initialized, clearing browsing data..." | Write-Verbose
                             $ClearTask = $Script:WebView2.CoreWebView2.Profile.ClearBrowsingDataAsync()
                             $ClearTask.GetAwaiter().OnCompleted({
-                                    "Start-WebView2Login - Browsing data cleared" | Write-Verbose
-                                    $Script:CurrentWebView2Session.BrowserDataCleared = $true
+                                    try {
+                                        # OnCompleted alone only means the task finished, not that it
+                                        # succeeded - GetResult() is what actually observes a faulted
+                                        # task and re-throws its exception, instead of the clear being
+                                        # reported as done, and BrowserDataCleared set, regardless.
+                                        $ClearTask.GetAwaiter().GetResult()
+                                        "Start-WebView2Login - Browsing data cleared" | Write-Verbose
+                                        $Script:CurrentWebView2Session.BrowserDataCleared = $true
+                                    }
+                                    catch {
+                                        # This continuation runs off the pipeline thread (it is a raw
+                                        # Task continuation, not something PowerShell scheduled), so
+                                        # Write-Warning/Write-Verbose have no stream to reach here -
+                                        # [Console]::WriteLine is what the outer catch below already
+                                        # uses for exactly that reason.
+                                        [Console]::WriteLine("Error clearing data: $_. This is non-terminating error.")
+                                    }
+                                    finally {
+                                        $Script:CurrentWebView2Session.BrowserDataClearPending = $false
+                                    }
                                 })
                         }
                         catch {
                             $Msg = "Error clearing data: $_. This is non-terminating error."
                             [Console]::WriteLine($Msg)
+                            $Script:CurrentWebView2Session.BrowserDataClearPending = $false
                         }
                     })
             }
@@ -238,7 +312,17 @@ function Start-WebView2Login {
 
     }
     catch {
-        "{0} - Error occurred" -f $MyInvocation.MyCommand | Write-Verbose
+        # The reason travels with the trace, not only with the terminating error. A caller that
+        # captures the verbose stream - a scheduled task, a CI job, the sign-in canary - sees only
+        # what is written here, and "Error occurred" on its own sent issue #90 looking for a changed
+        # Microsoft sign-in page that had nothing to do with it.
+        #
+        # Read once and redacted once. A failure this deep in a sign-in can quote the request it fell
+        # over on, and an authorization request carries an account name in its query string, so the
+        # message goes through Protect-LogMessage like every other logged exception message in the
+        # module - and both the trace and the console line below say the same redacted thing.
+        $SafeErrorMessage = Protect-LogMessage -Message $PSItem.Exception.Message
+        "{0} - Error occurred: {1}" -f $MyInvocation.MyCommand, $SafeErrorMessage | Write-Verbose
         try {
             "{0} - Reset-Timer" -f $MyInvocation.MyCommand | Write-Verbose
             Reset-Timer
@@ -256,7 +340,7 @@ function Start-WebView2Login {
             }
         }
         catch {}
-        Write-Host "Error in Start-WebView2Login" -ForegroundColor Red
+        Write-Host ("Error in Start-WebView2Login: {0}" -f $SafeErrorMessage) -ForegroundColor Red
         $PSCmdlet.ThrowTerminatingError($PSItem)
     }
 }

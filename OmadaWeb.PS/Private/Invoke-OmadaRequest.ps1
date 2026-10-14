@@ -20,6 +20,20 @@ function Invoke-OmadaRequest {
             # rebuilds its arguments from $BoundParams, so it carries across that recursion.
             $Script:SkipBodyRedaction = $BoundParams.ContainsKey("SkipBodyRedaction") -and [bool]$BoundParams['SkipBodyRedaction']
 
+            # Read from $BoundParams rather than from the dynamic parameter's own variable, which
+            # does not exist at all when the switch was not supplied - an unset-variable read, and a
+            # terminating one under the StrictMode the test suite runs with. Kept as a local because
+            # this function asks the question in three places.
+            $NoInteractiveAuthentication = $BoundParams.ContainsKey("NoInteractiveAuthentication") -and [bool]$BoundParams['NoInteractiveAuthentication']
+
+            # -ForceAuthentication discards the session cookie precisely so that a sign-in happens,
+            # which is the one thing -NoInteractiveAuthentication promises will not. Accepting both
+            # would mean honouring one and silently dropping the other, and either choice is a
+            # surprise, so the combination is refused instead of resolved.
+            if ($NoInteractiveAuthentication -and $BoundParams.ContainsKey("ForceAuthentication") -and [bool]$BoundParams['ForceAuthentication']) {
+                "{0} - Cannot combine -NoInteractiveAuthentication with -ForceAuthentication: the first forbids signing in, the second requires it." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+            }
+
             if ("UserAgent" -notin $BoundParams.Keys) {
                 $BoundParams.Add("UserAgent", $Script:UserAgent)
                 $Script:UserAgentParameterUsed = $false
@@ -52,9 +66,19 @@ function Invoke-OmadaRequest {
                 RetryIntervalSec  = [int]$BoundParams['RetryIntervalSec']
             }
 
-            if ("Headers" -notin $BoundParams.Keys) {
-                $BoundParams.Add("Headers", @{})
+            # Copied into a NEW case-insensitive dictionary rather than kept as the caller's own
+            # object: this module writes the bearer token or Basic credential, and default
+            # Accept/Content-Type, into $BoundParams['Headers'] below, and the caller's object must
+            # never receive them and must stay reusable for a later call (issue #103). Enumerated as
+            # key/value entries, not .Keys, so a header literally named "Keys" cannot shadow the
+            # enumerator.
+            $Headers = [System.Collections.Hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
+            if ($BoundParams.Keys -contains "Headers" -and $null -ne $BoundParams['Headers']) {
+                foreach ($Entry in $BoundParams['Headers'].GetEnumerator()) {
+                    $Headers[$Entry.Key] = $Entry.Value
+                }
             }
+            $BoundParams['Headers'] = $Headers
 
             $Uri = [System.Uri]::new($BoundParams['Uri'])
             if ($null -ne $Uri) {
@@ -99,13 +123,24 @@ function Invoke-OmadaRequest {
             # Reusable session state (cookie, base URL, WebView2 profile, etc.) is keyed by
             # (tenant base URL, auth type, identity) instead of single unkeyed module variables,
             # so concurrent sessions to different tenants/users don't clobber each other.
-            $SessionKey = Get-OmadaSessionKey -Uri $Uri -AuthenticationType $BoundParams['AuthenticationType'] -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
+            $SessionKey = Get-OmadaSessionKey -Uri $Uri -AuthenticationType $BoundParams['AuthenticationType'] -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey'] -UserName $BoundParams['UserName']
             $SessionContext = Get-OmadaSessionContext -Key $SessionKey -AuthorityHost $Uri.Host
             $SessionContext.BaseUrl = $BaseUrl
             # Computed unconditionally (not just lazily inside the encrypted-cache branch below) so it's
             # always available for Invoke-BrowserAuthentication.ps1's cache-write step later, even when
             # this particular call took the -CookiePath branch instead on its first-ever use of this session.
             $SessionContext.CookieCacheFilePath = Get-OmadaCookieCacheFilePath -SessionKey $SessionKey
+
+            # A session seeded by Import-OmadaSession carries the same refusal as the switch, so
+            # everything below this line treats the two as one question. It is widened here, after
+            # the session context exists, rather than at the assignment above: the -ForceAuthentication
+            # conflict is refused there and must stay a conflict between two things the caller
+            # actually typed. A seeded session plus an explicit -ForceAuthentication is not refused
+            # up front - it is allowed to reach the sign-in site and be turned away there, with a
+            # message that says the session was imported.
+            if ($SessionContext.NoInteractiveAuthentication) {
+                $NoInteractiveAuthentication = $true
+            }
 
             # The three pieces of per-request state the private helpers work on, bundled so they can
             # take them as a parameter instead of reading them out of this function's scope. The
@@ -115,7 +150,7 @@ function Invoke-OmadaRequest {
             if ($BoundParams.Keys -contains "CookiePath") {
                 # -CookiePath is authoritative on every call (not just when no cookie is cached yet),
                 # so callers can force a specific session's cookie to be used for a given call.
-                $CookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
+                $CookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey'] -UserName $BoundParams['UserName']
                 $CookiePath = (Join-Path $($BoundParams['CookiePath']) -ChildPath $CookieFileName)
                 "{0} - Loading custom cookie: {1}" -f $MyInvocation.MyCommand, $CookiePath | Write-Verbose
                 if (!(Test-Path $CookiePath -PathType Leaf)) {
@@ -123,7 +158,16 @@ function Invoke-OmadaRequest {
                     # cookie (possibly from an earlier call for this session) in place - that would
                     # silently defeat the "force this specific cookie" contract -CookiePath implies.
                     $SessionContext.AuthCookie = $null
-                    "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
+
+                    # Under -NoInteractiveAuthentication nothing is going to be created, and a
+                    # terminating error follows within a few lines, so promising a new cookie here
+                    # would be the last thing a caller reads before being told the opposite.
+                    if ($NoInteractiveAuthentication) {
+                        "No cookie found at '{0}'." -f $CookiePath | Write-Warning
+                    }
+                    else {
+                        "No cookie found at '{0}', trying to create a new one." -f $CookiePath | Write-Warning
+                    }
                 }
                 else {
                     # Only a protected file is read. One left unprotected by a version predating
@@ -150,6 +194,35 @@ function Invoke-OmadaRequest {
             }
 
             "{0} - Authentication type: {1}" -f $MyInvocation.MyCommand, $($BoundParams['AuthenticationType']) | Write-Verbose
+
+            # -UserName and -SelectAccount are two answers to one question - which account signs in -
+            # and Entra ID takes one of them, never both: an account name is sent as login_hint, an
+            # account picker as prompt=select_account, and its OpenID Connect documentation states
+            # that the two cannot be combined. Refused here rather than resolved, because either way
+            # of resolving it silently drops half of what the caller asked for.
+            $NamedUserName = $BoundParams.ContainsKey("UserName") -and -not [string]::IsNullOrWhiteSpace($BoundParams['UserName'])
+            $NamedSelectAccount = $BoundParams.ContainsKey("SelectAccount") -and [bool]$BoundParams['SelectAccount']
+            $NamedCredential = $null -ne $BoundParams['Credential'] -and -not [string]::IsNullOrWhiteSpace($BoundParams['Credential'].UserName)
+
+            if ($NamedUserName -and $NamedCredential) {
+                "{0} - Cannot combine -UserName with -Credential: both name the account to sign in with, and honouring one would silently drop the other. Supply the account either as -UserName or as the user name of -Credential." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+            }
+
+            if ($NamedSelectAccount -and ($NamedUserName -or $NamedCredential)) {
+                "{0} - Cannot combine -SelectAccount with an account name: Entra ID accepts an account name or an account picker, not both." -f $MyInvocation.MyCommand | Write-Error -ErrorAction "Stop"
+            }
+
+            # Both parameters act on the sign-in request the WebView2 engine navigates, so every other
+            # authentication type would accept them and quietly do nothing - the same reason
+            # -PreferredMfaMethod is refused below, and the same three ways of reaching WebView2.
+            if ($NamedUserName -or $NamedSelectAccount) {
+                $UsesWebView2ForAccount = $BoundParams['AuthenticationType'] -eq "WebView2" -or
+                    ($BoundParams['AuthenticationType'] -eq "Browser" -and (($BoundParams.ContainsKey("UseWebView2") -and $BoundParams['UseWebView2']) -or $SessionContext.WebView2Used))
+                if (-not $UsesWebView2ForAccount) {
+                    $Named = if ($NamedUserName) { "-UserName" } else { "-SelectAccount" }
+                    "{0} - {1} only applies to -AuthenticationType WebView2, got '{2}'" -f $MyInvocation.MyCommand, $Named, $BoundParams['AuthenticationType'] | Write-Error -ErrorAction "Stop"
+                }
+            }
 
             # -PreferredMfaMethod drives the Entra ID sign-in screens, which only the WebView2 engine
             # automates. Every other authentication type would accept the parameter and quietly do
@@ -245,25 +318,22 @@ function Invoke-OmadaRequest {
                     "Invoke-RestMethod" {
 
                         if ("Accept" -notin $BoundParams['Headers'].Keys) {
-                            $BoundParams['Headers'].Add("Accept", "application/json")
+                            $BoundParams['Headers']['Accept'] = "application/json"
                         }
 
                         if ("ContentType" -in $BoundParams.Keys) {
-                            $BoundParams['Headers'].Add("Content-Type", $BoundParams['ContentType'])
+                            # -ContentType is the caller's explicit choice, so it wins over a
+                            # Content-Type header that may already be present - indexer assignment
+                            # rather than .Add, since the key may already be there.
+                            $BoundParams['Headers']['Content-Type'] = $BoundParams['ContentType']
                             $BoundParams.Remove("ContentType") | Out-Null
                         }
                         elseif ("Content-Type" -notin $BoundParams['Headers'].Keys) {
-                            $BoundParams['Headers'].Add("Content-Type", "application/json")
+                            $BoundParams['Headers']['Content-Type'] = "application/json"
                         }
                         $Parameters = Set-RequestParameter -RequestContext $RequestContext
 
-                        try {
-                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
-                        }
-                        catch {
-                            Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
-                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
-                        }
+                        $CommandInfo = Resolve-OmadaNativeCommand -Name $_ -FullyQualifiedModule $FullyQualifiedModule
                         "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
 
                         $Return = Invoke-OmadaRetryableRequest -CommandInfo $CommandInfo -Parameters $Parameters @RetryPolicy
@@ -314,17 +384,14 @@ function Invoke-OmadaRequest {
                             }
                         }
                         $SessionContext.LoginCount++
+                        # This session is answering again, so the re-authentication budget spent
+                        # getting here is returned - the next expiry gets a full one.
+                        $SessionContext.ReAuthenticationCount = 0
                         return $Return
                     }
                     "Invoke-WebRequest" {
                         $Parameters = Set-RequestParameter -RequestContext $RequestContext
-                        try {
-                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
-                        }
-                        catch {
-                            Import-Module $FullyQualifiedModule.ModuleName -MinimumVersion $FullyQualifiedModule.ModuleVersion -Force -ErrorAction Stop
-                            $CommandInfo = Get-Command $_ -FullyQualifiedModule $FullyQualifiedModule
-                        }
+                        $CommandInfo = Resolve-OmadaNativeCommand -Name $_ -FullyQualifiedModule $FullyQualifiedModule
                         "{0} - Execute: {1}\{2}, Version: {3}" -f $MyInvocation.MyCommand, $CommandInfo.Source, $CommandInfo.Name, $CommandInfo.Version | Write-Verbose
                         $Return = Invoke-OmadaRetryableRequest -CommandInfo $CommandInfo -Parameters $Parameters @RetryPolicy
 
@@ -333,6 +400,8 @@ function Invoke-OmadaRequest {
                             throw $CustomErrorTrigger
                         }
                         $SessionContext.LoginCount++
+                        # See the matching reset in the Invoke-RestMethod branch above.
+                        $SessionContext.ReAuthenticationCount = 0
                         return $Return
                     }
                     default {
@@ -365,6 +434,42 @@ function Invoke-OmadaRequest {
                     if (![string]::IsNullOrWhiteSpace($SessionContext.CookieCacheFilePath) -and (Test-Path $SessionContext.CookieCacheFilePath -PathType Leaf)) {
                         $SessionContext.CookieCacheFilePath | Remove-Item -ErrorAction SilentlyContinue
                     }
+
+                    # The dead session has been dropped above, so a later interactive call signs in
+                    # cleanly - but this call does not, and says why. Placed after that cleanup and
+                    # before the "Authentication needed!" host message, because under this switch
+                    # nothing is going to authenticate and announcing it would be untrue.
+                    if ($NoInteractiveAuthentication) {
+                        $Message = if ($SessionContext.Seeded) {
+                            "The Omada session imported for '{0}' has expired or was rejected (HTTP 401), so no sign-in was attempted. Export a fresh session from the runspace that signed in, or import it with -AllowInteractiveAuthentication." -f $SessionContext.BaseUrl
+                        }
+                        else {
+                            "The Omada session for '{0}' has expired or was rejected (HTTP 401) and -NoInteractiveAuthentication was specified, so no sign-in was attempted. Sign in once without -NoInteractiveAuthentication, then retry." -f $SessionContext.BaseUrl
+                        }
+                        # The original 401 is carried as the inner exception: it holds the response
+                        # this verdict was reached from, which is the only place the server's own
+                        # explanation survives.
+                        throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $SessionContext.BaseUrl -InnerException $PSItem.Exception)
+                    }
+
+                    # Nothing else bounds the recursion at the end of this branch.
+                    # Get-DataFromWebView2 and Get-DataFromWebDriver each cap the number of sign-in
+                    # windows they open, but both reset that count on entry, so every recursion
+                    # starts their counter over. A server that answers 401 to a cookie the browser
+                    # keeps handing back therefore recursed without end - each turn opening another
+                    # sign-in window - until the call stack ran out.
+                    # The count lives on the session context and is cleared on the first successful
+                    # response (next to LoginCount++), so a long-lived session is never eventually
+                    # refused a re-authentication it legitimately needs.
+                    $SessionContext.ReAuthenticationCount++
+                    if ($SessionContext.ReAuthenticationCount -gt $Script:MaxLoginRetries) {
+                        $Message = "Re-authentication for '{0}' was attempted {1} time(s) and the server still answered HTTP 401. Giving up instead of signing in again." -f $SessionContext.BaseUrl, ($SessionContext.ReAuthenticationCount - 1)
+                        $SessionContext.ReAuthenticationCount = 0
+                        # The last 401 is carried as the inner exception: it holds the response the
+                        # verdict was reached from, which is where the server's own explanation is.
+                        throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $SessionContext.BaseUrl -InnerException $PSItem.Exception)
+                    }
+
                     if ($SessionContext.LoginCount -le 1) {
                         "Authentication needed!" | Write-Host
                     }
@@ -395,7 +500,7 @@ function Invoke-OmadaRequest {
                         # so the freshly re-authenticated cookie must be persisted here first - otherwise the
                         # recursive call below would immediately reload and clobber it with the stale cookie
                         # still on disk (the one that caused this 401 in the first place), looping forever.
-                        $RetryCookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
+                        $RetryCookieFileName = Get-OmadaCookieFileName -Uri $Uri -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey'] -UserName $BoundParams['UserName']
                         $RetryCookiePath = Join-Path $BoundParams['CookiePath'] -ChildPath $RetryCookieFileName
                         if (!(Export-OmadaCookieFile -Path $RetryCookiePath -AuthCookie $SessionContext.AuthCookie)) {
                             "{0} - Failed to update cookie file '{1}' after re-authentication." -f $MyInvocation.MyCommand, $RetryCookiePath | Write-Verbose

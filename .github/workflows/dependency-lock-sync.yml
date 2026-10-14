@@ -25,11 +25,14 @@ name: Dependency Lock Sync
 # the default branch, so the token is a normal one and no pull_request_target is involved.
 #
 # Consequences on the pull request. Pushing to a Dependabot branch stops Dependabot from rebasing it
-# automatically; comment `@dependabot recreate` to get a fresh one. And because PR Validation is
-# triggered by an `/validate` comment rather than by a push, syncing the lock does not revalidate the
-# pull request - a maintainer still comments `/validate`, and the -Check gate still blocks an unsynced
-# bump from merging. The human decision to take a version is unchanged; only the mechanical part is
-# automated.
+# automatically; comment `@dependabot recreate` to get a fresh one. The refreshed pins are committed
+# through the REST contents API rather than with git push: a commit created that way is authored by
+# github-actions[bot] and signed by GitHub, which is what lets .github/workflows/dependabot-validation.yml
+# tell this workflow's commit from one pushed by anybody else. A push made with the GITHUB_TOKEN starts
+# no workflow run, so after committing this workflow dispatches dependabot-validation.yml for the branch
+# itself. That workflow starts PR Validation when the bump passes its reputation policy, and leaves it to
+# a maintainer's `/validate` when it does not. Merging stays with a maintainer either way, and the
+# -Check gate still blocks an unsynced bump from merging.
 
 on:
   workflow_dispatch:
@@ -66,7 +69,7 @@ jobs:
     steps:
       - name: List the branches carrying a bump
         id: list
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             // workflow_dispatch names one branch explicitly and skips discovery entirely.
@@ -102,7 +105,10 @@ jobs:
     if: needs.discover.outputs.count != '0'
     runs-on: windows-latest
     permissions:
+      # Commit the refreshed pins through the contents API.
       contents: write
+      # Dispatch dependabot-validation.yml for the branch after committing.
+      actions: write
     strategy:
       # One failing branch must not stop the others from being synced.
       fail-fast: false
@@ -112,14 +118,14 @@ jobs:
     steps:
       - name: Checkout the default branch
         # The trusted tree. Only the script from here is ever executed.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: trusted
           persist-credentials: false
 
       - name: Checkout the branch carrying the bump
         # The untrusted tree. Read as data, written to, pushed - never executed.
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ matrix.branch }}
           path: bump
@@ -137,22 +143,56 @@ jobs:
           -DependabotConfigPath (Resolve-Path ./trusted/.github/dependabot.yml).Path
 
       - name: Commit the refreshed pins
+        id: commit
         shell: pwsh
         working-directory: bump
         # The branch name arrives through the environment rather than being interpolated into the
         # script, so a branch whose name contains shell metacharacters cannot become code here.
         env:
           BUMP_BRANCH: ${{ matrix.branch }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          git config user.email "devops@fortigi.nl"
-          git config user.name "GitHub Actions"
-
-          $changed = git status --porcelain -- OmadaWeb.PS/DependencyLock.psd1 Build/Dependencies.psd1
-          if ([string]::IsNullOrWhiteSpace($changed)) {
+          $Paths = @('OmadaWeb.PS/DependencyLock.psd1', 'Build/Dependencies.psd1')
+          $Changed = @($Paths | Where-Object { -not [string]::IsNullOrWhiteSpace((git status --porcelain -- $_)) })
+          if ($Changed.Count -eq 0) {
             Write-Host "Pins already match the manifest; nothing to commit."
+            "committed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             exit 0
           }
 
-          git add OmadaWeb.PS/DependencyLock.psd1 Build/Dependencies.psd1
-          git commit -m "deps: refresh pinned SHA-256 hashes and SBOM versions for the bumped package"
-          git push origin "HEAD:$env:BUMP_BRANCH"
+          $Headers = @{
+            Authorization          = "Bearer $env:GITHUB_TOKEN"
+            Accept                 = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          foreach ($Path in $Changed) {
+            # The repository stores these files with LF line endings; Update-DependencyLock.ps1 writes
+            # CRLF. git would normalise that on commit, the contents API commits bytes as given.
+            $Text = [System.IO.File]::ReadAllText((Resolve-Path $Path)) -replace "`r`n", "`n"
+            $Uri = 'https://api.github.com/repos/{0}/contents/{1}' -f $env:REPOSITORY, $Path
+            $Current = Invoke-RestMethod -Uri ('{0}?ref={1}' -f $Uri, [uri]::EscapeDataString($env:BUMP_BRANCH)) -Headers $Headers
+            $Body = @{
+              message = "deps: refresh pinned SHA-256 hashes and SBOM versions for the bumped package ($Path)"
+              content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Text))
+              sha     = $Current.sha
+              branch  = $env:BUMP_BRANCH
+            } | ConvertTo-Json
+            $Result = Invoke-RestMethod -Method Put -Uri $Uri -Headers $Headers -Body $Body -ContentType 'application/json'
+            Write-Host ("Committed {0} as {1}." -f $Path, $Result.commit.sha)
+          }
+          "committed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Evaluate the bump against the validation policy
+        if: steps.commit.outputs.committed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUMP_BRANCH: ${{ matrix.branch }}
+          # ref_name rather than event.repository.default_branch: a scheduled run's payload carries no
+          # repository object, and both triggers of this workflow run on the default branch.
+          DEFAULT_BRANCH: ${{ github.ref_name }}
+        run: |
+          gh workflow run dependabot-validation.yml --ref $env:DEFAULT_BRANCH -f "branch=$env:BUMP_BRANCH" -f lock_synced=true
+          exit $LASTEXITCODE

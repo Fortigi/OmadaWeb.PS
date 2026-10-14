@@ -5,6 +5,12 @@ on:
     - cron: '17 1 * * *'
   workflow_dispatch: {}
 
+# Least-privilege default: every job only reads the repository unless it declares
+# its own permissions block. Only the release job below needs to push a tag and
+# create a GitHub Release, so it is the only place contents: write is granted.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: Check for new commits
@@ -15,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -51,7 +57,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install modules
         shell: pwsh
@@ -73,7 +79,7 @@ jobs:
           ./Build/build.ps1 -Task Build -BuildVersion '${{ steps.versioning.outputs.build_version }}'
 
       - name: Upload build output
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: BuildOutput
           path: buildoutput/
@@ -84,18 +90,23 @@ jobs:
     needs: [check, build]
     if: needs.check.outputs.should_build == 'true'
 
+    # Pushes the nightly tag and publishes a GitHub Release, so this job (only)
+    # needs write access to repository contents.
+    permissions:
+      contents: write
+
     env:
       BUILD_VERSION: ${{ needs.build.outputs.build_version }}
       YEAR: ${{ needs.build.outputs.year }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Download build output
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: BuildOutput
           path: buildoutput/
@@ -126,7 +137,7 @@ jobs:
           git push origin "refs/tags/v${{ env.BUILD_VERSION }}-nightly"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: v${{ env.BUILD_VERSION }}-nightly
           name: Nightly Build v${{ env.BUILD_VERSION }}

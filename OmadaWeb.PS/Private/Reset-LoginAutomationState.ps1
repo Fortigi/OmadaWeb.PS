@@ -43,4 +43,11 @@ function Reset-LoginAutomationState {
     $Script:LogonPageErrorTask = $null
     $Script:LogonPageErrorLastCheck = $null
     $Script:LogonPageErrorReported = $null
+
+    # Per-window state of the account the sign-in request asks for. The counter is a loop guard: the
+    # navigation handler rewrites an authorization request and navigates to the rewritten one, and a
+    # redirect chain can legitimately produce more than one such request - but never many, and a
+    # browser that kept being sent round the same loop would be worse than one that stopped trying.
+    $Script:EntraSignInRequestRewriteCount = 0
+    $Script:EntraSignInAccountReported = $false
 }

@@ -57,6 +57,7 @@ $PreferredParameterOrder = @(
     "CookiePath",
     "SkipCookieCache",
     "ForceAuthentication",
+    "NoInteractiveAuthentication",
     "EdgeProfile",
     "InPrivate",
     "UseWebView2",

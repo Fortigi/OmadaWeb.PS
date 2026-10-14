@@ -205,6 +205,27 @@ Describe 'Clear-OmadaWebCache' -Tag 'Unit' {
                 $Item.Path | Should -Not -BeNullOrEmpty
             }
         }
+
+        It 'Should remove a cache file under a bracketed path without a warning (issue #105)' {
+            # "[" and "]" are wildcard metacharacters to -Path (as opposed to -LiteralPath), and the
+            # cookie cache folder can legitimately contain them - e.g. an IPv6 host's file name, or a
+            # user profile folder named with brackets. [System.IO.Directory]::CreateDirectory is used
+            # instead of New-Item -Path so the setup does not hit the same wildcard trap being tested.
+            InModuleScope 'OmadaWeb.PS' {
+                $BracketedCachePath = Join-Path $Script:TestRoot -ChildPath 'Cookies[1]'
+                [System.IO.Directory]::CreateDirectory($BracketedCachePath) | Out-Null
+                $Script:CookieCachePath = $BracketedCachePath
+                Set-Content -LiteralPath (Join-Path $BracketedCachePath -ChildPath 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') -Value 'cookie' -NoNewline
+            }
+
+            $Warnings = $null
+            Clear-OmadaWebCache -Scope Cookies -Force -Confirm:$false -WarningVariable Warnings -WarningAction SilentlyContinue | Out-Null
+
+            @($Warnings).Count | Should -Be 0
+            InModuleScope 'OmadaWeb.PS' {
+                Test-Path -LiteralPath (Join-Path $Script:CookieCachePath -ChildPath 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') | Should -BeFalse
+            }
+        }
     }
 }
 

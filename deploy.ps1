@@ -16,7 +16,7 @@ try {
         "Module source folder {0} does not exist" -f $ModuleSourceFolder | Write-Error -ErrorAction Stop
     }
 
-    "ModuleSourceFolder {0}" -f $ModuleTargetFolder | Write-Verbose
+    "ModuleSourceFolder {0}" -f $ModuleSourceFolder | Write-Verbose
 
     $ModulePsd1 = Import-PowerShellDataFile (Join-Path -Path $ModuleSourceFolder -ChildPath ("{0}.psd1" -f $ModuleName))
     [System.Version]$Version = $ModulePsd1.ModuleVersion

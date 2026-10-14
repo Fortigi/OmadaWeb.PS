@@ -11,11 +11,21 @@ function Get-OmadaSessionKey {
         [System.Management.Automation.PSCredential]$Credential,
 
         [AllowNull()]
-        [string]$SessionKey
+        [string]$SessionKey,
+
+        [AllowNull()]
+        [string]$UserName
     )
 
     $Identity = ""
-    if ($null -ne $Credential -and -not [string]::IsNullOrWhiteSpace($Credential.UserName)) {
+    # -UserName is read first because it is the more explicit of the two, and because it is the one
+    # that can be supplied without a password. Two accounts against the same host must never share a
+    # session: they do not share a cookie, and they must not share the browser profile that decides
+    # which of them signs in silently next time.
+    if (-not [string]::IsNullOrWhiteSpace($UserName)) {
+        $Identity = $UserName.Trim().ToLowerInvariant()
+    }
+    elseif ($null -ne $Credential -and -not [string]::IsNullOrWhiteSpace($Credential.UserName)) {
         $Identity = $Credential.UserName.Trim().ToLowerInvariant()
     }
     elseif (-not [string]::IsNullOrWhiteSpace($SessionKey)) {

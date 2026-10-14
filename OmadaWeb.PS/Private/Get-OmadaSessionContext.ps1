@@ -38,16 +38,50 @@ function Get-OmadaSessionContext {
         BaseUrl             = $null
         AuthCookie          = $AuthCookie
         Credential          = $null
+        # The account this session signs in as, from -UserName or from the user name of -Credential.
+        # It is what the sign-in request is told to ask for, so it has to outlive the call that
+        # supplied it: the WebView2 window runs in a blocking dialog that cannot see the call stack.
+        UserName            = $null
+        SelectAccount       = $false
+        # Whether this sign-in has already been given its one window with an account picker on it
+        # after being refused for the wrong account. Reset at the start of every sign-in, so the
+        # allowance is per call and not per PowerShell session.
+        AccountRecoveryAttempted = $false
         PreferredMfaMethod  = $null
         LastSessionType     = $null
         WebView2Used        = $false
         ForceAuthentication = $false
+        # Set by Import-OmadaSession on a session seeded from another runspace, and read alongside
+        # the -NoInteractiveAuthentication switch wherever that switch is honoured. A seeded session
+        # belongs to a worker that has no desktop to put a sign-in window on and no user watching it,
+        # so the refusal has to be a property of the session rather than something every call site
+        # has to remember to ask for. Import-OmadaSession -AllowInteractiveAuthentication clears it.
+        NoInteractiveAuthentication = $false
+        # Whether this context was seeded by Import-OmadaSession rather than signed in here. Used
+        # only to say so in the refusal message, which is the difference between a caller thinking
+        # their session expired and knowing the state they imported was already dead.
+        Seeded              = $false
         BrowserDataCleared  = $false
+        # Set while a ClearBrowsingDataAsync call is in flight for this session, from just before the
+        # continuation that starts it is registered until either it completes or fails. Distinct from
+        # BrowserDataCleared: that only ever tells the caller a clear succeeded, which is not enough
+        # for Test-WebView2NavigationReady to know when it is safe to stop waiting - a clear that was
+        # never scheduled, or that failed, must let navigation through too, not hang it forever.
+        BrowserDataClearPending = $false
         CookieCacheFilePath = $null
         LoginRetryCount     = 0
         LoginCount          = 0
+        # How many times Invoke-OmadaRequest has re-authenticated this session and retried without
+        # the server accepting the result yet. Distinct from LoginRetryCount, which counts sign-in
+        # windows inside a single Get-DataFromWebView2/Get-DataFromWebDriver call and is reset every
+        # time one starts - which is why it cannot bound the retry recursion across calls.
+        ReAuthenticationCount = 0
         WebView2ProfilePath = (Join-Path $Script:WebView2UserProfileBasePath ("OmadaWebView2Profile_{0}" -f $KeyHash.Substring(0, 16)))
         WebViewEnv          = $null
+        # Which way single sign-on with the Windows account was configured when WebViewEnv was
+        # created. A CoreWebView2Environment cannot be reconfigured after the fact, so a later call
+        # that asks for a different answer has to be given a new one - see Start-WebView2Login.
+        WebViewEnvSingleSignOn = $null
     }
 
     $Script:OmadaSessions[$Key] = $SessionContext

@@ -94,10 +94,23 @@ function Invoke-OmadaRestMethod {
         Link and clipboard sharing active it can be pasted straight into the Authenticator app.
 
     .EXAMPLE
-        Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
+        Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://example.okta.com/oauth2/default/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
 
         Authenticates against an identity provider other than Entra ID - here Okta - by supplying
         the token endpoint and scope explicitly.
+
+    .EXAMPLE
+        try {
+            Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/v2/health" -NoInteractiveAuthentication -ErrorAction Stop
+        }
+        catch [System.Security.Authentication.AuthenticationException] {
+            "Omada session is gone; stopping the keep-alive." | Write-Warning
+        }
+
+        Uses the session that already exists and cannot open a sign-in window, which is what a
+        background keep-alive or a worker runspace needs. A session that has expired raises a
+        distinguishable terminating error - its FullyQualifiedErrorId starts with
+        'OmadaSessionExpired' - instead of prompting.
 
     .EXAMPLE
         Invoke-OmadaRestMethod -Uri "https://omada.contoso.local/odata/dataobjects/identity(123456)" -AuthenticationType "Integrated"

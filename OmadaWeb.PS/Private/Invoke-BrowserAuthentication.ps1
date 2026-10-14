@@ -24,6 +24,21 @@ function Invoke-BrowserAuthentication {
         $SessionContext.Credential = $BoundParams['Credential']
     }
 
+    # One account, from either of the two places a caller can name it. Resolved here so that nothing
+    # downstream has to ask the question twice, and carried on the session for the same reason the
+    # credential is: the WebView2 sign-in runs inside a blocking dialog whose handlers cannot see
+    # this call stack. Left null when nobody named an account, which is what keeps the default
+    # behaviour - the browser decides - exactly as it was.
+    $SessionContext.UserName = $null
+    if ($BoundParams.keys -contains "UserName" -and -not [string]::IsNullOrWhiteSpace($BoundParams['UserName'])) {
+        $SessionContext.UserName = $BoundParams['UserName'].Trim()
+    }
+    elseif ($null -ne $SessionContext.Credential -and -not [string]::IsNullOrWhiteSpace($SessionContext.Credential.UserName)) {
+        $SessionContext.UserName = $SessionContext.Credential.UserName.Trim()
+    }
+
+    $SessionContext.SelectAccount = $BoundParams.keys -contains "SelectAccount" -and [bool]$BoundParams['SelectAccount']
+
     # Carried on the session rather than passed down: the WebView2 sign-in runs inside a blocking
     # WinForm dialog whose event handlers cannot see this call stack, and the session context is how
     # everything else - the credential included - reaches them.
@@ -61,6 +76,24 @@ function Invoke-BrowserAuthentication {
     }
     else {
         "{0} - OmadaWebAuthCookie not exists or is for different domain. Need to authenticate!" -f $MyInvocation.MyCommand | Write-Verbose
+
+        # -NoInteractiveAuthentication is refused here, above the engine selection, rather than
+        # inside either engine: this is the single point every browser sign-in passes through when no
+        # usable cookie is available, so stopping here is what makes "no window can open" a property
+        # of the code rather than a claim about it.
+        #
+        # The session's own flag counts as well as the switch: a session seeded by
+        # Import-OmadaSession is being used by a worker runspace with no desktop and nobody
+        # watching, so it may not sign in whether or not this particular call remembered to say so.
+        if (($BoundParams.ContainsKey("NoInteractiveAuthentication") -and [bool]$BoundParams['NoInteractiveAuthentication']) -or $SessionContext.NoInteractiveAuthentication) {
+            $Message = if ($SessionContext.Seeded) {
+                "The Omada session imported for '{0}' is no longer usable, so no sign-in was attempted. Export a fresh session from the runspace that signed in, or import it with -AllowInteractiveAuthentication." -f $SessionContext.BaseUrl
+            }
+            else {
+                "No usable Omada session for '{0}' and -NoInteractiveAuthentication was specified, so no sign-in was attempted. Sign in once without -NoInteractiveAuthentication, then retry." -f $SessionContext.BaseUrl
+            }
+            throw (New-OmadaSessionExpiredError -Message $Message -BaseUrl $SessionContext.BaseUrl)
+        }
 
         # Check if WebView2 should be used instead of Selenium
         $WebView2Authentication = $false
@@ -111,7 +144,7 @@ function Invoke-BrowserAuthentication {
         # filename (previously this used the cookie's own .domain attribute, which may lack the port,
         # producing a different filename than what the read path looked for). Built from
         # $BoundParams['Uri'] directly rather than relying on the caller's $Uri local.
-        $CookieFileName = Get-OmadaCookieFileName -Uri ([System.Uri]::new($BoundParams['Uri'])) -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey']
+        $CookieFileName = Get-OmadaCookieFileName -Uri ([System.Uri]::new($BoundParams['Uri'])) -Credential $BoundParams['Credential'] -SessionKey $BoundParams['SessionKey'] -UserName $BoundParams['UserName']
         $CookiePath = (Join-Path $($BoundParams['CookiePath']) -ChildPath $CookieFileName)
 
         # Protected at rest, through the same writer as the default cache below. This used to be a

@@ -108,7 +108,7 @@ function Get-WebView2LogonPageError {
 
     "Get-WebView2LogonPageError - Terminal logon page error found in '{0}'" -f $Verdict.Source | Write-Verbose
 
-    Stop-OmadaLogin -Message $Verdict.Message -Code $Verdict.Code -Reason $Verdict.Reason -Url $PageUrl -Engine "WebView2" | Out-Null
+    Stop-OmadaLogin -Message $Verdict.Message -Code $Verdict.Code -Reason $Verdict.Reason -Url $PageUrl -Engine "WebView2" -Category $Verdict.Category | Out-Null
 
     # The watchdog counters belong to the window that is closing, not to the next one.
     $Script:OmadaWatchdogStart = $null

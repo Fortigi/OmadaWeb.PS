@@ -7,6 +7,11 @@ Properties {
     $TestSource = Join-Path -Path $ParentPath -ChildPath 'tests'
     $OutputDir = Join-Path -Path $ParentPath -ChildPath 'buildoutput\OmadaWeb.PS'
     New-Item -Path $OutputDir -ItemType Directory -Force | Out-Null
+    $QualityOutputDir = Join-Path -Path $ParentPath -ChildPath 'buildoutput\quality'
+    $ComplexityBaseline = 'complexity-baseline.json'
+    $MutationConfig = 'psmutant.config.json'
+    $MaxCyclomatic = 15
+    $MaxCognitive = 15
 }
 
 
@@ -16,6 +21,17 @@ Properties {
 Task default -depends Analyze, Build, ImportModule, TestHelp, Test
 Task DeployOnly -depends Build, Deploy
 Task TestBuildOnly -depends Analyze, Build, ImportModule, TestHelp, Test
+
+# Complexity (PSComplexity) and test strength (PSMutant), see issue #91. Two scopes:
+#
+# - QualityChanged runs on a pull request and only judges the files the pull request changed: new or
+#   touched code meets the bar, pre-existing debt elsewhere does not block it.
+# - Complexity and Mutate judge the whole tree. They run weekly (.github/workflows/quality-weekly.yml),
+#   which files a bug when either falls below the bar.
+#
+# Both tools require PowerShell 7.0+, so every task below is skipped under Windows PowerShell 5.1,
+# which keeps the powershell leg of PR validation unaffected.
+Task QualityChanged -depends MutationConfigCheck, ComplexityChanged, MutateChanged
 
 Task Analyze {
 
@@ -412,6 +428,235 @@ Task Test -depends ImportModule {
 
     if ($Result.FailedCount -gt 0) {
         Write-Error -Message ("{0} Pester test(s) failed." -f $Result.FailedCount) -ErrorAction Stop
+    }
+}
+
+function Get-QualityChangedFile {
+    # The files the pull request changed, relative to the repository root. PR validation passes them in
+    # PR_CHANGED_FILES (';'-separated, from git diff against the merge base with main); a local run falls
+    # back to the same diff. Deleted files are dropped: there is nothing left to measure in them.
+    param(
+        [string]$RepositoryRoot
+    )
+    $Files = @($Env:PR_CHANGED_FILES -split ';' | Where-Object { ![string]::IsNullOrWhiteSpace($_) })
+    if ($Files.Count -eq 0) {
+        $MergeBase = git -C $RepositoryRoot merge-base origin/main HEAD
+        if ($LASTEXITCODE -ne 0) {
+            throw "PR_CHANGED_FILES is not set and the merge base with origin/main could not be determined. Run 'git fetch origin main' first."
+        }
+        $Files = @(git -C $RepositoryRoot diff --name-only $MergeBase HEAD)
+    }
+    return @($Files | Where-Object { Test-Path -LiteralPath (Join-Path -Path $RepositoryRoot -ChildPath $_) -PathType Leaf })
+}
+
+function Write-QualityVerdict {
+    # One small file per gate, read by the weekly workflow to decide whether to file or update a bug.
+    # Written on pass and on fail alike, so a missing file means the gate never reached a verdict.
+    param(
+        [string]$Path,
+        [string]$Gate,
+        [bool]$Passed,
+        [string]$Summary,
+        [string[]]$Detail = @()
+    )
+    New-Item -Path (Split-Path -Path $Path -Parent) -ItemType Directory -Force | Out-Null
+    [PSCustomObject]@{
+        gate    = $Gate
+        passed  = $Passed
+        summary = $Summary
+        detail  = @($Detail)
+    } | ConvertTo-Json -Depth 5 | Set-Content -Path $Path -Encoding UTF8
+    if ($Env:GITHUB_STEP_SUMMARY) {
+        $Lines = @(("### {0}: {1}" -f $Gate, $(if ($Passed) { "passed" } else { "FAILED" })), "", $Summary, "")
+        $Lines += @($Detail | ForEach-Object { "- {0}" -f $_ })
+        $Lines -join "`n" | Add-Content -Path $Env:GITHUB_STEP_SUMMARY -Encoding UTF8
+    }
+}
+
+function Get-ComplexityViolationLine {
+    param(
+        [string]$ReportPath
+    )
+    if (!(Test-Path -LiteralPath $ReportPath)) {
+        return @()
+    }
+    $Report = Get-Content -LiteralPath $ReportPath -Raw | ConvertFrom-Json
+    if (!($Report.PSObject.Properties.Name -contains 'violations')) {
+        return @()
+    }
+    return @($Report.violations | ForEach-Object {
+            "``{0}`` {1}: cyclomatic {2}, cognitive {3}" -f $_.file, $_.unit, $_.cyclomatic, $_.cognitive
+        })
+}
+
+function Get-MutationResultLine {
+    # The score alone is never quoted: the two shapes of a vacuous 100% (files with no candidate, and
+    # files whose candidates the coverage filter removed) and the uncovered mutants are reported beside
+    # it, together with the weakest files.
+    param(
+        $Result,
+        [string]$ReportPath
+    )
+    $Lines = [System.Collections.Generic.List[string]]::new()
+    if (Test-Path -LiteralPath $ReportPath) {
+        $Report = Get-Content -LiteralPath $ReportPath -Raw | ConvertFrom-Json
+        $Names = $Report.PSObject.Properties.Name
+        foreach ($Disclosure in 'skippedAsUncovered', 'filesWithNoMutants', 'filesWithNoCandidate') {
+            if ($Names -contains $Disclosure) {
+                $Lines.Add(("{0}: {1}" -f $Disclosure, @($Report.$Disclosure).Count))
+            }
+        }
+        if ($Names -contains 'perFile') {
+            foreach ($File in @($Report.perFile | Where-Object { $_.survived -gt 0 } | Select-Object -First 15)) {
+                $Lines.Add(("``{0}``: {1}% ({2}/{3} killed, {4} survived)" -f $File.file, $File.score, $File.killed, $File.total, $File.survived))
+            }
+        }
+    }
+    return $Lines.ToArray()
+}
+
+Task MutationConfigCheck -precondition { $PSVersionTable.PSVersion.Major -ge 7 } {
+    & (Join-Path -Path $PSScriptRoot -ChildPath "Update-MutationConfig.ps1") -Check -RepositoryRoot $ParentPath
+}
+
+Task Complexity -precondition { $PSVersionTable.PSVersion.Major -ge 7 } {
+    Import-Module -Name PSComplexity -RequiredVersion 0.5.1 -Force
+    $ReportPath = Join-Path -Path $QualityOutputDir -ChildPath 'complexity.json'
+    New-Item -Path $QualityOutputDir -ItemType Directory -Force | Out-Null
+
+    # The baseline records each unit already over the ceilings at its current score. It only ratchets
+    # down: a recorded unit may not get worse, any other unit must stay within the ceilings, and an
+    # entry that no longer describes the code (fixed, improved, renamed) fails the gate too, so it
+    # cannot age into a suppression list.
+    Push-Location -Path $ParentPath
+    try {
+        $Passed = Test-PSComplexity -Path './OmadaWeb.PS' -Recurse -MaxCyclomatic $MaxCyclomatic -MaxCognitive $MaxCognitive `
+            -BaselineFile $ComplexityBaseline -ReportPath $ReportPath -SarifPath (Join-Path -Path $QualityOutputDir -ChildPath 'complexity.sarif')
+        $Summary = "Whole tree, ceilings $MaxCyclomatic cyclomatic / $MaxCognitive cognitive, against $ComplexityBaseline."
+        $Detail = @(Get-ComplexityViolationLine -ReportPath $ReportPath)
+    }
+    catch {
+        $Passed = $false
+        $Summary = "PSComplexity refused to reach a verdict. Most often a $ComplexityBaseline entry no longer describes the code (fixed, improved, renamed or moved), which Test-PSComplexity -Path ./OmadaWeb.PS -Recurse -BaselineFile ./$ComplexityBaseline -UpdateBaseline resolves; the reason is below."
+        $Detail = @($_.Exception.Message -split '; ')
+    }
+    finally {
+        Pop-Location
+    }
+
+    Write-QualityVerdict -Path (Join-Path -Path $QualityOutputDir -ChildPath 'complexity.verdict.json') -Gate 'Complexity' -Passed $Passed -Summary $Summary -Detail $Detail
+    if (!$Passed) {
+        Write-Error -Message 'The complexity gate failed, see the report above.' -ErrorAction Stop
+    }
+}
+
+Task ComplexityChanged -precondition { $PSVersionTable.PSVersion.Major -ge 7 } {
+    $Changed = @(Get-QualityChangedFile -RepositoryRoot $ParentPath | Where-Object { $_ -like 'OmadaWeb.PS/*' -and $_ -like '*.ps*1' })
+    if ($Changed.Count -eq 0) {
+        "No module source changed; the complexity gate does not apply to this change." | Write-Host
+        return
+    }
+    Import-Module -Name PSComplexity -RequiredVersion 0.5.1 -Force
+    New-Item -Path $QualityOutputDir -ItemType Directory -Force | Out-Null
+    $ReportPath = Join-Path -Path $QualityOutputDir -ChildPath 'complexity.changed.json'
+
+    # PSComplexity 0.5.1 checks every baseline entry against the units it measured, and with
+    # -ChangedFile it measures only the changed files - so the entries for every other file read as
+    # "renamed or moved" and the gate throws. The baseline is narrowed to the changed files first. An
+    # entry for a changed file still has to match, so the ratchet holds for exactly the code under
+    # review.
+    $Baseline = Get-Content -LiteralPath (Join-Path -Path $ParentPath -ChildPath $ComplexityBaseline) -Raw | ConvertFrom-Json
+    $Baseline.units = @($Baseline.units | Where-Object { $_.file -in $Changed })
+    $ScopedBaseline = Join-Path -Path $QualityOutputDir -ChildPath 'complexity-baseline.changed.json'
+    $Baseline | ConvertTo-Json -Depth 5 | Set-Content -Path $ScopedBaseline -Encoding UTF8
+
+    Push-Location -Path $ParentPath
+    try {
+        $Passed = Test-PSComplexity -Path './OmadaWeb.PS' -Recurse -MaxCyclomatic $MaxCyclomatic -MaxCognitive $MaxCognitive `
+            -ChangedFile $Changed -BaselineFile $ScopedBaseline -ReportPath $ReportPath
+        $Summary = "Changed files only ($($Changed.Count)), ceilings $MaxCyclomatic cyclomatic / $MaxCognitive cognitive. A unit recorded in $ComplexityBaseline may not get worse; any other unit must stay within the ceilings."
+        $Detail = @(Get-ComplexityViolationLine -ReportPath $ReportPath)
+    }
+    catch {
+        $Passed = $false
+        $Summary = "PSComplexity refused to reach a verdict. Most often a $ComplexityBaseline entry no longer describes the code (fixed, improved, renamed or moved), which Test-PSComplexity -Path ./OmadaWeb.PS -Recurse -BaselineFile ./$ComplexityBaseline -UpdateBaseline resolves; the reason is below."
+        $Detail = @($_.Exception.Message -split '; ')
+    }
+    finally {
+        Pop-Location
+    }
+
+    Write-QualityVerdict -Path (Join-Path -Path $QualityOutputDir -ChildPath 'complexity.changed.verdict.json') -Gate 'Complexity (changed files)' -Passed $Passed -Summary $Summary -Detail $Detail
+    if (!$Passed) {
+        Write-Error -Message 'The complexity gate failed for the changed files, see the report above.' -ErrorAction Stop
+    }
+}
+
+Task Mutate -precondition { $PSVersionTable.PSVersion.Major -ge 7 } {
+    Invoke-QualityMutation -RepositoryRoot $ParentPath -ConfigPath $MutationConfig -QualityOutputDir $QualityOutputDir
+}
+
+Task MutateChanged -precondition { $PSVersionTable.PSVersion.Major -ge 7 } {
+    $Config = Get-Content -LiteralPath (Join-Path -Path $ParentPath -ChildPath $MutationConfig) -Raw | ConvertFrom-Json
+    $Changed = @(Get-QualityChangedFile -RepositoryRoot $ParentPath)
+    $ChangedMutate = @($Changed | Where-Object { $_ -in @($Config.mutate) })
+    if ($ChangedMutate.Count -eq 0) {
+        "No mutation-tested source file changed; the mutation gate does not apply to this change." | Write-Host
+        return
+    }
+    Invoke-QualityMutation -RepositoryRoot $ParentPath -ConfigPath $MutationConfig -QualityOutputDir $QualityOutputDir -ChangedFile $ChangedMutate
+}
+
+function Invoke-QualityMutation {
+    param(
+        [string]$RepositoryRoot,
+        [string]$ConfigPath,
+        [string]$QualityOutputDir,
+        [string[]]$ChangedFile = @()
+    )
+    Import-Module -Name PSMutant -RequiredVersion 0.5.0 -Force
+
+    # The tests import the source module, which only turns StrictMode on when asked to. Same contract
+    # as the Test task: every test run - and so every mutant - is evaluated under StrictMode.
+    $PreviousStrictMode = $Env:OMADAWEBPS_STRICTMODE
+    $Env:OMADAWEBPS_STRICTMODE = "1"
+    Push-Location -Path $RepositoryRoot
+    try {
+        $Parameters = @{
+            ConfigFile = $ConfigPath
+            SourceRoot = $RepositoryRoot
+        }
+        if ($ChangedFile.Count -gt 0) {
+            $Parameters.ChangedFile = $ChangedFile
+        }
+        $Result = Invoke-PSMutation @Parameters
+    }
+    finally {
+        Pop-Location
+        $Env:OMADAWEBPS_STRICTMODE = $PreviousStrictMode
+    }
+
+    $Config = Get-Content -LiteralPath (Join-Path -Path $RepositoryRoot -ChildPath $ConfigPath) -Raw | ConvertFrom-Json
+    $ReportPath = Join-Path -Path $RepositoryRoot -ChildPath $Config.reportPath
+    $Gate = 'Mutation'
+    $Scope = "Whole tree ($(@($Config.mutate).Count) files)"
+    if ($ChangedFile.Count -gt 0) {
+        $ReportPath = [System.IO.Path]::ChangeExtension($ReportPath, '.changed.json')
+        $Gate = 'Mutation (changed files)'
+        $Scope = "Changed files only: $($ChangedFile -join ', ')"
+    }
+    $Break = $Config.thresholds.break
+    $Floor = if ($null -eq $Break) { "no floor set (report-only)" } else { "floor $Break%" }
+    $Summary = "{0}. Score {1}% ({2}/{3} killed), {4}. Exit reason: {5}." -f $Scope, $Result.Score, $Result.Killed, $Result.Total, $Floor, $Result.FailureReason
+    $Detail = @(Get-MutationResultLine -Result $Result -ReportPath $ReportPath)
+    if (@($Config.PSObject.Properties.Name) -contains '_untested' -and $ChangedFile.Count -eq 0) {
+        $Detail += "Source files no test names, so not mutated at all: $(@($Config._untested).Count)"
+    }
+
+    $VerdictName = if ($ChangedFile.Count -gt 0) { 'mutation.changed.verdict.json' } else { 'mutation.verdict.json' }
+    Write-QualityVerdict -Path (Join-Path -Path $QualityOutputDir -ChildPath $VerdictName) -Gate $Gate -Passed ($Result.ExitCode -eq 0) -Summary $Summary -Detail $Detail
+    if ($Result.ExitCode -ne 0) {
+        Write-Error -Message ("The mutation gate failed: {0}." -f $Result.FailureReason) -ErrorAction Stop
     }
 }
 

@@ -59,6 +59,40 @@ Describe 'Get-OmadaCookieFileName' -Tag 'Unit' {
             $NameBoth | Should -Be $NameCredentialOnly
         }
     }
+
+    It 'Should give an account named with -UserName its own cookie file' {
+        InModuleScope 'OmadaWeb.PS' {
+            $Uri = [System.Uri]::new('http://localhost:19000/')
+
+            $Name = Get-OmadaCookieFileName -Uri $Uri -UserName 'user-a@example.com'
+
+            $Name | Should -BeLike 'localhost_19000_*.cookie'
+            $Name | Should -Not -Be (Get-OmadaCookieFileName -Uri $Uri -UserName 'user-b@example.com')
+        }
+    }
+
+    It 'Should resolve -UserName and the same name on a Credential to one file' {
+        # The two are the same account named two ways, and they must not end up with two cookies.
+        InModuleScope 'OmadaWeb.PS' {
+            $Uri = [System.Uri]::new('http://localhost:19000/')
+            $Credential = New-Object System.Management.Automation.PSCredential('user-a@example.com', (ConvertTo-SecureString 'x' -AsPlainText -Force))
+
+            Get-OmadaCookieFileName -Uri $Uri -UserName 'USER-A@example.com' |
+                Should -Be (Get-OmadaCookieFileName -Uri $Uri -Credential $Credential)
+        }
+    }
+
+    It 'Should strip the brackets an IPv6 host authority carries, not just the colons (issue #105)' {
+        # Uri.Authority for an IPv6 host reads "[::1]:8443" - "[" and "]" are legal in a Windows
+        # filename but are wildcard metacharacters to every -Path (as opposed to -LiteralPath) call
+        # that later resolves this name, so they must be stripped the same way ":" already is.
+        InModuleScope 'OmadaWeb.PS' {
+            $Name = Get-OmadaCookieFileName -Uri ([System.Uri]::new('https://[::1]:8443/'))
+            $Name | Should -Not -Match '\['
+            $Name | Should -Not -Match '\]'
+            $Name | Should -Not -Match ':'
+        }
+    }
 }
 
 AfterAll {

@@ -29,7 +29,7 @@ function Invoke-WebEdgeDriverFramework {
     $CheckJsonLibrary = $false
     $JsonLibraryType = $null
     if ($InstallOrUpdateEdgeDriver) {
-        $InstallOrUpdateEdgeDriver = Install-EdgeDriver
+        $InstallOrUpdateEdgeDriver = Install-EdgeDriver -InstalledEdgeFileInfo $InstalledEdgeFileInfo
     }
 
     if (!(Test-Path $Script:WebDriverPath -PathType Leaf)) {

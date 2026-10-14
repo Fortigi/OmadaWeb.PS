@@ -18,6 +18,8 @@ When using browser based authentication this module is able to sign-in automatic
 | Command | Description |
 |---|---|
 | [`Clear-OmadaWebCache`](#clear-omadawebcache) | Reports and removes the data OmadaWeb.PS stores on this machine. |
+| [`Export-OmadaSession`](#export-omadasession) | Captures an authenticated Omada session so another runspace can reuse it. |
+| [`Import-OmadaSession`](#import-omadasession) | Seeds this runspace with a session captured by Export-OmadaSession. |
 | [`Invoke-OmadaRestMethod`](#invoke-omadarestmethod) | Sends a request to an Omada REST or OData endpoint and returns the response as objects. |
 | [`Invoke-OmadaWebRequest`](#invoke-omadawebrequest) | Sends a request to an Omada web endpoint and returns the raw HTTP response. |
 <!-- END GENERATED COMMANDS -->
@@ -164,7 +166,7 @@ The certificate is looked up in `CurrentUser\My` first and then in `LocalMachine
 ```powershell
 Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" `
     -AuthenticationType "OAuth" `
-    -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" `
+    -OAuthUri "https://example.okta.com/oauth2/default/v1/token" `
     -OAuthScope "omadaIdentityCloud" `
     -ClientId "0oa1b2c3d4e5f6g7h8i9" `
     -OAuthCertificateThumbprint "9A8B7C6D5E4F30211A2B3C4D5E6F708192A3B4C5"
@@ -184,6 +186,138 @@ The client assertion follows RFC 7523, so it is accepted by Okta, Ping, Keycloak
 Replacing interactive browser sign-in with token acquisition was investigated separately in [#23](https://github.com/Fortigi/OmadaWeb.PS/issues/23) and closed: Omada is itself the OpenID Connect relying party, and the session it hands back is established in the browser. Device code would not change that either.
 
 **A token is requested per call.** There is no token cache yet, so a script making many calls asks the identity provider for a token each time. That is tracked in [#29](https://github.com/Fortigi/OmadaWeb.PS/issues/29) and does not affect correctness, only the number of round trips.
+
+### Using an existing session, without ever prompting
+
+`-AuthenticationType "OAuth"` covers the job that authenticates as an application. A different kind of background work still has to run *as the signed-in person*: a keep-alive ping that stops an idle session expiring, a query dispatched to a worker runspace, a refresh that runs while someone is at the keyboard doing something else.
+
+That work has a hard requirement of its own. It must never put a sign-in window on the screen. A prompt nobody asked for is at best startling and at worst - in a runspace with no interactive desktop - a `WebView2RuntimeNotFoundException` that takes the job down with it.
+
+`-NoInteractiveAuthentication` is the switch for exactly that. The request is sent with the existing session cookie, precisely as it would be without the switch, and no code path under it can reach Selenium, WebView2, or any other window. When there is no usable session it says so instead of signing in:
+
+```powershell
+try {
+    Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/v2/health" -NoInteractiveAuthentication -ErrorAction Stop
+    "Session is still alive" | Write-Verbose
+}
+catch [System.Security.Authentication.AuthenticationException] {
+    # No session, or the server rejected the one we had. Stop the watchdog and leave signing in to
+    # whatever the user does next - do not try to acquire a session behind their back.
+    "Omada session is gone; stopping the keep-alive." | Write-Warning
+}
+```
+
+The error is distinguishable on purpose, because telling *session still good* from *session gone* cheaply is the whole point:
+
+| | |
+|---|---|
+| `FullyQualifiedErrorId` | starts with `OmadaSessionExpired` |
+| `Exception` | `System.Security.Authentication.AuthenticationException` |
+| Raised when | no cookie is cached for this tenant, or the server answers HTTP 401 |
+| Side effect | the rejected session is dropped, so the next call *without* the switch signs in normally |
+
+Match the error id with a wildcard (`$_.FullyQualifiedErrorId -like "OmadaSessionExpired*"`), or catch the exception type as above. PowerShell appends the name of each function an error passes through to the id, so it is a prefix rather than the whole string.
+
+Two things worth knowing:
+
+- The switch changes behaviour only for `-AuthenticationType "Browser"` and `-AuthenticationType "WebView2"`, the two types that can sign a user in. It is accepted with every other type, where it is already true, so a wrapper can pass it unconditionally.
+- It cannot be combined with `-ForceAuthentication`, which exists to discard the session and sign in again. The combination is refused rather than silently resolved one way or the other.
+
+A session still has to be established once, interactively, before any of this works - the switch uses a session, it never creates one.
+
+### Reusing a session in another runspace
+
+The switch above stops a worker prompting. It does not give the worker a session to use, and by itself a worker has none: authentication state belongs to one module instance, and a background runspace imports its own. It starts with an empty session table even though the application that created it signed in seconds earlier.
+
+`Export-OmadaSession` and `Import-OmadaSession` are the supported way across that boundary. Capture the session where the sign-in happened, hand the state to the worker, and put it back there:
+
+```powershell
+# On the runspace that signed in.
+$State = Export-OmadaSession -Uri "https://example.omada.cloud"
+
+$PowerShell = [powershell]::Create()
+$null = $PowerShell.AddScript({
+        param($State, $Uri)
+
+        Import-Module OmadaWeb.PS
+        Import-OmadaSession -State $State
+
+        # Reuses the session that was signed in elsewhere. No sign-in, no window, no disk.
+        Invoke-OmadaRestMethod -Uri $Uri
+    }).AddArgument($State).AddArgument("https://example.omada.cloud/api/v2/identity")
+
+$PowerShell.Invoke()
+```
+
+Neither command touches the disk. The session cookie is a live bearer token, so it is never a property of the state object: it is encrypted with DPAPI for the current Windows user account and carried as ciphertext in `ProtectedState`. Any process already running as that account can decrypt it - including on another computer where the account's DPAPI keys roam through a roaming profile or credential roaming - so treat the state object as a secret. It names neither the account nor the tenant's session key - only a hash that lets you match it to a log line.
+
+The worker's *requests* behave as they always do, which includes refreshing the encrypted cookie cache under `%LOCALAPPDATA%\OmadaWeb.PS` - the same DPAPI-protected file any other successful request writes, never a plaintext token. Pass `-SkipCookieCache` on the worker's calls if you would rather it left no trace on disk at all.
+
+That protection is scoped to the Windows user account that exported the state, not to a computer: any process running as that account can decrypt it, including on another machine where the account's DPAPI keys roam. Anything else - a different user, or a state damaged or altered in transit - is refused as `OmadaSessionStateUnreadable` rather than quietly ignored.
+
+**A seeded session may not sign in.** Everything that could open a browser window is refused for it, whether or not the worker's own call remembered `-NoInteractiveAuthentication`, because a worker runspace usually has no desktop to put a window on and nobody watching it. When the session turns out to be dead - refused on import because its cookie has already expired, or refused later because the server answers HTTP 401 - the worker gets the same catchable error described in the previous section:
+
+```powershell
+try {
+    Import-OmadaSession -State $State
+    Invoke-OmadaRestMethod -Uri $Uri -ErrorAction Stop
+}
+catch [System.Security.Authentication.AuthenticationException] {
+    # FullyQualifiedErrorId starts with OmadaSessionExpired.
+    "The session this worker was handed is gone; asking for a fresh one." | Write-Warning
+}
+```
+
+Use `Import-OmadaSession -AllowInteractiveAuthentication` only where a sign-in window would actually be welcome.
+
+Two things worth knowing:
+
+- A session is identified by the environment, the authentication type **and** the account, so `Export-OmadaSession` has to be given the same `-UserName`, `-Credential` or `-SessionKey` the original request used. Without them it exports the session of the default authentication type and no named account, which may not be the one you meant.
+- Omada session cookies are short lived - roughly ten minutes. Export close to where the state is used rather than holding one; `Import-OmadaSession` refuses a cookie that has already expired instead of seeding a session that cannot work.
+
+### Choosing the account to sign in with
+
+By default the browser decides. It signs in with the account Windows is logged on with, or with whoever used this session last, and for a workstation that belongs to the tenant you are administering that is exactly right - the sign-in is instant and nobody is asked anything.
+
+It is wrong the moment more than one identity is in play. A consultant's own account, a guest account in the customer's tenant, an acceptance account and a production account: the browser picks one silently, and Entra ID answers with a refusal that names neither what it picked nor what it wanted.
+
+```text
+AADSTS50178: User account '{EUII Hidden}' from identity provider 'https://sts.windows.net/<tenant id>/'
+does not exist in tenant '<tenant> production' and cannot access the application ... in that tenant.
+```
+
+Two parameters take that choice back:
+
+```powershell
+# Sign in as a named account. No password is needed.
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/..." -UserName "mark@example.com"
+
+# Or be shown the account picker, including the option to use an account the browser does not know.
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/..." -SelectAccount
+```
+
+**The account is named in the sign-in request, not typed into the page.** `-UserName` is sent to Entra ID as `login_hint` together with `prompt=login`, and `-SelectAccount` as `prompt=select_account`. That is the whole point: a session for somebody else can no longer answer the request before a page is ever drawn, which is what the refusal above is. Single sign-on with the Windows account is turned off for these sign-ins for the same reason.
+
+Nothing else in the request is touched - `state`, `nonce` and the redirect URI stay exactly as Omada built them, and a `prompt` that Omada sets itself is left alone.
+
+| | |
+|---|---|
+| `-UserName "mark@example.com"` | that account signs in |
+| `-Credential $Credential` | the credential's user name is the account; its password is filled in when it has one |
+| `-SelectAccount` | Entra asks which account to use |
+| neither | unchanged: the browser decides |
+
+The two cannot be combined - Entra ID accepts an account name or an account picker, not both - and `-UserName` cannot be combined with `-Credential`, which carries a user name of its own. Both apply to `-AuthenticationType "WebView2"` (and to `"Browser"` once it runs on WebView2); supplying them with any other type is refused rather than silently ignored.
+
+**A password is optional.** `-UserName` supplies none at all, and a `-Credential` may carry an empty one:
+
+```powershell
+$Credential = [System.Management.Automation.PSCredential]::new("mark@example.com", [System.Security.SecureString]::new())
+```
+
+The account name is filled in, an empty password is never submitted - that is one of the attempts an account has before Entra ID locks it out - and if Entra offers a passwordless method the module takes it. When it insists on a password anyway, the window stays open and waits for you to type it.
+
+**Each account gets its own session**, meaning its own cookie cache and its own browser profile, keyed on the account name exactly as `-Credential` and `-SessionKey` already are. Two accounts against the same Omada environment therefore no longer need signing out in between, and neither can be silently signed in as the other.
 
 ### Signing in, and what happens when Microsoft changes the sign-in page
 
@@ -205,6 +339,18 @@ The warning names the state, the elements that were expected but absent, and the
 
 The module waits 60 seconds without progress before it gives up on autofill, so a slow round trip to Microsoft is not mistaken for a changed page. Waiting for you to approve a sign-in request in your authenticator app does not count against that.
 
+A page that asks for something the command was never given is not a changed page, and is not reported as one. A `-Credential` that carries a user name but no password is a normal way to use the module: the user name is filled in, an empty password is never submitted, and when Entra insists on a password anyway the module says so and leaves the window open for you.
+
+```text
+WARNING: Automated Microsoft sign-in is waiting for you - handing control back to you.
+  State            : Deciding/PasswordRequired
+  Page URL         : https://login.microsoftonline.com/common/login
+  Reason           : The credential has no password and this page offers no way to sign in without one.
+Entra ID is asking for something that was not supplied to this command - a password, or a verification code from your device. Please complete the sign-in yourself in the browser window that is open; it stays open and waits for you. Nothing is broken and there is nothing to report.
+```
+
+No selector is named there, and no bug report is asked for, because nothing about the page is broken.
+
 You should not normally be the one to find out. A scheduled job signs in to Entra ID once a day in a real browser and opens an issue when autofill stops recognising a screen, so a change on Microsoft's side is usually already known - and often already fixed - by the time you meet it. See [the Entra sign-in canary](docs/entra-canary.md).
 
 ### When Omada refuses the sign-in
@@ -222,10 +368,28 @@ WARNING: Sign-in was refused and will not be retried.
   Engine     : WebView2
   Message    : AADSTS50178: User account '...' from identity provider '...' does not exist in tenant 'Example' and cannot access the application '...' in that tenant. The account needs to be added as an external user in the tenant first.
   Meaning    : The account that signed in is not known in the tenant the Omada application is registered in.
-Opening the sign-in window again would land on this same page, so no further attempts are made. ...
+  Account in : tenant be4c52b6-1a23-493e-a8ce-f36325d16462
+  Needed in  : tenant 'Example'
+  Application: example.com (Omada) (a1880835-5fff-4d48-b926-44471e6f3c6c)
+  Correlation: 53b30bf1-f9c9-4ad1-8bba-5442011f3a7c
+  Trace      : c5936087-19ec-4f9d-bbfa-9202d9218900
+This account cannot be used for this application however often the sign-in is repeated, so no further attempts are made. Sign in with an account of tenant 'Example', or have this account invited into it as a guest, and try again.
+Entra ID withholds the account name from this message because it identifies an end user. Look the attempt up by its correlation ID in the sign-in logs of the tenant that refused it to see which account was used.
 ```
 
-The request then fails with that same message rather than with a bare "could not authenticate", so what to do next - sign in with an account from the application's own tenant, or have yours invited into it - is in the error itself. Add `-ForceAuthentication` to the retry so the sign-in starts from a clean browser session.
+**A refusal about the account gets one more window, with the picker on it.** When the sign-in was refused because the account the browser chose is not known in the application's tenant - and only then - the module says so and opens the sign-in window once more with `prompt=select_account`, so you can pick an account that does exist there:
+
+```text
+WARNING: The account the browser signed in with is not known in tenant 'Example productie'. Opening the
+sign-in window once more, this time asking which account to use - please choose one that exists in that
+tenant.
+```
+
+Once, never twice: a second refusal is the tenant repeating itself. It is also skipped entirely when you named the account yourself with `-UserName` or `-Credential` - the picker asks exactly the question you already answered - and when there is no interactive desktop, where a picker would be a window nobody will ever click and the command would hang instead of failing with a message.
+
+The request then fails with that same message rather than with a bare "could not authenticate", so what to do next is in the error itself. Add `-ForceAuthentication` to the retry so the sign-in starts from a clean browser session.
+
+Everything under `Meaning` is lifted out of the message Entra wrote, because all of it is something you have to paste into a portal to get any further and none of it was anywhere you could see it. One thing is deliberately missing: the account name. Entra replaces it with `{EUII Hidden}` in a message it hands to an application, so the sign-in logs of the tenant that refused the sign-in - searched by the correlation ID above - are the only place the account can be identified.
 
 **Only errors a retry cannot change stop the sign-in.** An error you can correct in the window that is open - a wrong password on Omada's own logon form - is reported once and otherwise left alone, and so is one the identity provider may recover from by itself, such as `server_error` or `temporarily_unavailable`. An error whose wording the module does not recognize is treated as final only when the page offers no way to sign in again, which is what a failed federated sign-in looks like whatever the Omada version calls it.
 
@@ -299,8 +463,8 @@ Everything the module stores lives under one root: `%LOCALAPPDATA%\OmadaWeb.PS`.
 
 | Artefact | Path | Contents | Protection | Lifetime |
 |---|---|---|---|---|
-| Encrypted cookie cache | `%LOCALAPPDATA%\OmadaWeb.PS\Cookies\<session hash>` | The Omada session cookie, so a later command does not have to sign in again | Encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), readable only by the current user on the current machine | Until the cookie is rejected, `-ForceAuthentication` or `-SkipCookieCache` is used, or you run `Clear-OmadaWebCache` |
-| Custom cookie file | The folder you pass to `-CookiePath` | The same session cookie | Encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), readable only by the current user on the current machine - the same protection as the cache above | Until you delete it. It is not touched by `Clear-OmadaWebCache`, because the module does not know where you put it |
+| Encrypted cookie cache | `%LOCALAPPDATA%\OmadaWeb.PS\Cookies\<session hash>` | The Omada session cookie, so a later command does not have to sign in again | Encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), readable only by the current Windows user account - on this machine or any other where that account's DPAPI keys roam | Until the cookie is rejected, `-ForceAuthentication` or `-SkipCookieCache` is used, or you run `Clear-OmadaWebCache` |
+| Custom cookie file | The folder you pass to `-CookiePath` | The same session cookie | Encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), readable only by the current Windows user account - the same protection as the cache above | Until you delete it. It is not touched by `Clear-OmadaWebCache`, because the module does not know where you put it |
 | WebView2 browser profiles | `%LOCALAPPDATA%\OmadaWeb.PS\Edge User Data\OmadaWebView2Profile_<session hash>` | A dedicated Edge user profile per session, holding the Entra ID cookies and tokens that make re-authentication silent | File system permissions of your Windows user profile | Until you run `Clear-OmadaWebCache` |
 | Selenium browser profiles | `%LOCALAPPDATA%\OmadaWeb.PS\Profiles\<Edge profile>_<session hash>` | The Edge `user-data-dir` used when `-EdgeProfile` is combined with `-AuthenticationType Browser` | File system permissions of your Windows user profile | Until you run `Clear-OmadaWebCache` |
 | Bundled WebView2 assemblies | `lib\<edition>\<architecture>` inside the installed module | The Microsoft WebView2 assemblies, fetched and verified against their pinned SHA-256 when the module was built (see [SECURITY.md](SECURITY.md)) | File system permissions of the module's install location, usually read-only | For the lifetime of the installed module version; never written to at runtime |
@@ -341,52 +505,64 @@ Clear-OmadaWebCache -Force
 Clear-OmadaWebCache [-Scope {All | Cookies | BrowserProfiles | Binaries | Sessions}] [-ListOnly <switch>] [-Force <switch>] [-WhatIf <switch>] [-Confirm <switch>] [<CommonParameters>]
 ```
 
+### Export-OmadaSession (__AllParameterSets)
+
+```powershell
+Export-OmadaSession -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-UserName <string>] [-Credential <pscredential>] [-SessionKey <string>] [<CommonParameters>]
+```
+
+### Import-OmadaSession (__AllParameterSets)
+
+```powershell
+Import-OmadaSession -State <object> [-AllowInteractiveAuthentication <switch>] [-PassThru <switch>] [<CommonParameters>]
+```
+
 ### Invoke-OmadaRestMethod (StandardMethod)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-NoInteractiveAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SelectAccount <switch>] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [-UserName <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (StandardMethodNoProxy)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-NoInteractiveAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SelectAccount <switch>] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [-UserName <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (CustomMethod)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-NoInteractiveAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SelectAccount <switch>] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [-UserName <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaRestMethod (CustomMethodNoProxy)
 
 ```powershell
-Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [<Invoke-RestMethod Parameters>]
+Invoke-OmadaRestMethod -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-NoInteractiveAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-Paged <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SelectAccount <switch>] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [-UserName <string>] [<Invoke-RestMethod Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (StandardMethod)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-NoInteractiveAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SelectAccount <switch>] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [-UserName <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (StandardMethodNoProxy)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-NoInteractiveAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SelectAccount <switch>] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [-UserName <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (CustomMethod)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-NoInteractiveAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SelectAccount <switch>] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [-UserName <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 ### Invoke-OmadaWebRequest (CustomMethodNoProxy)
 
 ```powershell
-Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [<Invoke-WebRequest Parameters>]
+Invoke-OmadaWebRequest -Uri <uri> -CustomMethod <string> -NoProxy [-AuthenticationType {OAuth | Integrated | Basic | Browser | WebView2 | Windows | None}] [-EntraIdTenantId <string>] [-EntraApplicationIdUri <string>] [-OAuthScope <string>] [-OAuthUri <string>] [-CookiePath <string>] [-SkipCookieCache <switch>] [-ForceAuthentication <switch>] [-NoInteractiveAuthentication <switch>] [-EdgeProfile <string>] [-InPrivate <switch>] [-UseWebView2 <switch>] [-DebugWebView2 <switch>] [-MaximumRetryCount <int>] [-RetryIntervalSec <int>] [-ClientId <string>] [-OAuthCertificate <x509certificate2>] [-OAuthCertificatePassword <securestring>] [-OAuthCertificatePath <string>] [-OAuthCertificateThumbprint <string>] [-PreferredMfaMethod {PhoneAppNotification | PhoneAppOTP | OneWaySMS | TwoWayVoiceMobile | TwoWayVoiceAlternateMobile | TwoWayVoiceOffice | ConsolidatedTelephony}] [-SelectAccount <switch>] [-SessionKey <string>] [-SkipBodyRedaction <switch>] [-UserName <string>] [<Invoke-WebRequest Parameters>]
 ```
 
 <!-- END GENERATED SYNTAX -->
@@ -442,6 +618,90 @@ Clear-OmadaWebCache -Force
 ```
 
 Removes everything the module stores, without prompting. Useful when handing a machine over, or as a cleanup step at the end of an automated run.
+
+### Export-OmadaSession
+
+Returns the session this PowerShell session already signed in with, as one opaque object that can be handed to a background runspace and replayed there with Import-OmadaSession. The worker then makes its requests against the same session, without signing in and without a browser window ever opening.
+
+This exists because authentication state is per module instance. A background runspace imports its own copy of OmadaWeb.PS, so it starts with no session at all and would try to sign in interactively even though the calling application authenticated seconds earlier.
+
+This command writes nothing to disk, and neither does Import-OmadaSession. The session cookie is a live bearer token, so it never appears in the returned object: it is encrypted with DPAPI for the current Windows user account and carried in the ProtectedState property as ciphertext. The object can therefore be passed through a job argument, a queue or a variable without leaking the token to a reader who is signed in as someone else. That protection is scoped to the account, not the computer: any process already running as that user - on this machine, or on another one where the account's DPAPI keys roam through a roaming profile or credential roaming - can decrypt it. It does not stop someone who runs as the account that exported it, so treat the returned object as a secret, the same as the cookie it carries.
+
+The command reads the session that is already there. It never creates one, and it never signs in: when there is no authenticated session for the arguments given, it says so and stops. The arguments are the same ones that identified the session when it was created - the Omada URL, the authentication type, and whichever of -UserName, -Credential or -SessionKey the original call used - because sessions are keyed by all three.
+
+Omada session cookies are short lived. Export the session close to where it is used rather than holding one for a long time, and expect Import-OmadaSession to refuse one whose cookie has already expired.
+
+#### Example 1
+
+```powershell
+$State = Export-OmadaSession -Uri "https://example.omada.cloud"
+```
+
+Captures the session of the default authentication type, ready to be handed to a worker.
+
+#### Example 2
+
+```powershell
+$State = Export-OmadaSession -Uri "https://example.omada.cloud" -UserName "someone@example.com"
+```
+
+Captures the session belonging to one specific account, on an environment where more than one account is signed in. The account has to be named the same way the original request named it, because that is part of what identifies the session.
+
+#### Example 3
+
+```powershell
+$PowerShell = [PowerShell]::Create()
+$null = $PowerShell.AddScript({
+        param($State, $Uri)
+        Import-Module OmadaWeb.PS
+        Import-OmadaSession -State $State
+        Invoke-OmadaRestMethod -Uri $Uri
+    }).AddArgument((Export-OmadaSession -Uri "https://example.omada.cloud")).AddArgument("https://example.omada.cloud/api/v2/identity")
+$PowerShell.Invoke()
+```
+
+Runs a request on a background runspace against the session this session signed in with. The worker never signs in: no browser window can open, and nothing is written to disk.
+
+### Import-OmadaSession
+
+Takes the state object Export-OmadaSession produced in the runspace that signed in, and installs it here. The next Invoke-OmadaRestMethod or Invoke-OmadaWebRequest made against the same environment, with the same authentication type and the same account or session key, reuses that session instead of authenticating.
+
+Nothing is read from or written to disk, and no request is made: this only puts the session in place.
+
+A seeded session may not sign in. Everything that could open a browser window is refused for it, whether or not the call asked for -NoInteractiveAuthentication, because a worker runspace usually has no desktop to put a window on and nobody watching it. When the session turns out to be dead - refused here because its cookie has already expired, or refused later because the server answers HTTP 401 - the caller gets a terminating error it can catch: an AuthenticationException whose FullyQualifiedErrorId starts with OmadaSessionExpired. The third example below shows the shape. Use -AllowInteractiveAuthentication only where a sign-in window would actually be welcome.
+
+The state is protected with DPAPI for the Windows user account that exported it: any process already running as that account can decrypt it, whether it runs on this machine or on another one where the account's DPAPI keys roam through a roaming profile or credential roaming. It does not stop another process running as that same account, so an exported state is a secret and should be handled like one. A state that cannot be read at all - because it belongs to a different user, or was damaged or altered in transit - is refused as one error rather than silently ignored.
+
+The protected contents are also the authority on which environment the session belongs to, and on when it expires. The BaseUrl and ExpiresOn properties beside them are a convenience for the caller and sit outside the protection, so if either disagrees with what is inside - by accident or by an edit - the state is not trusted on that point: BaseUrl is refused outright, and expiry is decided from the protected copy rather than the visible one, so editing the visible ExpiresOn cannot make an already-dead session look current.
+
+#### Example 1
+
+```powershell
+Import-OmadaSession -State $State
+```
+
+Seeds this runspace with the session captured elsewhere. The next request against that environment reuses it, and cannot open a sign-in window.
+
+#### Example 2
+
+```powershell
+$State | Import-OmadaSession -PassThru
+```
+
+Seeds the session and reports what was seeded, which is useful in a worker whose output is the only place its state can be observed from.
+
+#### Example 3
+
+```powershell
+try {
+    Import-OmadaSession -State $State
+}
+catch [System.Security.Authentication.AuthenticationException] {
+    "The exported session has already expired; asking the caller for a fresh one." | Write-Warning
+}
+```
+
+Distinguishes a session that is still good from one that is already dead, without making a request and without any chance of a prompt.
 
 ### Invoke-OmadaRestMethod
 
@@ -525,12 +785,25 @@ Signs in interactively, but hands the sign-in page the account to use and fills 
 #### Example 9
 
 ```powershell
-Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://dev-505878.okta.com/oauth2/ausc0u4lq9sPySN5W4x7/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
+Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/odata/dataobjects/identity(123456)" -AuthenticationType "OAuth" -OAuthUri "https://example.okta.com/oauth2/default/v1/token" -OAuthScope "omadaIdentityCloud" -Credential $ClientCredential
 ```
 
 Authenticates against an identity provider other than Entra ID - here Okta - by supplying the token endpoint and scope explicitly.
 
 #### Example 10
+
+```powershell
+try {
+    Invoke-OmadaRestMethod -Uri "https://example.omada.cloud/api/v2/health" -NoInteractiveAuthentication -ErrorAction Stop
+}
+catch [System.Security.Authentication.AuthenticationException] {
+    "Omada session is gone; stopping the keep-alive." | Write-Warning
+}
+```
+
+Uses the session that already exists and cannot open a sign-in window, which is what a background keep-alive or a worker runspace needs. A session that has expired raises a distinguishable terminating error - its FullyQualifiedErrorId starts with 'OmadaSessionExpired' - instead of prompting.
+
+#### Example 11
 
 ```powershell
 Invoke-OmadaRestMethod -Uri "https://omada.contoso.local/odata/dataobjects/identity(123456)" -AuthenticationType "Integrated"
@@ -583,6 +856,20 @@ Invoke-OmadaWebRequest -Uri "https://example.omada.cloud/Report/Export?id=42" -O
 The same download from a scheduled task, authenticating with a certificate from the Windows certificate store rather than a client secret, so no reusable credential travels on the wire or sits in the script.
 
 #### Example 5
+
+```powershell
+try {
+    $Response = Invoke-OmadaWebRequest -Uri "https://example.omada.cloud/api/v2/health" -NoInteractiveAuthentication -ErrorAction Stop
+    "Session is alive, Omada answered {0}" -f $Response.StatusCode | Write-Verbose
+}
+catch [System.Security.Authentication.AuthenticationException] {
+    "Omada session is gone; stopping the keep-alive." | Write-Warning
+}
+```
+
+Uses the session that already exists and cannot open a sign-in window, which is what a background keep-alive or a worker runspace needs. A session that has expired raises a distinguishable terminating error - its FullyQualifiedErrorId starts with 'OmadaSessionExpired' - instead of prompting.
+
+#### Example 6
 
 ```powershell
 Invoke-OmadaWebRequest -Uri "https://omada.contoso.local/OData/DataObjects" -AuthenticationType "Windows" -Credential $UserCredential
@@ -680,12 +967,12 @@ Together with -OAuthScope this is the provider-neutral way to reach any OpenID C
 ```
 
 #### -CookiePath <string>
-The **folder** to keep a stored Omada authentication cookie in. Pass a directory, not a file path: the module derives the file name itself with `Get-OmadaCookieFileName` and creates one file per session inside the folder you name. The file is updated when re-authentication is needed, and created after successful authentication if it is not there yet. When this option is used, the default cookie cache is not written - this file takes its place.
+The FOLDER to keep a stored Omada authentication cookie in. The module derives the file name itself, one per session, so pass a directory and not a file path. The file is updated when re-authentication is needed, and created after successful authentication if it is not there yet. When this option is used, the default cookie cache is not written - this file takes its place.
 
-The file is encrypted with [DPAPI](https://learn.microsoft.com/en-us/dotnet/standard/security/how-to-use-data-protection), exactly like the default cookie cache, so it is readable only by the user who created it on the machine where it was created. **There is no option to write it unencrypted** - the module deliberately offers no plaintext export, because a readable file holding a live session token is exactly what this parameter used to produce. This parameter only applies in combination with parameter -AuthenticationType Browser or -AuthenticationType WebView2.
+The file is encrypted with DPAPI, exactly like the default cookie cache, so it is readable only by the Windows user account that created it - any process running as that account can decrypt it, including on another machine where the account's DPAPI keys roam. There is no option to write it unencrypted. This parameter only applies in combination with parameter -AuthenticationType Browser or -AuthenticationType WebView2.
 
 > [!IMPORTANT]
-> Because the protection is tied to the user and the machine, a cookie file **cannot be copied to another user or another computer**. A file written unencrypted by an earlier version of this module is ignored rather than read - you simply sign in again, and the file is replaced with an encrypted one. If such a file ever sat on shared or synchronised storage, treat the token it held as exposed; Omada session cookies are short lived, so it has most likely expired already.
+> Because the protection is tied to the Windows user account, not the computer, a cookie file cannot be copied to a different user - but that same account can still decrypt it on another machine where its DPAPI keys roam, so treat it as a secret. A file written unencrypted by an earlier version of this module is ignored rather than read - you simply sign in again, and the file is replaced with an encrypted one.
 
 ```yaml
         Type: System.String
@@ -714,6 +1001,28 @@ Do not cache the encrypted Omada authentication cookie. It will also not be cach
 
 #### -ForceAuthentication <switch>
 Force authentication to Omada even when the cookie is still valid.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+#### -NoInteractiveAuthentication <switch>
+Use the session that already exists, and never sign in. The request is sent with the existing Omada session cookie exactly as it would be without this switch, but no code path under it can open a browser, a WebView2 window or any other prompt.
+
+Use it for work nobody is watching that still has to run as the signed-in user: a session keep-alive ping, a background runspace, a scheduled job that runs while someone is at the keyboard. Without it, a session that expired mid-job puts a sign-in window on the user's screen unannounced, or fails with a WebView2 runtime error where there is no desktop at all.
+
+When there is no usable session - no cookie for this tenant, or the server answers HTTP 401 - the command raises a terminating error instead of signing in. That error is distinguishable, so a caller can tell a session that is still good from one that is gone and act on it: its FullyQualifiedErrorId starts with `OmadaSessionExpired`, and its exception is a System.Security.Authentication.AuthenticationException. The expired session is dropped from the cache first, so the next call made without this switch signs in normally.
+
+This switch changes behaviour only for -AuthenticationType Browser and -AuthenticationType WebView2, which are the only types that can sign a user in interactively. It is accepted with every other type as well, where it is already true, so a wrapper can pass it unconditionally.
+
+It cannot be combined with -ForceAuthentication, which discards the session precisely in order to sign in again.
 
 ```yaml
         Type: System.Management.Automation.SwitchParameter
@@ -946,6 +1255,27 @@ When the account does not offer the requested method, a warning is written and t
         Accept wildcard characters: false
 ```
 
+#### -SelectAccount <switch>
+Ask Entra ID which account to sign in with, instead of letting it choose one.
+
+The sign-in request is sent with prompt=select_account, so Entra shows the account picker - every account the browser already knows, and the option to use one it does not. Use it when you do not want to name an account in advance but the automatic choice is wrong, which is what an `AADSTS50178 ... does not exist in tenant` refusal means.
+
+Single sign-on with the Windows account is turned off for this sign-in, since it is the thing that made the choice being overruled.
+
+> [!IMPORTANT]
+> This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. It cannot be combined with -UserName or with the user name of -Credential: Entra ID accepts an account name or an account picker, not both.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
 #### -SessionKey <string>
 Explicitly discriminate the reusable authentication session (cookie, base URL, WebView2/Selenium profile) to use for this call, in addition to the base URL, -AuthenticationType and -Credential (when supplied). Use this to keep multiple concurrent sessions apart when they would otherwise share the same base URL, authentication type and credential - for example two interactive Browser/WebView2 logins to the same tenant before either has a known user identity. Has no effect on which cookie/base URL etc. is used beyond distinguishing sessions from each other; defaults to an empty value, which reproduces prior single-session-per-(base URL, AuthenticationType, Credential) behavior.
 
@@ -969,6 +1299,31 @@ Only use it when the body carries no secret you would mind reading back: the ver
 
 ```yaml
         Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: true
+        Accept wildcard characters: false
+```
+
+#### -UserName <string>
+The account to sign in with, as its user principal name. Use it when the browser would otherwise sign in as somebody else - the Windows account you are logged on with, or whoever used this session last - which is what happens when a tenant has more than one identity available and nobody says which one to use.
+
+The name is sent to Entra ID as part of the sign-in request itself (login_hint, with prompt=login), so it decides which account is used before any sign-in screen is drawn. That is the difference between this parameter and typing a name into the window: an existing session for another account can no longer answer the request silently.
+
+No password is needed. When one is supplied, through -Credential, it is filled in as before; when it is not, the account name is filled in and the sign-in waits in the open window for you to complete it - with a passwordless method, or by typing the password yourself.
+
+Each account gets its own session: its own cookie cache and its own browser profile. Signing in to the same environment as two different accounts therefore does not require signing out in between.
+
+Leave it out to keep the current behaviour, where the browser decides which account to use.
+
+> [!IMPORTANT]
+> This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. It cannot be combined with -Credential, which carries a user name of its own, nor with -SelectAccount, because Entra ID accepts an account name or an account picker but not both.
+
+```yaml
+        Type: System.String
         Required: false
         Position: Named
         Accept pipeline input: false
@@ -1022,6 +1377,128 @@ Binaries or Sessions. More than one value can be given.
         Dynamic: false
         Accept wildcard characters: false
 ```
+
+### Export-OmadaSession parameters
+
+#### -AuthenticationType <string>
+The authentication type the session was established with. Defaults to WebView2, the same
+default Invoke-OmadaRestMethod and Invoke-OmadaWebRequest use.
+
+```yaml
+        Type: System.String
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+#### -Credential <pscredential>
+The credential the original call used. Only its user name identifies the session; the
+password is not read and is never part of the exported state.
+
+```yaml
+        Type: System.Management.Automation.PSCredential
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+#### -SessionKey <string>
+The value the original call passed as -SessionKey, when it used one to keep several
+sessions to the same environment apart.
+
+```yaml
+        Type: System.String
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+#### -Uri <uri>
+The Omada URL the session was established against. Only the scheme, host and port are used,
+so the URL of any request made against that environment will do.
+
+```yaml
+        Type: System.Uri
+        Required: true
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+#### -UserName <string>
+The account the session signs in as, when the original call named one with -UserName.
+
+```yaml
+        Type: System.String
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+### Import-OmadaSession parameters
+
+#### -AllowInteractiveAuthentication <switch>
+Allow this session to sign in interactively after all, if it turns out to be expired.
+Without it - the default - nothing under the seeded session can open a browser window, and
+an unusable session raises a terminating error instead.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+#### -PassThru <switch>
+Return a summary of the session that was seeded. Without it the command returns nothing.
+
+```yaml
+        Type: System.Management.Automation.SwitchParameter
+        Required: false
+        Position: Named
+        Accept pipeline input: false
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
+
+#### -State <object>
+The object returned by Export-OmadaSession. Accepted from the pipeline.
+
+```yaml
+        Type: System.Object
+        Required: true
+        Position: Named
+        Accept pipeline input: true (ByValue)
+        Parameter set name: (All)
+        Aliases: None
+        Dynamic: false
+        Accept wildcard characters: false
+```
 <!-- END GENERATED PARAMETERS -->
 
 ### Invoke-RestMethod Parameters / Invoke-WebRequest Parameters
@@ -1044,6 +1521,8 @@ Every release has a CycloneDX Software Bill of Materials (`OmadaWeb.PS-<version>
 ## CONTRIBUTING
 
 Contributions are welcome! If you have ideas for improvements or bug fixes, feel free to open a pull request on [GitHub](https://github.com/Fortigi/OmadaWeb.PS).
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) first — it covers where the tests live, how to run them, how a pull request gets validated, and the one rule we ask every change to follow: **every bug fix ships with the test that would have caught it**.
 
 The COMMANDS, SYNTAX, EXAMPLES and PARAMETERS sections of this README are generated from the module, so help is written once:
 

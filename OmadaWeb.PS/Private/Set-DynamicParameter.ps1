@@ -135,11 +135,20 @@ This is not the same parameter as Invoke-RestMethod's -CertificateThumbprint, wh
     New-DynamicParam -Name "OAuthCertificatePassword" -Type ([System.Security.SecureString]) -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The password protecting the file named by -OAuthCertificatePath, as a SecureString. Omit it for a file that is not password protected."
     New-DynamicParam -Name "CookiePath" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The FOLDER to keep a stored Omada authentication cookie in. The module derives the file name itself, one per session, so pass a directory and not a file path. The file is updated when re-authentication is needed, and created after successful authentication if it is not there yet. When this option is used, the default cookie cache is not written - this file takes its place.
 
-The file is encrypted with DPAPI, exactly like the default cookie cache, so it is readable only by the user who created it on the machine where it was created. There is no option to write it unencrypted. This parameter only applies in combination with parameter -AuthenticationType Browser or -AuthenticationType WebView2.
+The file is encrypted with DPAPI, exactly like the default cookie cache, so it is readable only by the Windows user account that created it - any process running as that account can decrypt it, including on another machine where the account's DPAPI keys roam. There is no option to write it unencrypted. This parameter only applies in combination with parameter -AuthenticationType Browser or -AuthenticationType WebView2.
 
-IMPORTANT: Because the protection is tied to the user and the machine, a cookie file cannot be copied to another user or another computer. A file written unencrypted by an earlier version of this module is ignored rather than read - you simply sign in again, and the file is replaced with an encrypted one."
+IMPORTANT: Because the protection is tied to the Windows user account, not the computer, a cookie file cannot be copied to a different user - but that same account can still decrypt it on another machine where its DPAPI keys roam, so treat it as a secret. A file written unencrypted by an earlier version of this module is ignored rather than read - you simply sign in again, and the file is replaced with an encrypted one."
     New-DynamicParam -Name "SkipCookieCache" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Do not cache the encrypted Omada authentication cookie. It will also not be cached when -CookiePath is used. This parameter only applies in combination with parameter -AuthenticationType Browser and -AuthenticationType WebView2."
     New-DynamicParam -Name "ForceAuthentication" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Force authentication to Omada even when the cookie is still valid."
+    New-DynamicParam -Name "NoInteractiveAuthentication" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use the session that already exists, and never sign in. The request is sent with the existing Omada session cookie exactly as it would be without this switch, but no code path under it can open a browser, a WebView2 window or any other prompt.
+
+Use it for work nobody is watching that still has to run as the signed-in user: a session keep-alive ping, a background runspace, a scheduled job that runs while someone is at the keyboard. Without it, a session that expired mid-job puts a sign-in window on the user's screen unannounced, or fails with a WebView2 runtime error where there is no desktop at all.
+
+When there is no usable session - no cookie for this tenant, or the server answers HTTP 401 - the command raises a terminating error instead of signing in. That error is distinguishable, so a caller can tell a session that is still good from one that is gone and act on it: its FullyQualifiedErrorId starts with 'OmadaSessionExpired', and its exception is a System.Security.Authentication.AuthenticationException. The expired session is dropped from the cache first, so the next call made without this switch signs in normally.
+
+This switch changes behaviour only for -AuthenticationType Browser and -AuthenticationType WebView2, which are the only types that can sign a user in interactively. It is accepted with every other type as well, where it is already true, so a wrapper can pass it unconditionally.
+
+It cannot be combined with -ForceAuthentication, which discards the session precisely in order to sign in again."
     New-DynamicParam -Name "EdgeProfile" -Type "string" -ValidateSet $Script:EdgeProfiles.Name -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use the specified Edge profile for the authentication request. The acceptable values for this parameter are based on the available profiles on your system.
 
 IMPORTANT: Due to the requirements of Selenium, the selected Edge profile needs to be closed when using this parameter."
@@ -161,6 +170,24 @@ The values are the method identifiers Entra ID itself uses, so they mean the sam
 When the account does not offer the requested method, a warning is written and the most secure method it does offer is used instead, so a preference never fails a sign-in that would otherwise succeed.
 
 IMPORTANT: This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. Supplying it with any other authentication type raises a terminating error.'
+    New-DynamicParam -Name "UserName" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "The account to sign in with, as its user principal name. Use it when the browser would otherwise sign in as somebody else - the Windows account you are logged on with, or whoever used this session last - which is what happens when a tenant has more than one identity available and nobody says which one to use.
+
+The name is sent to Entra ID as part of the sign-in request itself (login_hint, with prompt=login), so it decides which account is used before any sign-in screen is drawn. That is the difference between this parameter and typing a name into the window: an existing session for another account can no longer answer the request silently.
+
+No password is needed. When one is supplied, through -Credential, it is filled in as before; when it is not, the account name is filled in and the sign-in waits in the open window for you to complete it - with a passwordless method, or by typing the password yourself.
+
+Each account gets its own session: its own cookie cache and its own browser profile. Signing in to the same environment as two different accounts therefore does not require signing out in between.
+
+Leave it out to keep the current behaviour, where the browser decides which account to use.
+
+IMPORTANT: This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. It cannot be combined with -Credential, which carries a user name of its own, nor with -SelectAccount, because Entra ID accepts an account name or an account picker but not both."
+    New-DynamicParam -Name "SelectAccount" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Ask Entra ID which account to sign in with, instead of letting it choose one.
+
+The sign-in request is sent with prompt=select_account, so Entra shows the account picker - every account the browser already knows, and the option to use one it does not. Use it when you do not want to name an account in advance but the automatic choice is wrong, which is what an 'AADSTS50178 ... does not exist in tenant' refusal means.
+
+Single sign-on with the Windows account is turned off for this sign-in, since it is the thing that made the choice being overruled.
+
+IMPORTANT: This parameter only applies to -AuthenticationType WebView2, and to -AuthenticationType Browser once that runs on WebView2. It cannot be combined with -UserName or with the user name of -Credential: Entra ID accepts an account name or an account picker, not both."
     New-DynamicParam -Name "DebugWebView2" -Type "System.Management.Automation.SwitchParameter" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Use this parameter to enable WebView2 browser debugging options like Developer Tools"
     New-DynamicParam -Name "SessionKey" -Type "string" -ParameterSetName $ParameterObjectSetNames -DPDictionary $Dictionary -HelpMessage "Explicitly discriminate the reusable authentication session (cookie, base URL, WebView2/Selenium profile) to use for this call, in addition to the base URL, -AuthenticationType and -Credential (when supplied). Use this to keep multiple concurrent sessions apart when they would otherwise share the same base URL, authentication type and credential - for example two interactive Browser/WebView2 logins to the same tenant before either has a known user identity. Has no effect on which cookie/base URL etc. is used beyond distinguishing sessions from each other; defaults to an empty value, which reproduces prior single-session-per-(base URL, AuthenticationType, Credential) behavior."
 

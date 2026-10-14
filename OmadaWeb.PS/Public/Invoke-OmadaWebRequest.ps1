@@ -64,6 +64,20 @@ function Invoke-OmadaWebRequest {
         wire or sits in the script.
 
     .EXAMPLE
+        try {
+            $Response = Invoke-OmadaWebRequest -Uri "https://example.omada.cloud/api/v2/health" -NoInteractiveAuthentication -ErrorAction Stop
+            "Session is alive, Omada answered {0}" -f $Response.StatusCode | Write-Verbose
+        }
+        catch [System.Security.Authentication.AuthenticationException] {
+            "Omada session is gone; stopping the keep-alive." | Write-Warning
+        }
+
+        Uses the session that already exists and cannot open a sign-in window, which is what a
+        background keep-alive or a worker runspace needs. A session that has expired raises a
+        distinguishable terminating error - its FullyQualifiedErrorId starts with
+        'OmadaSessionExpired' - instead of prompting.
+
+    .EXAMPLE
         Invoke-OmadaWebRequest -Uri "https://omada.contoso.local/OData/DataObjects" -AuthenticationType "Windows" -Credential $UserCredential
 
         Requests an on-premises endpoint with explicit Windows credentials, negotiating

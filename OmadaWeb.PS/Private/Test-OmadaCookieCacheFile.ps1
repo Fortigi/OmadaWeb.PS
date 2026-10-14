@@ -6,14 +6,14 @@ function Test-OmadaCookieCacheFile {
     )
 
     try {
-        $Item = Get-Item -Path $Path -Force -ErrorAction Stop
+        $Item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
         # A cache holds one serialized SecureString; anything substantially larger is not ours and is
         # not worth reading into memory just to find that out.
         if ($Item.Length -gt 1MB) {
             return $false
         }
 
-        $Content = Get-Content -Path $Path -Raw -ErrorAction Stop
+        $Content = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
         if ([string]::IsNullOrWhiteSpace($Content)) {
             return $false
         }

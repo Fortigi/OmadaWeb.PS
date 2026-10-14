@@ -174,15 +174,27 @@ Describe 'Invoke-TestOmadaWebRequest' -Tag 'Integration' {
         }
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri' {
+            # -OAuthUri must be https (issue #102), so it no longer points at this file's own http://
+            # fake server. Invoke-OAuthTokenRequest is the seam Invoke-OAuth2Authentication calls for
+            # the token itself, mocked here instead of Invoke-RestMethod - mocking the cmdlet directly
+            # breaks Set-DynamicParameter's introspection of it, which Invoke-OmadaRestMethod's own
+            # dynamicparam block relies on. The request under test still goes to the real listener
+            # below, which is what "OK" is asserted from.
+            Mock -ModuleName OmadaWeb.PS Invoke-OAuthTokenRequest { [pscustomobject]@{ access_token = 'fake-oauth-token' } }
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential  -OAuthUri $Uri @AllowUnencryptedAuthParams -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri 'https://login.example.test/token' @AllowUnencryptedAuthParams -Verbose
             $Result | Should -Be "OK"
+            Should -Invoke -ModuleName OmadaWeb.PS Invoke-OAuthTokenRequest -Times 1
         }
 
         It 'Should return result from Invoke-(Test)OmadaWebRequest using a custom OAuthUri and OAuthScope' {
+            # See the comment on the previous test for why the token call is mocked at the
+            # Invoke-OAuthTokenRequest seam and pointed at an https placeholder.
+            Mock -ModuleName OmadaWeb.PS Invoke-OAuthTokenRequest { [pscustomobject]@{ access_token = 'fake-oauth-token' } }
             $Credential = (New-Object System.Management.Automation.PSCredential("user", (ConvertTo-SecureString "password" -AsPlainText -Force)))
-            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri $Uri -OAuthScope $Uri  @AllowUnencryptedAuthParams -WarningVariable Test -Verbose
+            $Result = Invoke-TestOmadaWebRequest -Uri $Uri -AuthenticationType OAuth -ForceAuthentication -Credential $Credential -OAuthUri 'https://login.example.test/token' -OAuthScope $Uri @AllowUnencryptedAuthParams -WarningVariable Test -Verbose
             $Result | Should -Be "OK"
+            Should -Invoke -ModuleName OmadaWeb.PS Invoke-OAuthTokenRequest -Times 1
         }
 
         It 'Should read cookie previous from exported cookie file' {

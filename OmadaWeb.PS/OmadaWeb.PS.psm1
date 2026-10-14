@@ -131,18 +131,26 @@ catch {}
 # Initialize script-level variables
 # Redaction constants for ConvertTo-RedactedLogString. They live here, initialized once per import,
 # because the walker recurses once per property of every object logged and builds its string on every
-# request whether or not -Verbose is on - rebuilding a 16-element array per recursive call is exactly
-# the kind of cost that does not belong on that path. The patterns are matched as case-insensitive
-# substrings, so composites such as X-CSRF-Token, RefreshToken and SessionCookie are covered too.
+# request whether or not -Verbose is on - rebuilding these arrays per recursive call is exactly the
+# kind of cost that does not belong on that path. Matched through Test-SensitiveLogName against a
+# normalized name (lowercased, "-" and "_" stripped), so X-API-Key, api_key and ApiKey are all one
+# name. Two lists: long, unambiguous words are matched as substrings, so composites such as
+# X-CSRF-Token, RefreshToken and SessionCookie are covered too. Short words such as "key" and "sig"
+# would, as substrings, redact ordinary members like StatusCode or Keys - those are matched only
+# when they are the whole normalized name. The exact names are "key" and "sig"; "code" is
+# deliberately not a member-name pattern here, because a sign-in error's Code member is a
+# diagnostic, and is masked only as a URL query parameter by Protect-LogMessage.
 $Script:RedactedLogToken = "***REDACTED***"
-$Script:SensitiveLogNamePatterns = @(
+$Script:SensitiveLogNameSubstringPatterns = @(
     "authorization", "cookie", "credential", "password", "pwd", "secret", "token",
-    "apikey", "api_key", "clientsecret", "sessionkey", "bearer", "csrf", "assertion",
-    "privatekey", "connectionstring"
+    "apikey", "clientsecret", "sessionkey", "bearer", "csrf", "assertion",
+    "privatekey", "connectionstring", "subscriptionkey", "functionskey",
+    "passwd", "passphrase", "protectedstate", "signature"
 )
+$Script:SensitiveLogNameExactPatterns = @("key", "sig")
 # Used only inside an object that pairs a Name member with a Value member - a cookie or a header,
-# where the value is the secret. Precomputed for the same reason as the list above.
-$Script:SensitiveLogNamePatternsWithValue = $Script:SensitiveLogNamePatterns + "value"
+# where the value is the secret. Precomputed for the same reason as the lists above.
+$Script:SensitiveLogNameSubstringPatternsWithValue = $Script:SensitiveLogNameSubstringPatterns + "value"
 # Set per request from -SkipBodyRedaction, and read by the walker instead of being threaded through
 # its recursion. It has to exist before the first request: Set-StrictMode is active, and the walker
 # reads it on every object logged, including the one logged at the end of this file.
@@ -263,6 +271,13 @@ $Script:UnmatchedPageSince = $null
 # It is cleared once per sign-in rather than once per window: surviving the window closing is exactly
 # what lets the driver see why the window closed.
 $Script:LoginAbortReason = $null
+# Per-window state of the account the sign-in request asks for. The counter is the loop guard on the
+# navigation rewrite in Initialize-WebView2 - a redirect chain may carry more than one authorization
+# request, but a browser going round the same loop is worse than one that stops trying. The flag
+# keeps "no account was named" to one line per window instead of one per 150 ms tick. Both are
+# cleared by Reset-LoginAutomationState.
+$Script:EntraSignInRequestRewriteCount = 0
+$Script:EntraSignInAccountReported = $false
 # State of the logon-page scrape in Get-WebView2LogonPageError. Per browser window, so it is cleared
 # by Reset-LoginAutomationState along with the rest of the per-window automation state.
 $Script:LogonPageErrorTask = $null
