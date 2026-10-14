@@ -17,6 +17,11 @@
 # Build/Dependencies.psd1 reports. It sweeps the open Dependabot pull requests weekly, so a bump
 # arrives already synced. PR validation fails while any of the three disagree.
 #
+# Dependabot validation. .github/workflows/dependabot-validation.yml starts PR Validation for a pull
+# request opened from here - refreshing the lock first for a NuGet bump - when every update in it is
+# patch or minor, at least 3 days old, and from a source repository with a sufficient OpenSSF Scorecard.
+# A maintainer still merges. Policy: Build/DependabotValidation.psd1.
+#
 # Note that GitHub reads this file from the default branch only, so an ignore rule added here takes
 # effect on Dependabot's next run - it does not retroactively close pull requests that are already
 # open. Those have to be closed by hand.

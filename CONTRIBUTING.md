@@ -104,6 +104,21 @@ Three files are part of the gates and are reviewed like code:
   behaviour. Declare it with its reason; the run fails if a declared mutant is ever killed or no
   longer exists.
 
+## Pinning GitHub Actions
+
+Every `uses:` in `.github/workflows` references a full 40-character commit SHA with the release it
+belongs to as a trailing comment:
+
+```yaml
+uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+```
+
+Not a tag: a tag can be moved after review, and a moved tag on a workflow holding a write-scoped
+token runs whatever it now points at. Dependabot reads the comment and updates the SHA and the
+comment together. `Tests/Unit/WorkflowActionPins.Tests.ps1` fails PR validation on any reference that
+is not pinned this way. Resolve a tag to its commit with the GitHub API rather than a browser, and
+dereference an annotated tag if the response is one.
+
 ## Branches
 
 | Kind | Format |
@@ -122,7 +137,10 @@ Three files are part of the gates and are reviewed like code:
    you verified it — including the judgement calls a reviewer could reasonably have made
    differently.
 2. **Validation does not start on its own.** Comment `/validate` on the pull request. Post it as
-   the most recent comment; a newer `/validate` supersedes an earlier run rather than racing it.
+   the most recent comment; a newer `/validate` supersedes an earlier run rather than racing it. A
+   Dependabot pull request that passes the validation policy gets it started automatically, and says so
+   in a comment; one that does not says why (see
+   [Dependabot validation](SECURITY.md#dependabot-validation)).
 3. Resolve every review thread, automated ones included, before asking for a merge.
 
 Please do not add AI-attribution trailers (`Co-Authored-By: Claude` and similar) to commits or
