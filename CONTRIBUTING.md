@@ -137,7 +137,10 @@ dereference an annotated tag if the response is one.
    you verified it — including the judgement calls a reviewer could reasonably have made
    differently.
 2. **Validation does not start on its own.** Comment `/validate` on the pull request. Post it as
-   the most recent comment; a newer `/validate` supersedes an earlier run rather than racing it.
+   the most recent comment; a newer `/validate` supersedes an earlier run rather than racing it. A
+   Dependabot pull request that passes the validation policy gets it started automatically, and says so
+   in a comment; one that does not says why (see
+   [Dependabot validation](SECURITY.md#dependabot-validation)).
 3. Resolve every review thread, automated ones included, before asking for a merge.
 
 Please do not add AI-attribution trailers (`Co-Authored-By: Claude` and similar) to commits or

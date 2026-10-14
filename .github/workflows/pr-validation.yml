@@ -7,10 +7,22 @@ name: PR Validation
 run-name: >-
   ${{ github.event_name == 'issue_comment'
   && format('PR Validation #{0} — {1}', github.event.issue.number, github.event.issue.title)
-  || format('PR Validation — {0}', github.ref_name) }}
+  || (inputs.pr_number
+  && format('PR Validation #{0} — dispatched', inputs.pr_number)
+  || format('PR Validation — {0}', github.ref_name)) }}
 
 on:
+  # With pr_number, validates that pull request's head exactly as /validate does. This is how
+  # .github/workflows/dependabot-validation.yml starts validation for an eligible Dependabot pull
+  # request: a comment posted with the GITHUB_TOKEN would start no run at all, and workflow_dispatch is
+  # the one event the GITHUB_TOKEN may trigger. Dispatch it on main, so the definition that runs is the
+  # reviewed one there. Dispatching needs write access to the repository - the same bar as /validate.
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request to validate. Empty validates the commit the workflow is run on.'
+        required: false
+        type: string
   issue_comment:
     types: [created]
 
@@ -18,7 +30,7 @@ on:
 # second /validate on the same PR supersedes the first instead of racing it to write
 # the commit status.
 concurrency:
-  group: pr-validation-${{ github.event.issue.number || github.ref }}
+  group: pr-validation-${{ github.event.issue.number || inputs.pr_number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -43,8 +55,29 @@ jobs:
         with:
           script: |
             if (context.eventName === 'workflow_dispatch') {
+              const prNumber = (context.payload.inputs?.pr_number ?? '').trim();
+              if (prNumber === '') {
+                core.setOutput('should_run', 'true');
+                core.setOutput('head_sha', context.sha);
+                return;
+              }
+              if (!/^[1-9][0-9]*$/.test(prNumber)) {
+                core.setFailed(`pr_number '${prNumber}' is not a pull request number.`);
+                core.setOutput('should_run', 'false');
+                return;
+              }
+              const dispatched = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(prNumber)
+              });
+              if (dispatched.data.state !== 'open') {
+                core.setFailed(`Pull request #${prNumber} is ${dispatched.data.state}.`);
+                core.setOutput('should_run', 'false');
+                return;
+              }
               core.setOutput('should_run', 'true');
-              core.setOutput('head_sha', context.sha);
+              core.setOutput('head_sha', dispatched.data.head.sha);
               return;
             }
 
