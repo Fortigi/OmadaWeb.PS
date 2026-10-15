@@ -122,9 +122,14 @@ Describe 'New-Sbom.ps1' -Tag 'Unit' {
         }
 
         It 'Should use the declared pin when a component version is fixed in the module' {
+            # The expected version comes from the inventory itself, so a dependency bump that updates
+            # Build/Dependencies.psd1 does not also have to edit this test.
+            $Declared = (Import-PowerShellDataFile -Path $Script:DependencyManifest).Components |
+                Where-Object { $_.Name -eq 'System.Text.Json' }
+            $Declared.Version | Should -Not -BeNullOrEmpty
             $Pinned = $Script:Sbom.components | Where-Object { $_.name -eq 'System.Text.Json' }
-            $Pinned.version | Should -Be '8.0.5'
-            $Pinned.purl | Should -Be 'pkg:nuget/System.Text.Json@8.0.5'
+            $Pinned.version | Should -Be $Declared.Version
+            $Pinned.purl | Should -Be "pkg:nuget/System.Text.Json@$($Declared.Version)"
             ($Pinned.properties | Where-Object { $_.name -eq 'omadaweb:versionSource' }).value | Should -Be 'declared-pin'
         }
 
