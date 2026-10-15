@@ -119,6 +119,24 @@ comment together. `Tests/Unit/WorkflowActionPins.Tests.ps1` fails PR validation 
 is not pinned this way. Resolve a tag to its commit with the GitHub API rather than a browser, and
 dereference an annotated tag if the response is one.
 
+## Dependency versions live in one place
+
+A pinned dependency version is written only in `Build/Dependencies.psd1`,
+`OmadaWeb.PS/DependencyLock.psd1` and the `.csproj` files under `Build/Dependencies/`. A Dependabot
+bump and the lock refresh update those together, so a copy anywhere else is left behind: a test
+asserting a literal version string fails the next bump, and main has to be edited before the
+dependency update can pass. Tests, scripts and docs read the version from the inventory instead:
+
+```powershell
+$Declared = (Import-PowerShellDataFile -Path $DependencyManifest).Components |
+    Where-Object { $_.Name -eq 'System.Text.Json' }
+$Pinned.version | Should -Be $Declared.Version
+```
+
+`Tests/Unit/DependencyVersionLiterals.Tests.ps1` fails PR validation on any file that names a pinned
+component together with its exact version. Test data that has nothing to do with the inventory can
+be exempted in that test's allow list, with the reason.
+
 ## Branches
 
 | Kind | Format |
