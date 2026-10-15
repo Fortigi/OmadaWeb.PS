@@ -188,8 +188,8 @@ function ConvertFrom-DependabotCommitMessage {
 
             ---
             updated-dependencies:
-            - dependency-name: Selenium.WebDriver
-              dependency-version: 4.51.0
+            - dependency-name: Example.Package
+              dependency-version: 1.2.3
               dependency-type: direct:production
               update-type: version-update:semver-minor
             ...
