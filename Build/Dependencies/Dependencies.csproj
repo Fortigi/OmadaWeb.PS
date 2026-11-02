@@ -28,7 +28,7 @@
 
   <ItemGroup>
     <!-- Drives Microsoft Edge for -AuthenticationType Browser on PowerShell 7 (Install-Selenium). -->
-    <PackageReference Include="Selenium.WebDriver" Version="4.51.0" />
+    <PackageReference Include="Selenium.WebDriver" Version="4.52.0" />
 
     <!-- Hosts the embedded sign-in browser for -AuthenticationType WebView2 (Install-WebView2). -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
