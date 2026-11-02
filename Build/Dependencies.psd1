@@ -60,7 +60,7 @@
             Acquisition     = "runtime-download"
             Publisher       = "Software Freedom Conservancy"
             Purl            = "pkg:nuget/Selenium.WebDriver"
-            Version         = "4.51.0"
+            Version         = "4.52.0"
             VersionStrategy = "Pinned in OmadaWeb.PS/DependencyLock.psd1 and verified by SHA-256 before loading. Windows PowerShell 5.1 (Desktop) installs the separate 'Selenium.Desktop' pin, 4.11.0, because Selenium's .NET bindings went netstandard2.0-only from 4.12.0."
             LockId          = "Selenium.Core"
             Source          = "https://www.nuget.org/packages/Selenium.WebDriver"
