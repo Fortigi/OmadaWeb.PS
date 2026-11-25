@@ -36,6 +36,7 @@
     "OmadaWeb.PS/Private/ConvertTo-RedactedLogString.ps1",
     "OmadaWeb.PS/Private/Expand-DownloadFile.ps1",
     "OmadaWeb.PS/Private/Export-OmadaCookieFile.ps1",
+    "OmadaWeb.PS/Private/Get-AssemblyFileName.ps1",
     "OmadaWeb.PS/Private/Get-DataFromWebDriver.ps1",
     "OmadaWeb.PS/Private/Get-DataFromWebView2.ps1",
     "OmadaWeb.PS/Private/Get-DependencyLock.ps1",
@@ -45,6 +46,7 @@
     "OmadaWeb.PS/Private/Get-EntraTenantMismatchDetail.ps1",
     "OmadaWeb.PS/Private/Get-GalleryModuleVersion.ps1",
     "OmadaWeb.PS/Private/Get-InstalledModuleInfo.ps1",
+    "OmadaWeb.PS/Private/Get-LoadedAssembly.ps1",
     "OmadaWeb.PS/Private/Get-LockedArtifact.ps1",
     "OmadaWeb.PS/Private/Get-NuGetLibraryFolder.ps1",
     "OmadaWeb.PS/Private/Get-OAuthClientCertificate.ps1",
@@ -92,6 +94,7 @@
     "OmadaWeb.PS/Private/Protect-LogMessage.ps1",
     "OmadaWeb.PS/Private/Protect-OmadaSessionPayload.ps1",
     "OmadaWeb.PS/Private/Reset-LoginAutomationState.ps1",
+    "OmadaWeb.PS/Private/Resolve-AssemblyLoadAction.ps1",
     "OmadaWeb.PS/Private/Resolve-EntraSignInScreen.ps1",
     "OmadaWeb.PS/Private/Resolve-OmadaNativeCommand.ps1",
     "OmadaWeb.PS/Private/Save-RemoteFile.ps1",
@@ -125,6 +128,7 @@
   ],
   "tests": {
     "OmadaWeb.PS/Private/Add-ReflectionAssembly.ps1": [
+      "Tests/Unit/Add-ReflectionAssembly.Tests.ps1",
       "Tests/Unit/Get-DataFromWebView2.Recovery.Tests.ps1"
     ],
     "OmadaWeb.PS/Private/Compare-ModuleVersion.ps1": [
@@ -165,6 +169,9 @@
       "Tests/Integration/Invoke-OmadaWebRequest.Tests.ps1",
       "Tests/Unit/Export-OmadaCookieFile.Tests.ps1",
       "Tests/Unit/OmadaCookieCache.Tests.ps1"
+    ],
+    "OmadaWeb.PS/Private/Get-AssemblyFileName.ps1": [
+      "Tests/Unit/Add-ReflectionAssembly.Tests.ps1"
     ],
     "OmadaWeb.PS/Private/Get-DataFromWebDriver.ps1": [
       "Tests/Integration/Invoke-OmadaRestMethod.NoInteractiveAuthentication.Tests.ps1",
@@ -209,6 +216,9 @@
     ],
     "OmadaWeb.PS/Private/Get-InstalledModuleInfo.ps1": [
       "Tests/Unit/Write-ModuleVersionStatus.Tests.ps1"
+    ],
+    "OmadaWeb.PS/Private/Get-LoadedAssembly.ps1": [
+      "Tests/Unit/Add-ReflectionAssembly.Tests.ps1"
     ],
     "OmadaWeb.PS/Private/Get-LockedArtifact.ps1": [
       "Tests/Unit/DependencyLock.Tests.ps1",
@@ -437,6 +447,9 @@
       "Tests/Unit/Get-DataFromWebView2.Recovery.Tests.ps1",
       "Tests/Unit/StrictMode.Tests.ps1",
       "Tests/Unit/Switch-ToManualLogin.Tests.ps1"
+    ],
+    "OmadaWeb.PS/Private/Resolve-AssemblyLoadAction.ps1": [
+      "Tests/Unit/Add-ReflectionAssembly.Tests.ps1"
     ],
     "OmadaWeb.PS/Private/Resolve-EntraSignInScreen.ps1": [
       "Tests/Integration/EntraSignInScript.Browser.Tests.ps1",
