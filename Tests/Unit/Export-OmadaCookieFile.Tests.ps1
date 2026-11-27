@@ -88,7 +88,17 @@ Describe 'Export-OmadaCookieFile / Import-OmadaCookieFile' -Tag 'Unit' {
         # source rather than by probing memory, because there is no supported way to observe a freed
         # BSTR - but a future edit that drops the finally fails here.
         InModuleScope 'OmadaWeb.PS' {
-            $Source = (Get-Command Import-OmadaCookieFile).Definition
+            # Code only, without its comments. The function's own comment explains why it does not
+            # call PtrToStringAuto, by name. The build strips comments from the module, so against
+            # buildoutput that passed; against the source module - which is what a local run and
+            # the mutation sandbox load - the comment matched and the test failed on correct code.
+            $Definition = (Get-Command Import-OmadaCookieFile).Definition
+            $Tokens = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseInput($Definition, [ref]$Tokens, [ref]$null)
+            $Source = $Definition
+            foreach ($Comment in @($Tokens | Where-Object { $_.Kind -eq 'Comment' } | Sort-Object { $_.Extent.StartOffset } -Descending)) {
+                $Source = $Source.Remove($Comment.Extent.StartOffset, $Comment.Extent.EndOffset - $Comment.Extent.StartOffset)
+            }
 
             $Source | Should -Match 'ZeroFreeBSTR'
             $Source | Should -Match 'PtrToStringBSTR'
