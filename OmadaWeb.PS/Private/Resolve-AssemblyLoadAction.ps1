@@ -7,8 +7,8 @@ function Resolve-AssemblyLoadAction {
     .DESCRIPTION
         PowerShell 7 (.NET) loads every assembly into one load context, and a strong-named assembly
         can be loaded there in one version only. When another module in the same session has already
-        loaded, say, Microsoft.Web.WebView2.Core 1.0.4258.31, Assembly.LoadFrom of this module's
-        bundled 1.0.4191.47 fails with "A different copy of assembly ... is already loaded" - and
+        loaded a newer Microsoft.Web.WebView2.Core than the one this module bundles, Assembly.LoadFrom
+        of the bundled file fails with "A different copy of assembly ... is already loaded" - and
         signing in with WebView2 fails with it. OmadaSqlTroubleshooter does exactly that: it loads its
         own pinned WebView2 at start-up and calls this module to sign in later.
 
