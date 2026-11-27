@@ -2,11 +2,14 @@ param(
     [string]$ModulePath = (Join-Path $(Split-Path $(Split-Path $PSScriptRoot)) -ChildPath 'OmadaWeb.PS\OmadaWeb.PS.psm1')
 )
 
-# Regression: OmadaSqlTroubleshooter loads its own pinned Microsoft.Web.WebView2.Core (1.0.4258.31) at
-# start-up and calls this module to sign in later. LoadFrom of this module's bundled 1.0.4191.47 then
+# Regression: OmadaSqlTroubleshooter loads its own pinned Microsoft.Web.WebView2.Core at
+# start-up and calls this module to sign in later. LoadFrom of this module's bundled, older version then
 # failed with "A different copy of assembly 'Microsoft.Web.WebView2.Core' is already loaded", and so
 # did every WebView2 sign-in in that session. An assembly already loaded in the same or a newer
 # version is now used instead of loading the bundled file.
+#
+# The versions below are invented: only their order matters. The real bundled version lives in
+# Build/Dependencies.psd1 and must not be copied here (see DependencyVersionLiterals.Tests.ps1).
 
 BeforeAll {
     Get-Module OmadaWeb.PS | ForEach-Object { $_ | Remove-Module -Force -ErrorAction SilentlyContinue }
@@ -20,23 +23,23 @@ BeforeAll {
 Describe 'Resolve-AssemblyLoadAction' -Tag 'Unit' {
     It 'Should load when nothing by that name is loaded' {
         InModuleScope 'OmadaWeb.PS' {
-            Resolve-AssemblyLoadAction -RequestedVersion '1.0.4191.47' -LoadedVersion $null | Should -Be 'Load'
+            Resolve-AssemblyLoadAction -RequestedVersion '1.0.2000.0' -LoadedVersion $null | Should -Be 'Load'
         }
     }
 
     It 'Should reuse a loaded <Case> version' -ForEach @(
-        @{ Case = 'newer'; Loaded = '1.0.4258.31' }
-        @{ Case = 'equal'; Loaded = '1.0.4191.47' }
+        @{ Case = 'newer'; Loaded = '1.0.3000.0' }
+        @{ Case = 'equal'; Loaded = '1.0.2000.0' }
     ) {
         InModuleScope 'OmadaWeb.PS' -Parameters @{ Loaded = $Loaded } {
             param($Loaded)
-            Resolve-AssemblyLoadAction -RequestedVersion '1.0.4191.47' -LoadedVersion $Loaded | Should -Be 'Reuse'
+            Resolve-AssemblyLoadAction -RequestedVersion '1.0.2000.0' -LoadedVersion $Loaded | Should -Be 'Reuse'
         }
     }
 
     It 'Should report a loaded older version as a conflict' {
         InModuleScope 'OmadaWeb.PS' {
-            Resolve-AssemblyLoadAction -RequestedVersion '1.0.4191.47' -LoadedVersion '1.0.4129.50' | Should -Be 'Conflict'
+            Resolve-AssemblyLoadAction -RequestedVersion '1.0.2000.0' -LoadedVersion '1.0.1000.0' | Should -Be 'Conflict'
         }
     }
 }
@@ -44,7 +47,7 @@ Describe 'Resolve-AssemblyLoadAction' -Tag 'Unit' {
 Describe 'Add-ReflectionAssembly -Type LoadFrom' -Tag 'Unit' {
     BeforeEach {
         InModuleScope 'OmadaWeb.PS' {
-            Mock Get-AssemblyFileName { [System.Reflection.AssemblyName]::new('Microsoft.Web.WebView2.Core, Version=1.0.4191.47') }
+            Mock Get-AssemblyFileName { [System.Reflection.AssemblyName]::new('Microsoft.Web.WebView2.Core, Version=1.0.2000.0') }
         }
     }
 
@@ -52,7 +55,7 @@ Describe 'Add-ReflectionAssembly -Type LoadFrom' -Tag 'Unit' {
         InModuleScope 'OmadaWeb.PS' -Parameters @{ File = $Script:AssemblyFile } {
             param($File)
             $Newer = [PSCustomObject]@{ Location = 'C:\Other\Microsoft.Web.WebView2.Core.dll' }
-            $Newer | Add-Member -MemberType ScriptMethod -Name GetName -Value { [System.Reflection.AssemblyName]::new('Microsoft.Web.WebView2.Core, Version=1.0.4258.31') }
+            $Newer | Add-Member -MemberType ScriptMethod -Name GetName -Value { [System.Reflection.AssemblyName]::new('Microsoft.Web.WebView2.Core, Version=1.0.3000.0') }
             Mock Get-LoadedAssembly { $Newer }
 
             # The file is not a real assembly: reaching LoadFrom would throw.
@@ -65,10 +68,10 @@ Describe 'Add-ReflectionAssembly -Type LoadFrom' -Tag 'Unit' {
         InModuleScope 'OmadaWeb.PS' -Parameters @{ File = $Script:AssemblyFile } {
             param($File)
             $Older = [PSCustomObject]@{ Location = 'C:\Other\Microsoft.Web.WebView2.Core.dll' }
-            $Older | Add-Member -MemberType ScriptMethod -Name GetName -Value { [System.Reflection.AssemblyName]::new('Microsoft.Web.WebView2.Core, Version=1.0.4129.50') }
+            $Older | Add-Member -MemberType ScriptMethod -Name GetName -Value { [System.Reflection.AssemblyName]::new('Microsoft.Web.WebView2.Core, Version=1.0.1000.0') }
             Mock Get-LoadedAssembly { $Older }
 
-            { Add-ReflectionAssembly -Object $File } | Should -Throw -ExpectedMessage "*1.0.4129.50 is already loaded*C:\Other\Microsoft.Web.WebView2.Core.dll*older than the 1.0.4191.47*new PowerShell session*"
+            { Add-ReflectionAssembly -Object $File } | Should -Throw -ExpectedMessage "*1.0.1000.0 is already loaded*C:\Other\Microsoft.Web.WebView2.Core.dll*older than the 1.0.2000.0*new PowerShell session*"
         }
     }
 
